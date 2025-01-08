@@ -20,7 +20,7 @@ Additionally, the order of commands is defined by the order that they're added t
 To make use of this session perspective, some additional changes to the API will be required.
 
 ### Add Command
-The Aranya Client currently can only accept new commands via `sync_receive()` or by calling  `action()`. This leaves us with no easy way to add commands from a remote device to a session perspective. To fix this, we should add an `add_command()` method to the Aranya Client that attempts to add a command to a session perspective.
+The Aranya Client currently can only accept new commands via `sync_receive()` or by calling  `action()`. This leaves us with no easy way to add commands from a remote device to a session perspective. To fix this, we should add a `session_receive()` method to the Aranya Client that attempts to add a command to a session perspective.
 
 ### Session Sinks
 Other Aranya Client APIs take a `Sink` which contains a callback returning an `Effects`, so Session Sinks must also contain a callback to return commands. This is strictly required for `Actions` on a session as any generated commands will not be added to the graph. It will also be useful for indicating success for adding commands received from remote parties.
