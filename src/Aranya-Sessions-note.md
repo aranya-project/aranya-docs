@@ -5,7 +5,7 @@ taxonomy:
 ---
 
 ## Rationale
-It is sometimes useful to leverage the strong security guarantees provided by the existing Aranya graph without incurring the costs of storing additional data on-graph. We therefore need a mechanism that can evaluate policy locally at a specific "perspective" in the graph, which we call an Aranya Session. This is an 'ephemeral' session that  processes commands as we would normally, but whose data is only temporarily stored in memory and will be lost after restarting the application or power cycling hardware.
+It is sometimes useful to leverage the strong security guarantees provided by the existing Aranya graph without incurring the costs of storing additional data on-graph. We therefore need a mechanism that can evaluate policy commands locally at the current "perspective" in the graph. We call this mechanism an Aranya session that  processes 'ephemeral' commands as we would normal commands, but where data is only temporarily stored in memory and will be lost after restarting the application or power cycling hardware.
 
 This is useful, for example, when creating a potentially lighter-weight protocol or an [Aranya Fast Channel (AFC)](afc.md), as only a few endpoints may require specific session data. If this were on-graph, all nodes would have to pay the cost of syncing and storing the data, which can be extremely costly depending on the amount of data and the number of nodes involved.
 
