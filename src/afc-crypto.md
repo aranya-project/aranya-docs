@@ -70,13 +70,13 @@ decryption is referred to as the _OpenKey_.
 
 #### Key Derivation
 
-ChannelKeys are derived using HPKE's Secret Export API. 
+ChannelKeys are derived using HPKE's Secret Export API.
 
 For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate ChannelKeys (from a buggy CSPRNG), it mixes in the ID
 of the command that created the channel. (Command IDs are assumed
-to be unique; for more information, see the [Aranya spec](product-beta.md).)
+to be unique; for more information, see the [Aranya spec](aranya-beta.md).)
 
 The key derivation scheme is as follows:
 
@@ -159,13 +159,13 @@ that decrypts calls this the _OpenOnlyKey_.
 #### Key Derivation
 
 The SealOnlyKey/OpenOnlyKey is derived using HPKE's Secret Export
-API. 
+API.
 
 For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate keys (from a buggy CSPRNG), it mixes in the ID of the
 command that created the channel. (Command IDs are assumed to be
-unique; for more information, see the [Aranya spec](product-beta.md).)
+unique; for more information, see the [Aranya spec](aranya-beta.md).)
 
 The key derivation scheme is as follows:
 
@@ -328,7 +328,7 @@ Encryption][Bellare].
 #### KDF
 
 An extract-then-expand Key Derivation Function (KDF) as
-formally defined in section 3 of [HKDF]. 
+formally defined in section 3 of [HKDF].
 
 The KDF must:
 
@@ -348,7 +348,7 @@ Hybrid Public Key Encryption (HPKE) per [RFC 9180].
 [AES-256-GCM]: https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf
 [AES-GCM-SIV]: https://www.rfc-editor.org/rfc/rfc8452.html
 [AFC]: https://github.com/aranya-project/aranya-core/tree/main/crates/aranya-fast-channels
-[AranyaUsers]: idam.md#member-status
+[AranyaUsers]: https://git.spideroak-inc.com/spideroak-inc/aranya-docs/blob/main/src/idam.md#member-status
 [Ascon]: https://csrc.nist.gov/News/2023/lightweight-cryptography-nist-selects-ascon
 [Bellare]: https://eprint.iacr.org/2022/268
 [CSPRNG]: https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
