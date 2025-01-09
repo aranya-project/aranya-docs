@@ -1,7 +1,11 @@
 ## Aranya Architecture
 
 ```mermaid
-flowchart-elk TB
+---
+config:
+  layout: elk
+---
+flowchart TB
  subgraph ClientLibrary["Client Library"]
         a1("User Application")
         a2("C-API")
