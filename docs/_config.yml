@@ -5,3 +5,4 @@ kramdown:
     bold_every: 5
 # Exclude files and directories
 exclude: []
+remote_theme: zendesk/jekyll-theme-zendesk-garden@main
