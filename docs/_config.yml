@@ -3,4 +3,5 @@ kramdown:
   syntax_highlighter_opts:
     line_numbers: table
     bold_every: 5
-exclude: [afc.md]
+# Exclude files and directories
+exclude: []
