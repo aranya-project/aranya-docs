@@ -6,3 +6,17 @@ kramdown:
 # Exclude files and directories
 exclude: []
 remote_theme: zendesk/jekyll-theme-zendesk-garden@main
+sidebar:
+  - aranya-overview
+  - aranya-beta
+  - afc
+  - afc-crypto
+  - aranya-sessions-notes
+  - graph
+  - model
+  -  open-sync
+  - policy-v1
+  - policy-v2
+  - skip-list
+  - sync
+
