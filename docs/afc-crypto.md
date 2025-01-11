@@ -1,3 +1,7 @@
+---
+id: afc-crypto
+---
+
 # AFC Cryptography
 
 # Overview

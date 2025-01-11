@@ -1,3 +1,7 @@
+---
+id: afc
+---
+
 # Aranya Fast Channels Data Routing For Aranya Beta V2
 
 ## Overview
