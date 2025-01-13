@@ -1,5 +1,6 @@
 ---
-id: afc-crypto
+layout: page
+title: AFC Cryptography
 ---
 
 # AFC Cryptography
