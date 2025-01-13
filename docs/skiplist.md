@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Skip List
+permalink: "/skip-list/"
 ---
 
 ## Max Cut

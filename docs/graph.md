@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Graph Auth
+permalink: "/graph-auth/"
 ---
 
 Disclaimer: this document is somewhat out-of-date and incomplete.

@@ -1,6 +1,7 @@
 ---
 layout: page
 title: AFC Cryptography
+permalink: "/afc-cryptography/"
 ---
 
 # Overview

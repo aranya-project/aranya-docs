@@ -1,6 +1,7 @@
 ---
 layout: page
-title: Aranya Sessions Design Note
+title: Aranya Sessions
+permalink: "/aranya-sessions/"
 ---
 
 # Aranya Sessions Design Note

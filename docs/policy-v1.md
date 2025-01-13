@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Policy Language v1
+permalink: "/policy-language-v1/"
 ---
 
 ## File format

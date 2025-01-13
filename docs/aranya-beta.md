@@ -1,6 +1,7 @@
 ---
 layout: page
-title: Aranya Spec V1
+title: Aranya Beta V1
+permalink: "/aranya-beta-v1/"
 ---
 
 # Aranya V1

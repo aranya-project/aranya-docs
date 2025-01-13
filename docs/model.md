@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Aranya Model
+permalink: "/aranya-model/"
 ---
 
 

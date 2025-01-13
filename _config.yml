@@ -7,8 +7,7 @@ project-repo: https://github.com/aranya-project/aranya
 baseurl:             ''
 paginate:            5
 permalink:           pretty
-source: ../docs
-layouts_dir: site/_layouts
+# source: ./docs
 
 # Gems
 plugins:

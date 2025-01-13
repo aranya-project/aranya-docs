@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Policy Language v2
+permalink: "/policy-language-v2/"
 ---
 
 All elements of [Policy Language v1](policy-v1.md) not modified by this document are unchanged.

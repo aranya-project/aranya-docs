@@ -1,6 +1,7 @@
 ---
 layout: page
 title: Open Sync Requests
+permalink: "/open-sync-requests/"
 ---
 
 ## Problem
