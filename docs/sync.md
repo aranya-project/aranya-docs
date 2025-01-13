@@ -1,8 +1,9 @@
 ---
+layout: page
 title: Sync
-taxonomy:
-    category: docs
 ---
+
+# Sync
 
 ## Problem
 
@@ -231,7 +232,7 @@ this command will always be sent. No commands will be sent which are ancestors
 of the stored command.
 
 The last known command will be the command with the highest max cut that we
-know the peer has. We will update the last known command when receiving a sync 
+know the peer has. We will update the last known command when receiving a sync
 request or a sync response.
 
 The last known commands will be stored in memory. And can be recreated after

@@ -1,4 +1,7 @@
-# AFC Cryptography
+---
+layout: page
+title: AFC Cryptography
+---
 
 # Overview
 

@@ -1,7 +1,6 @@
 ---
+layout: page
 title: Policy Language v1
-taxonomy:
-    category: docs
 ---
 
 ## File format

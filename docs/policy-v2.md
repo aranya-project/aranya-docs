@@ -1,7 +1,6 @@
 ---
+layout: page
 title: Policy Language v2
-taxonomy:
-    category: docs
 ---
 
 All elements of [Policy Language v1](policy-v1.md) not modified by this document are unchanged.

@@ -3,13 +3,24 @@ title:               Aranya Documentation
 tagline:             'An overview of the Aranya project'
 description:         'Aranya is an access governance and secure data exchange platform for organizations to control their critical data and services.'
 url:                 https://aranya-project.github.io/aranya-docs/
+project-repo: https://github.com/aranya-project/aranya
 baseurl:             ''
 paginate:            5
 permalink:           pretty
+source: ../docs
+layouts_dir: site/_layouts
 
 # Gems
 plugins:
   - jekyll-paginate
 
-# Custom vars
-version:             1.1.0
+# Excludes
+exclude:
+  - .editorconfig
+  - .git
+  - .jekyll-cache
+  - Gemfile
+  - Gemfile.lock
+  - LICENSE.md
+  - README.md
+
