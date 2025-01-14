@@ -64,7 +64,15 @@
   }
 }
 .doc-image {
-  margin: 0 auto;
-  max-width: 1000px;
+  margin: 0 auto 1rem;
+  max-width: 50rem;
   width: 100%;
+}
+@media (min-width: 38em) {
+  .doc-image {
+    margin-bottom: 1.5rem;
+  }
+  .doc-image.tall {
+    max-width: 37.5rem;
+  }
 }
