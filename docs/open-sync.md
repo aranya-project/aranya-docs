@@ -4,6 +4,8 @@ title: Open Sync Requests
 permalink: "/open-sync-requests/"
 ---
 
+# Open Sync Requests
+
 ## Problem
 
 We currently sync by polling. This can be very inefficient when new commands

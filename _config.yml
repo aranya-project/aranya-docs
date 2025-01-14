@@ -5,13 +5,7 @@ description:         'Aranya is an access governance and secure data exchange pl
 url:                 https://aranya-project.github.io/aranya-docs
 project-repo: https://github.com/aranya-project/aranya
 baseurl:             ''
-paginate:            5
 permalink:           pretty
-# source: ./docs
-
-# Gems
-plugins:
-  - jekyll-paginate
 
 # Excludes
 exclude:

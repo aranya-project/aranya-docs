@@ -1,14 +1,14 @@
 ---
 layout: page
-title: Aranya Beta V1
+title: Aranya Beta
 permalink: "/aranya-beta-v1/"
 ---
 
-# Aranya V1
+# Aranya Beta
 
 ## Introduction
 
-A product specification for version 1 of the standalone Aranya daemon. The goal
+A product specification of the standalone Aranya daemon. The goal
 is to provide a commercial off the shelf solution for integrating Aranya. Customers
 should be able to download the Aranya daemon, setup a team, and begin using Aranya.
 

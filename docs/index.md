@@ -133,7 +133,7 @@ To ensure that participating entities are acting over a common authoritative sta
 
 Other core components of our system that enable the control plane and data plane functionalities are detailed below and can be seen in Figure 1 below.
 
-<img src="{{ site.url }}/assets/images/overview-image1.png" style="width:6.5in;height:3.61111in" alt="A diagram of a software application Description automatically generated" />
+<img src="{{ site.url }}/assets/images/overview-image1.png"  class="doc-image" alt="A diagram of a software application Description automatically generated" />
 
 _Figure 1: System Architecture Overview Diagram_
 
@@ -189,7 +189,7 @@ All endpoints participating in the graph will receive all updates to the graph r
 
 The general workflow for exchanging control plane commands on-graph across two endpoints can be seen below in Figure 2. This workflow assumes a policy has been written and validated for all actions desired in the architecture.
 
-<img src="{{ site.url }}/assets/images/overview-image2.png" style="width:6.5in;height:2.94444in" alt="A diagram of a diagram Description automatically generated" />
+<img src="{{ site.url }}/assets/images/overview-image2.png" class="doc-image" alt="A diagram of a diagram Description automatically generated" />
 
 _Figure 2: General On-Graph Workflow_
 
@@ -229,7 +229,7 @@ Policy evaluation in Aranya relies on the set of facts stored in the fact databa
 
 To call an Action, the entity will follow the following process:
 
-<img src="{{ site.url }}/assets/images/overview-image3.png" style="width:3.36111in;height:3.90912in" alt="A diagram of a command Description automatically generated" />
+<img src="../assets/images/overview-image3.png" style="margin: 0 auto; max-width: 1000px; width: 100%;" alt="A diagram of a command Description automatically generated" />
 
 _Figure 3: Calling an Action Workflow_
 
@@ -237,7 +237,7 @@ _Figure 3: Calling an Action Workflow_
 
 To sync with a peer or other entity using Aranya, the entity will follow the following process:
 
-<img src="{{ site.url }}/assets/images/overview-image4.png" style="width:3.15476in;height:3.68056in" alt="A diagram of a system Description automatically generated" />
+<img src="../assets/images/overview-image4.png" style="margin: 0 auto; max-width: 1000px; width: 100%;" alt="A diagram of a system Description automatically generated" />
 
 _Figure 4: Syncing with a Peer Workflow_
 

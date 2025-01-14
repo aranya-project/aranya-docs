@@ -4,6 +4,8 @@ title: Skip List
 permalink: "/skip-list/"
 ---
 
+# Skip List
+
 ## Max Cut
 
 The maximum cut of a command is the maximum number of steps it takes to get from a command to the root. The init command is the root and has a max cut of 0. The max cut of a command is one

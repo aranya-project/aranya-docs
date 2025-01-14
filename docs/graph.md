@@ -4,6 +4,8 @@ title: Graph Auth
 permalink: "/graph-auth/"
 ---
 
+# Graph
+
 Disclaimer: this document is somewhat out-of-date and incomplete.
 
 ## Introduction

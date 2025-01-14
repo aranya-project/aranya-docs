@@ -4,6 +4,8 @@ title: Policy Language v1
 permalink: "/policy-language-v1/"
 ---
 
+# Policy Language v1
+
 ## File format
 
 The policy document is a Markdown document with YAML front matter (as
