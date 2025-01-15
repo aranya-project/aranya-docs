@@ -1,8 +1,11 @@
 ---
+layout: page
 title: Aranya Model
-taxonomy:
-  category: docs
+permalink: "/aranya-model/"
 ---
+
+# Aranya Model
+
 ## Introduction
 When simulating or testing Aranya we need a model that can be used to test the behavior of Aranya under different scenarios. The Aranya Model is the answer to this need.
 

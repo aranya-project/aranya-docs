@@ -1,8 +1,10 @@
 ---
+layout: page
 title: Policy Language v1
-taxonomy:
-    category: docs
+permalink: "/policy-language-v1/"
 ---
+
+# Policy Language v1
 
 ## File format
 
