@@ -82,3 +82,6 @@
     margin: 0 auto;
     display: block;
 }
+.mermaid-wrapper {
+    margin-bottom: 1rem;
+}
