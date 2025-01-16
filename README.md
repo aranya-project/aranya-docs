@@ -13,8 +13,8 @@ The key Front Matter information that every file needs is
 ```
 ---
 layout: page
-title: <"document-title">
-permalink: </"url-slug"/>
+title: "document-title"
+permalink: /"url-slug"/
 ---
 ```
 
