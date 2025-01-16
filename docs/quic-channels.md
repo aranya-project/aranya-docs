@@ -3,7 +3,7 @@
 ## Overview
 
 Aranya Quic Channels are a way for application data to be sent over the 
-network to other peers using tls to ensure security. The QUIC protocol will
+network to other peers using TLS to ensure security. The QUIC protocol will
 be used to send data. This provides multiplexing of connections, tls for
 security, and custom congestion control.
 
