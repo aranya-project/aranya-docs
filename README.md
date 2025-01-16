@@ -19,4 +19,4 @@ permalink: /"url-slug"/
 ```
 
 ## Deploying the site
-Deploying is easy, just push to the `main` branch. The documentation repo is configured to use Github's built in branch push actions to trigger builds and deploys to GH pages. The target branch and directory can be configured in the GH Pages settings section of the repo.
+Deploying is easy, just merge a PR to the `main` branch. The documentation repo is configured to use Github's built in branch push actions to trigger builds and deploys to GH pages. The target branch and directory can be configured in the GH Pages settings section of the repo, if you need to test a deployment. Just note however, we don't have a proper staging environment, so these deployments will go live to the production github.io site.
