@@ -1,4 +1,4 @@
-# Ignore docs files
+# GitHub pages site
 _gh_pages
 _site
 .ruby-version
@@ -29,6 +29,7 @@ nbproject
 *.sublime-project
 *.sublime-workspace
 .idea
+.editorconfig
 
 # Komodo
 *.komodoproject
