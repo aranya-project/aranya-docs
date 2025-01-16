@@ -1,3 +1,9 @@
+---
+layout: page
+title: Aranya Fast Channels
+permalink: "/afc/"
+---
+
 # Aranya Fast Channels Data Routing For Aranya Beta V2
 
 ## Overview

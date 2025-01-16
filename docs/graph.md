@@ -1,8 +1,10 @@
 ---
+layout: page
 title: Graph Auth
-taxonomy:
-  category: docs
+permalink: "/graph-auth/"
 ---
+
+# Graph
 
 Disclaimer: this document is somewhat out-of-date and incomplete.
 
@@ -78,7 +80,7 @@ A state in Aranya is a set of Commands. For example if we had the command instan
 
 Given a deterministic function which provides a total ordering over any set of Commands this approach can be used to build a distributed system which supports eventual consistency.
 
-Most blockchains in productions use an ordering approach that is provided by a partial deterministic ordering augmented by a Validator, a miner in blockchain parlance, which extends the deterministic partial order into a total order. 
+Most blockchains in productions use an ordering approach that is provided by a partial deterministic ordering augmented by a Validator, a miner in blockchain parlance, which extends the deterministic partial order into a total order.
 
 In this approach Validators have large amounts of freedom over the total order. For financial transactions between mutual distrusting parties, this is workable as the prevention of double spending requires a global consistent state and the freedom of the miners to produce different orderings can largely be ignored. (Though Miner Extractable Value, MEV, is still an issue that is exacerbated by this flexibility in ordering.)
 
