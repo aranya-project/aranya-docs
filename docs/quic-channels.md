@@ -1,3 +1,9 @@
+---
+layout: page
+title: Aranya Quic Channels
+permalink: "/aranya-quic-channels/"
+---
+
 # Aranya Quic Channels
 
 ## Overview
