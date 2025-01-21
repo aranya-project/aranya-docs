@@ -1,8 +1,10 @@
 ---
+layout: page
 title: Policy Language v1
-taxonomy:
-    category: docs
+permalink: "/policy-language-v1/"
 ---
+
+# Policy Language v1
 
 ## File format
 
@@ -208,10 +210,10 @@ function is_a(v enum Foo) {
 ```
 
 Enumerations are a set of unique identifiers grouped under a single
-name. They are defined in a top level [`enum`
-declaration](#enumerations-1). An enumeration literal is the name of the
-enumeration and the name of the item separated by `::`. So `Foo::A` is
-the `A` value of `Foo`, and is distinct from `Bar::A`.
+name. They are defined in a top level [`enum` declaration](#enumerations-1).
+An enumeration literal is the name of the enumeration and the name of the
+item separated by `::`. So `Foo::A` is the `A` value of `Foo`, and is
+distinct from `Bar::A`.
 
 The only valid operation you can perform with an enumeration is
 equality, either through the `==` operator, or via the `match`

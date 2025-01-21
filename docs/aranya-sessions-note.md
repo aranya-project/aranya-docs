@@ -1,8 +1,10 @@
 ---
-title: Aranya Session Design Notes
-taxonomy:
-    category: docs
+layout: page
+title: Aranya Sessions
+permalink: "/aranya-sessions/"
 ---
+
+# Aranya Sessions Design Note
 
 ## Rationale
 It is sometimes useful to leverage the strong security guarantees provided by the existing Aranya graph without incurring the costs of storing additional data on-graph. We therefore need a mechanism that can evaluate policy commands locally at the current "perspective" in the graph. We call this mechanism an Aranya Session - that processes 'ephemeral' commands as we would normal commands, but where data is only temporarily stored in memory and will be lost after restarting the application or power cycling hardware.

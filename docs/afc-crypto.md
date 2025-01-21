@@ -1,6 +1,12 @@
+---
+layout: page
+title: AFC Cryptography
+permalink: "/afc-cryptography/"
+---
+
 # AFC Cryptography
 
-# Overview
+## Overview
 
 Aranya Fast Channels (AFC) is a low latency, high throughput
 encryption engine that uses Aranya for key management and
@@ -14,7 +20,7 @@ Encryption is scoped to a particular _channel_, which supports
 one-to-one communication in either a unidirectional or
 bidirectional manner.
 
-# Notation
+## Notation
 
 - `"abc"`: A byte string containing the UTF-8 characters between
   the double quotation marks (`"`).
@@ -29,7 +35,7 @@ bidirectional manner.
 - `ALG_Op(...)`: A cryptographic algorithm routine. E.g.,
   `AEAD_Seal(...)`, `HPKE_OneShotSeal(...)`, etc.
 
-# Design
+## Design
 
 Conceptually, AFC implements this interface:
 
@@ -54,12 +60,12 @@ ensuring that both channel users meet some specified criteria.
 > **Note**: For performance reasons, users and labels are mapped
 > to 32-bit integers.
 
-## Bidirectional Channels
+### Bidirectional Channels
 
 Bidirectional channels allow both users to encrypt and decrypt
 data. Generally speaking, they're the default channel type.
 
-### Cryptography
+#### Cryptography
 
 Each bidirectional channel has two unique symmetric [AEAD] keys,
 (k1, k2), called the _ChannelKeys_. One side of the channel uses
@@ -68,15 +74,15 @@ k2 for encryption and k1 for decryption. The key used for
 encryption is referred to as the _SealKey_ and the key used for
 decryption is referred to as the _OpenKey_.
 
-#### Key Derivation
+##### Key Derivation
 
-ChannelKeys are derived using HPKE's Secret Export API. 
+ChannelKeys are derived using HPKE's Secret Export API.
 
 For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate ChannelKeys (from a buggy CSPRNG), it mixes in the ID
 of the command that created the channel. (Command IDs are assumed
-to be unique; for more information, see the [Aranya spec](product-beta.md).)
+to be unique; for more information, see the [Aranya spec]({{ site.url }}/aranya-beta).)
 
 The key derivation scheme is as follows:
 
@@ -145,27 +151,27 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
 }
 ```
 
-## Unidirectional Channels
+### Unidirectional Channels
 
 Unidirectional channels allow one user to encrypt and one user to
 decrypt.
 
-### Cryptography
+#### Cryptography
 
 Each unidirectional channel has one unique symmetric [AEAD] key.
 The side that encrypts calls this the _SealOnlyKey_ and the side
 that decrypts calls this the _OpenOnlyKey_.
 
-#### Key Derivation
+##### Key Derivation
 
 The SealOnlyKey/OpenOnlyKey is derived using HPKE's Secret Export
-API. 
+API.
 
 For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate keys (from a buggy CSPRNG), it mixes in the ID of the
 command that created the channel. (Command IDs are assumed to be
-unique; for more information, see the [Aranya spec](product-beta.md).)
+unique; for more information, see the [Aranya spec]({{ site.url }}/aranya-beta).)
 
 The key derivation scheme is as follows:
 
@@ -232,12 +238,12 @@ fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
 }
 ```
 
-## Cryptography
+### Cryptography
 
 Outside of key derivation, the remaining cryptography is
 identical for both channel types.
 
-### Message Encryption
+#### Message Encryption
 
 AFC encrypts each message with a uniformly random nonce generated
 by a CSPRNG.
@@ -280,16 +286,16 @@ fn Open(user, label, ciphertext) {
 }
 ```
 
-### Key Usage
+#### Key Usage
 
 Each encryption key must not be used more than allowed by the
 underlying AEAD (i.e., it should respect the AEAD's lifetime).
 **The current specification does not require AFC to track how
 much a particular key is used. This will change in the future.**
 
-### Algorithms
+#### Algorithms
 
-#### AEAD
+##### AEAD
 
 Briefly, [AEAD] encryption is a construction with four inputs:
 
@@ -318,17 +324,17 @@ include [AES-256-GCM], [ChaCha20-Poly1305], and [Ascon]. It is
 highly recommended to use a nonce misuse-resistant AEAD, like
 [AES-GCM-SIV].
 
-### Committing AEAD
+#### Committing AEAD
 
 A _committing_ AEAD is an AEAD that binds the authenticator to
 one or more of the AEAD inputs. For more information, see
 [Efficient Schemes for Committing Authenticated
 Encryption][Bellare].
 
-#### KDF
+##### KDF
 
 An extract-then-expand Key Derivation Function (KDF) as
-formally defined in section 3 of [HKDF]. 
+formally defined in section 3 of [HKDF].
 
 The KDF must:
 
@@ -340,7 +346,7 @@ The KDF must:
 > from passwords. In other words, it does not need to be a "slow"
 > KDF like PBKDF2.
 
-#### HPKE
+##### HPKE
 
 Hybrid Public Key Encryption (HPKE) per [RFC 9180].
 
@@ -348,7 +354,7 @@ Hybrid Public Key Encryption (HPKE) per [RFC 9180].
 [AES-256-GCM]: https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf
 [AES-GCM-SIV]: https://www.rfc-editor.org/rfc/rfc8452.html
 [AFC]: https://github.com/aranya-project/aranya-core/tree/main/crates/aranya-fast-channels
-[AranyaUsers]: idam.md#member-status
+[AranyaUsers]: https://git.spideroak-inc.com/spideroak-inc/aranya-docs/blob/main/src/idam.md#member-status
 [Ascon]: https://csrc.nist.gov/News/2023/lightweight-cryptography-nist-selects-ascon
 [Bellare]: https://eprint.iacr.org/2022/268
 [CSPRNG]: https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
