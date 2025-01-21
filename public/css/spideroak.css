@@ -78,10 +78,18 @@
         margin-bottom: 1.5rem;
     }
 }
+
+/* Hide raw Mermaid code to stop flash of unstyled content */
+.mermaid {
+    height: 0;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+.mermaid.processed {
+    height: auto;
+    overflow: unset;
+}
 .mermaid svg {
     margin: 0 auto;
     display: block;
-}
-.mermaid-wrapper {
-    margin-bottom: 1rem;
 }

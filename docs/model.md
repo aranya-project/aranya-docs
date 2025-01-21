@@ -2,7 +2,6 @@
 layout: page
 title: Aranya Model
 permalink: "/aranya-model/"
-tags: [Mermaid]
 mermaid: true
 ---
 
@@ -19,7 +18,7 @@ The APIs use simple user generated segregate Proxy IDs for the public client and
 ## Client State
 Each client in the model can be thought of as an instance of Aranya Client State or the state of its graph. To configure an Aranya client, we need to look at its component parts.
 
-<div class="mermaid mermaid-wrapper">
+<div class="mermaid">
     flowchart
         A(Policy Document) --> B(Policy Parser)
         B --> C(Policy Compiler)
@@ -80,7 +79,7 @@ The client state keeps track of the state of the graph in the runtime client. Th
 
 
 ## Model Client
-<div class="mermaid mermaid-wrapper">
+<div class="mermaid">
     flowchart
         A(Client State) --> B(Model Client)
         C(Public Keys) --> B
@@ -92,7 +91,7 @@ Once we have the required configurations to build the client state, we can const
 When key bundles are created, they are limited in scope to the factory in which they are instantiated. We need to use the public key portion of the bundle to interact with various parts of the policy. Because of this we store them as part of the model client.
 
 ## Runtime Model
-<div class="mermaid mermaid-wrapper">
+<div class="mermaid">
     flowchart
         A(clients) --> B(RuntimeModel)
         C(storage_ids) --> B
