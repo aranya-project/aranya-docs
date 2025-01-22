@@ -25,5 +25,8 @@
         </div>
         <div for="sidebar-checkbox" class="sidebar-toggle"></div>
         <script src='{{ site.url }}/public/js/script.js'></script>
+        {% if page.mermaid %}
+        <script type="module" src='{{ site.url }}/public/js/mermaid.js'></script>
+        {% endif %}
     </body>
 </html>
