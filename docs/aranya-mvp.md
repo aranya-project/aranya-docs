@@ -7,8 +7,8 @@ taxonomy:
 
 ## Introduction
 
-A product specification for version 1 of the standalone Aranya daemon. The goal is to provide a 
-commercial off the shelf solution for integrating Aranya. Customers should be able to download the Aranya daemon and user library, setup a team, and begin using Aranya.
+A product specification for version 1 of the standalone Aranya daemon and user library. The goal is to provide a 
+commercial-off-the-shelf solution for integrating Aranya. Customers should be able to download the Aranya daemon and user library, setup a team, and begin using Aranya.
 
 Much of this document will serve as an extension to the [Aranya Beta spec](/docs/aranya-beta.md) that was implemented 
 as version beta of the product. To capture all details related to the MVP in a single spot, 
@@ -21,7 +21,7 @@ Primary Goals:
 3. Implement a default policy that works well enough for a wide variety of situations that 
 customers can relate to.
 1. Provide stable APIs that allow devices and users to interact with Aranya.
-2. Expose an API for point to point high performance encrypted communication using IPv4 for  
+2. Expose an API for point-to-point high performance encrypted communication using IPv4 for  
 transport.
 
 Secondary internal goals:
@@ -82,7 +82,7 @@ TODO (post-mvp): add support for other languages.
 
 ## Config
 
-On startup, the daemon requires the work directory as well as the path to the UDS socket that 
+On startup, the daemon requires the work directory as well as the path to the unix domain socket that 
 should be created. The daemon working directory will be split using XDG, with namespaces and 
 prefixes for everything. Just the config path will be passed in.
 
