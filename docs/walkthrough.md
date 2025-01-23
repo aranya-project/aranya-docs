@@ -6,7 +6,7 @@ permalink: "/walkthrough/"
 
 # Getting Started with Aranya
 
-Note: The following walkthrough offers a detailed explanation of [Aranya](https://github.com/aranya-project/aranya/tree/main)'s internals, written in Rust, to assist in setting up an example usage. To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
+Note: The following walkthrough offers a detailed explanation of [Aranya](https://github.com/aranya-project/aranya/tree/main)'s internals, written in Rust, to assist in setting up an example usage. To run this scenario using Rust, see the [Rust template](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
 In this document, we will walk through a scenario with five users initializing
 and running Aranya. The users will create a team using Aranya and send messages
@@ -23,7 +23,7 @@ to each other using Aranya Fast Channels. There are a few things to keep in mind
   protected partition, such as an HSM, for maximum security. This avoids a
   single access point for all Aranya user keys in case a machine is compromised.
 
-See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
+See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) or [templates](https://github.com/aranya-project/aranya/tree/main/templates) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
 
 # Outline
 
