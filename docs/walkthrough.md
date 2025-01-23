@@ -6,16 +6,14 @@ permalink: "/walkthrough/"
 
 # Getting Started with Aranya
 
-Note: The following walkthrough offers a detailed explanation of Aranya's
-internals, written in Rust, to assist in setting up an example usage. To run
-this scenario using our C API wrappers, see the [C example](../examples/c/).
+Note: The following walkthrough offers a detailed explanation of [Aranya](https://github.com/aranya-project/aranya/tree/main)'s internals, written in Rust, to assist in setting up an example usage. To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
 In this document, we will walk through a scenario with five users initializing
 and running Aranya. The users will create a team using Aranya and send messages
 to each other using Aranya Fast Channels. There are a few things to keep in mind:
 
 - Any policy actions are determined by the implemented policy. This walkthrough
-  will use the default policy defined [here](/crates/aranya-daemon/src/policy.md).
+  will use the default policy defined [here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/policy.md).
 
 - Security tip: This walkthrough is intended as an example to be run on a
   single machine. As such, a single machine is used to build all key bundles
@@ -25,19 +23,11 @@ to each other using Aranya Fast Channels. There are a few things to keep in mind
   protected partition, such as an HSM, for maximum security. This avoids a
   single access point for all Aranya user keys in case a machine is compromised.
 
-See the [examples](../examples) directory for example applications that
-follow scenarios similar to the one described in this document. Also, see the
-[overview documentation](overview.md) for more details on the components
-used in this walkthrough.
+See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview documentation](aranya-overview.md) for more details on the components used in this walkthrough.
 
 # Outline
 
-The walkthrough includes five users who will be referred to by their user role.
-The actions performed by each user are based on the permissions assigned to
-each role in the [default policy](/crates/aranya-daemon/src/policy.md). There
-will be five users, `Owner`, `Admin`, `Operator`, `Member A` and `Member B`. We
-will use the [`daemon`](/crates/aranya-daemon/src/daemon.rs) implementation for
-this example.
+The walkthrough includes five users who will be referred to by their user role. The actions performed by each user are based on the permissions assigned to each role in the [default policy](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/policy.md). There will be five users, `Owner`, `Admin`, `Operator`, `Member A` and `Member B`. We will use the [`daemon`](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs) implementation for this example.
 
 Step 1. [Prepare the device environment](#prereqs)
 
@@ -76,16 +66,9 @@ The following platforms are not supported:
 
 # <a name="daemon"></a>Daemon
 
-The [daemon](../crates/aranya-daemon) provides functionality for the
-[client library](../crates/aranya-client) to maintain Aranya state, including
-interacting with the graph and syncing with peers, and send off-graph messages
-using Aranya Fast Channels. The daemon and client interact through the
-[Daemon API](../crates/aranya-daemon-api/src/service.rs). The following
-sections will walk through configuring and starting a long-running daemon
-process.
+The [daemon](https://github.com/aranya-project/aranya/tree/main/crates/aranya-daemon) provides functionality for the [client library](https://github.com/aranya-project/aranya/tree/main/crates/aranya-client) to maintain Aranya state, including interacting with the graph and syncing with peers, and send off-graph messages using Aranya Fast Channels. The daemon and client interact through the [Daemon API](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon-api/src/service.rs). The following sections will walk through configuring and starting a long-running daemon process.
 
-For more details, see the
-[Aranya Daemon's README](../crates/aranya-daemon/README.md).
+For more details, see the [Aranya Daemon's README](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/README.md).
 
 ## <a name="daemon-config"></a>Configuration
 
@@ -96,13 +79,12 @@ cryptographic material belonging to the user, key storage accessed by Aranya
 and graph storage for holding all fully processed commands. Additionally, the
 daemon's config file also includes networking for syncing and off-graph
 messaging. A complete example of a daemon configuration file can be found
-[here](/crates/aranya-daemon/example.json).
+[here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/example.json).
 
 Based on this example, create a configuration file for each user. Remember to
 change the ports and other user-specific values for each user.
 
-Or, directly use the [daemon configuration files](../examples/c/configs/) from
-the C example. This example has configs for each user in this tutorial.
+Or, directly use the [daemon configuration files](https://github.com/aranya-project/aranya/tree/main/examples/c/configs) from the C example. This example has configs for each user in this tutorial.
 
 Now that the daemons have been configured, we can build and run them!
 
@@ -209,13 +191,13 @@ async fn setup_aranya(
 ```
 
 **NB**: This is an abbreviated version of the daemon's `setup_aranya` method, see
-[here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs#L141)
+[here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs#L138)
 for the current implementation details.
 
 The daemon receives actions from the user via the user client API. When the
 client makes a call in the client library, it may invoke a command in the
 daemon using an internal API. For more details on this API, see the
-[aranya-daemon-api crate](../crates/aranya-daemon-api/src/service.rs).
+[aranya-daemon-api crate](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon-api/src/service.rs).
 
 
 ## <a name="syncer"></a>Syncer
@@ -276,8 +258,7 @@ let team_id = client.create_team()?;
 
 #### C
 
-The following snippet has been modified for simplicity. To see actual usage,
-see the [C example](../examples/c/example.c#L162).
+The following snippet has been modified for simplicity. To see actual usage, see the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L169).
 
 ```C
 // have owner create the team.
@@ -328,7 +309,7 @@ team.add_sync_peer(member_b_sync_addr, interval).await?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage
-in the [C example](../examples/c/example.c#L185).
+in the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L194).
 
 ```C
 const char *admin_sync_addr = "127.0.0.1:10002";
@@ -379,7 +360,7 @@ let admin_kb = client.get_key_bundle()?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L145).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L148).
 
 ```C
 err = aranya_get_key_bundle(&owner_client->client, &owner_client->pk);
@@ -409,7 +390,7 @@ team.assign_role(admin_device_id, Role::Admin)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L229).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L242).
 
 ```C
 // add admin to team.
@@ -447,7 +428,7 @@ team.assign_role(operator_device_id, Role::Operator)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L239).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L252).
 
 ```C
 // add operator to team.
@@ -479,7 +460,7 @@ team.assign_role(member_b_device_id, Role::Member)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L249).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L262).
 
 ```C
 // add membera to team.
@@ -518,7 +499,7 @@ operator_client.assign_net_identifier(member_b_device_id, member_b_afc_addr)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L274).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L302).
 
 ```C
 const char *member_a_afc_addr = "127.0.0.1:11004";
@@ -569,7 +550,7 @@ team.create_label(label)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L261).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L280).
 
 ```C
 // operator creates AFC labels and assigns them to team members.
@@ -603,7 +584,7 @@ team.assign_label(member_b_device_id, label)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L266).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L287).
 
 ```C
 err = aranya_assign_label(&team->clients.operator.client, &team->id,
@@ -639,7 +620,7 @@ let channel_id = member_a_client.create_bidi_channel(team_id, member_b_afc_addr,
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L287).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L320).
 
 ```C
 // create AFC channel between membera and memberb.
@@ -674,7 +655,7 @@ member_a_client.send_data(channel_id, data)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L307).
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L343).
 
 ```C
 // send AFC data.
@@ -705,7 +686,7 @@ member_b_client.send_data(channel_id, data)?;
 #### C
 
 The following snippet has been modified for simplicity. See the actual usage in
-the [C example](../examples/c/example.c#L307). Note the example does not
+the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/example.c#L343). Note the example does not
 include `Member B` sending a message to `Member A`. However, the action will
 look similar to the linked usage, but `Member B`'s client would be passed in
 instead.
