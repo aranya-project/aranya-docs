@@ -23,7 +23,7 @@ to each other using Aranya Fast Channels. There are a few things to keep in mind
   protected partition, such as an HSM, for maximum security. This avoids a
   single access point for all Aranya user keys in case a machine is compromised.
 
-See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview documentation](aranya-overview.md) for more details on the components used in this walkthrough.
+See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
 
 # Outline
 
