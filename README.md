@@ -20,3 +20,6 @@ permalink: /"url-slug"/
 
 ## Deploying the site
 Deploying is easy, just merge a PR to the `main` branch. The documentation repo is configured to use Github's built in branch push actions to trigger builds and deploys to GH pages. The target branch and directory can be configured in the GH Pages settings section of the repo, if you need to test a deployment. Just note however, we don't have a proper staging environment, so these deployments will go live to the production github.io site.
+
+## Develop locally
+Given the single deployment target of GitHub Pages we do not have a staging site. The best way to test your work is to use a local development server. Luckily Jekyll supplies a solution for this. You can see the install instructions here https://jekyllrb.com/docs/installation/macos/ and then you just need to run `jekyll serve -w` which will spin up a dev server on localhost.
