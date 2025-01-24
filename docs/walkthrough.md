@@ -6,11 +6,11 @@ permalink: "/walkthrough/"
 
 # Getting Started with Aranya
 
-Note: The following walkthrough offers a detailed explanation of [Aranya](https://github.com/aranya-project/aranya/tree/main)'s internals, written in Rust, to assist in setting up an example usage. To run this scenario using Rust, see the [Rust template](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
+In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust template](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
-In this document, we will walk through a scenario with five users initializing
-and running Aranya. The users will create a team using Aranya and send messages
-to each other using Aranya Fast Channels. There are a few things to keep in mind:
+There are a few things to note:
+
+- The following walkthrough offers a detailed explanation of [Aranya](https://github.com/aranya-project/aranya/tree/main)'s internals, written in Rust, to assist in setting up an example usage with the [client](https://crates.io/crates/aranya-client) and [daemon](https://crates.io/crates/aranya-daemon). Examples for the [Rust API](https://github.com/aranya-project/aranya/tree/main/crates/aranya-client) and the [C API wrappers](https://github.com/aranya-project/aranya/tree/main/crates/aranya-client-capi) are both displayed.
 
 - Any policy actions are determined by the implemented policy. This walkthrough
   will use the default policy defined [here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/policy.md).
@@ -23,7 +23,7 @@ to each other using Aranya Fast Channels. There are a few things to keep in mind
   protected partition, such as an HSM, for maximum security. This avoids a
   single access point for all Aranya user keys in case a machine is compromised.
 
-See the [examples](https://github.com/aranya-project/aranya/tree/main/examples/) or [templates](https://github.com/aranya-project/aranya/tree/main/templates) directory for example applications that follow scenarios similar to the one described in this document. Also, see the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
+See the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
 
 # Outline
 
