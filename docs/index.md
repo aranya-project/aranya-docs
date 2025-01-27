@@ -29,3 +29,5 @@ Aranya is useful anywhere you have data that needs to be reconciled, sent secure
 - [Open Sync Requests](open-sync-requests): Open Sync Requests discusses our pushed based approach to syncing.
 
 - [Aranya Model](aranya-model): The Aranya Model is a simple tool for simulating or testing the Aranya runtime under different scenarios.
+
+- [Aranya Walkthrough](walkthrough): Discusses the internals used to setup Aranya and walks through the initial steps of an example usage.
