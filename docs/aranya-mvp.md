@@ -22,7 +22,7 @@ Primary Goals:
 2. Easily setup a team and onboard devices.
 3. Implement a default policy that works well enough for a wide variety of situations that 
 customers can relate to.
-4. Provide stable APIs that allow devices and users to interact with Aranya.
+4. Provide stable and backwards compatible APIs that allow devices and users to interact with Aranya.
 5. Expose an API for point-to-point high performance encrypted communication using IP for  
 transport.
 
@@ -59,8 +59,9 @@ There will be two subsystems as part of the product:
 1. The daemon
 2. The client library
 
-The daemon is a standalone process that runs Aranya and exposes the control plane API via IPC. The 
-daemon will periodically sync with peers and handle commands as they are synced. The current design 
+The daemon is a standalone process that runs an instance Aranya and exposes the control plane API via IPC. 
+It handles setting up all the dependencies that Aranya needs including storage, policy, and network communication.
+The daemon will periodically sync with registered peers and handle commands as they are synced. The current design 
 does not require any disk-persisted effects, so on startup the daemon should start from a clean 
 state (aside from loading accounts) every time it is started. This includes clearing any shared 
 memory on startup to avoid collisions/stale data.
@@ -85,20 +86,23 @@ TODO: update diagrams to remove AFC (https://github.com/aranya-project/aranya-do
 
 ## Config
 
-On startup, the daemon requires the work directory as well as the path to the unix domain socket 
-that should be created. The daemon working directory will be split using XDG, with namespaces and 
-prefixes for everything. Just the config path will be passed in.
+On startup, the daemon requires a path to the working directory. That directory contains a configuration
+file with the path to the unix domain socket that should be created and other values. The daemon working
+directory will be split using XDG, with namespaces and prefixes for subdirectories.
 
 All other config values are provided when a client context is initialized and passed to the daemon  
 over the Unix Domain Socket. This approach allows the device API to drive the configuration of the 
 daemon, and can help reduce errors in config mismatch by minimizing the number of duplicate config 
 values.
 
+The daemon will expose a simple API that clients can use to request connection information for
+dataplanes like AFC. The client will be able to request the AFC config from the daemon and use
+that directly. Other configuration values can also be added to this mechanism. After MVP, additional
+APIs can be exposed to change those configured values.
+
 A config object will be used to instantiate a graph, i.e. in the action to perform the Init command 
 and the API call for adding an existing graph (see CreateTeam and AddTeam APIs below). The config 
 object will be versioned and extensible, and should not break API compatibility. 
-
-TODO (post-mvp): pass policy through Init command config object.
 
 ## Components
 
@@ -265,8 +269,6 @@ related APIs.
 Aranya Quic channels use a modified Quic transport implementation that supports the ability to use 
 custom cryptography and has latency-based congestion control (see (s2n-quic)[https://github.com/aws/s2n-quic]).
 
-TODO: not requiring TLS certs?
-  
 Ideally, embedded devices that implement a subset of Aranya library should still be able to sync with
 clients that have the full product integrated. AFC should also be compatible between subset implementations
 and the full implementation. This compatibility is Post-MVP.
@@ -378,9 +380,12 @@ pull only, so the device that requests a sync receives commands from the request
 
 ## Additional Notes
 
-- All APIs use Result unless stated otherwise
+- All Rust APIs use Result unless stated otherwise
+- C APIs return the AranyaError type, and use parameters for return values unless
+some other pattern is required.
 
-- TODO: C API naming prefix
+
+### Naming Scheme
 
 The C API will use the following naming scheme:
 ```
@@ -468,3 +473,5 @@ a Finalization must be its descendant, otherwise, it will be dropped. Post-MVP. 
 For the initial implementation in the beta, AFC control messages should be handled
 transparently by the client library. In the future, control messages can be passed
 to the device to be manually forwarded to the daemon using a different API.
+
+TODO (post-mvp): pass policy through Init command config object.
