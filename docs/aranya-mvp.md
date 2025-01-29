@@ -147,7 +147,8 @@ TODO: add table of comparison for AFC and Quic channels.
 ### Client APIs
 
 The client APIs are local-only API endpoints that do not create commands on the graph. They are 
-mostly used to manage the local state.
+mostly used to manage the local state. Depending on the language, the endpoints may be a different
+format that is more idiomatic to that language such as snake_case for C.
 
 - `InitDevice() -> device_id` - init a device if not exists, generate keys, create the API 
 instance, etc.
@@ -333,48 +334,63 @@ to get developers up and running with the product as soon as possible. Documenta
 should also be provided for the daemon so that developers and sysadmins can
 understand the requirements and operations of the daemon.
 
-## Glossary
 
-- `AFC` - the library used to do high performance encryption using keys managed by `Aranya`.
-- `Aranya Quic Channels (maybe AQC)` - An integration of Aranya with QUIC to provide a secure 
-and integrated transport. See QUIC channels spec. TODO(declan): link
-- `Aranya` - the main library that drives the control plane and policy execution.
-- `daemon` - a long-lived process, typically running in the background, that
-handles commands and keeps state.
-- `device` - a computer, sometimes associated with a user but can also be independent.
-In this model, we consider `devices` instead of users directly to accommodate
-autonomous entities.
-- `IPC` - inter-process communication.
-- `policy` - an Aranya policy, containing the logic and rules of the system.
-- `sync` - a request to synchronize the commands on the control plane. Syncs are currently
-pull only, so the device that requests a sync receives commands from the requestee.
-- `team` - a group of devices with an associated policy.
-- `user` - a person who may operate a device.
+# Appendix
 
-### Verb pairs
+## Appendix A: TODOs needed to complete MVP updates
 
-- Add/Remove
-- Assign/Revoke
-- Create/Delete
+### Urgent
 
-## Additional Notes
+### High
+-  Measure system requirements and record values in this spec.
+-  Quic channels spec and implementation
+-  ARM32 support for CI and releases
+-  Expose bytes of IDs to end user
 
-- All Rust APIs use Result unless stated otherwise
-- C APIs return the AranyaError type, and use parameters for return values unless
-some other pattern is required.
+### Normal 
+-  Update existing code and docs to use "device" instead of "user".
+  -  Ensure "graph" is used in core, while "team" is used in product.
+-  Add "ephemeral" marker in command metadata.
+-  Take measures to deem AFC as experimental (e.g., updating docs)?
+-  Update AddSyncPeer to sync immediately
+-  Add config object with just version field to `CreateTeam` and `AddTeam` APIs.
+-  Implement `SyncNow`
+-  Add config object to `AddSyncPeer` and include the rate parameter in it.
+  -  Might want to add max # of bytes to sync, timeout for number of secs it stays open, etc.
+-  Update existing AFC APIs to include "afc" in their name to differentiate from Quic channels
+-  Custom policy roles spec and implementation
 
+### Low
+-  Set up CI to measure resource usage
+-  Implement FactDB query APIs
+-  CLI for managing permissions
+-  Update default policy to have one role type authoring each command
 
-### Naming Scheme
+### Nice to have
+
+Anything moved to Post-MVP but would be nice to get into the MVP if we have resources.
+
+-  Implement `Finalization`
+-  Implement `AwaitCommand` and `IsPresent`.
+
+### Uncategorized
+
+-  Update spec diagrams.
+-  Outline and apply daemon working directory changes.
+  -  Establish best terminology for reference (e.g. "device store"?).
+-  Improve polling mechanism for Quic channels
+
+## Appendix B: Naming Schemes
 
 The C API will use the following naming scheme:
 ```
-(LibraryPrefix)_((Receiver)_)?(FunctionName)
+(libraryPrefix)_((receiver)_)?(functionName)
 ```
 
 Where 
-- LibraryPrefix is a global prefix for the whole library (ex Aranya)
-- Receiver is a thing we are calling a function on (see below for example) 
-- FunctionName is the name of the function to call.
+- libraryPrefix is a global prefix for the whole library (ex: Aranya)
+- receiver is a thing we are calling a function on (see below for example) 
+- functionName is the name of the function to call.
 
 For example, an API endpoint with the name `FooClientBar` breaks down as follows:
 
@@ -385,34 +401,14 @@ For example, an API endpoint with the name `FooClientBar` breaks down as follows
 `FooClientBar` calls the function `Bar` on an instance of `Client` (passed as an argument)
 provided by the library `Foo`.
 
+### Verb pairs
 
-## TODO: Tasks needed to complete MVP updates
+- Add/Remove
+- Assign/Revoke
+- Create/Delete
+- Set/Unset
 
--  Measure system requirements and record values in this spec.
--  Update existing code and docs to use "device" instead of "user".
-  -  Ensure "graph" is used in core, while "team" is used in product.
--  Update spec diagrams.
--  Outline and apply daemon working directory changes.
-  -  Establish best terminology for reference (e.g. "device store"?).
--  Add "ephemeral" marker in command metadata.
--  Add config object with just version field to `CreateTeam` and `AddTeam` APIs.
--  Implement `AwaitCommand` and `IsPresent`.
--  Add config object to `AddSyncPeer` and include the rate parameter in it.
-  -  Might want to add max # of bytes to sync, timeout for number of secs it stays open, etc.
--  Update AddSyncPeer to sync immediately
--  Implement `SyncNow`
--  Implement FactDB query APIs
--  Update existing AFC APIs to include "afc" in their name to differentiate from Quic channels
--  Quic channels spec and implementation
-   -  Include reference to spec in this doc once ready
--  Improve polling mechanism for Quic channels
--  Implement `Finalization`
--  Custom policy roles spec and implementation
--  CLI for managing permissions
--  Update default policy to have one role type authoring each command
--  Take measures to deem AFC as experimental (e.g., updating docs)?
--  Expose bytes of IDs to end user
--  ARM32 support for CI and releases
+## Appendix C: Notes and Post-MVP information
 
 ## TODO: Post-MVP (unordered)
 
@@ -456,3 +452,28 @@ to the device to be manually forwarded to the daemon using a different API.
 TODO (post-mvp): pass policy through Init command config object.
 
 TODO: (post-mvp?) improving AFC polling in rust API. "Different mechanism for Quic channels will be used. Improving the API for AFC specifically is not part of MVP but if improvements are needed for Quic channel then they might happen for MVP - see Quic channels spec." - YC
+
+### Additional Notes
+
+- All Rust APIs use Result unless stated otherwise
+- C APIs return the AranyaError type, and use parameters for return values unless
+some other pattern is required.
+
+## Appendix D: Glossary
+
+- `AFC` - the library used to do high performance encryption using keys managed by `Aranya`.
+- `Aranya Quic Channels (maybe AQC)` - An integration of Aranya with QUIC to provide a secure 
+and integrated transport. See QUIC channels spec. TODO(declan): link
+- `Aranya` - the main library that drives the control plane and policy execution.
+- `daemon` - a long-lived process, typically running in the background, that
+handles commands and keeps state.
+- `device` - a computer, sometimes associated with a user but can also be independent.
+In this model, we consider `devices` instead of users directly to accommodate
+autonomous entities.
+- `IPC` - inter-process communication.
+- `policy` - an Aranya policy, containing the logic and rules of the system.
+- `sync` - a request to synchronize the commands on the control plane. Syncs are currently
+pull only, so the device that requests a sync receives commands from the requestee.
+- `team` - a group of devices with an associated policy.
+- `user` - a person who may operate a device.
+
