@@ -253,13 +253,13 @@ TODO: Custom roles actions (Client APIs for static policy or Control Plane APIs 
 
 ### Aranya Quic Channels API
 
-TODO: add reference to Quic channels spec once ready
+Draft version: https://github.com/aranya-project/aranya-docs/blob/2-quic-channels/docs/quic-channels.md 
+Eventually where the final spec will live: https://github.com/aranya-project/aranya-docs/blob/main/docs/quic-channels.md 
 
 Note: The beta spec describes Aranya Fast Channels (AFC) which is replaced by Aranya Quic Channels 
 for the MVP. AFC is instead viewed as an experimental feature of the product which might still be
 preferred when running on embedded devices or when using a unidirectional transport. Refer to the 
 beta spec and other existing documentation ([AFC](/docs/afc.md) and [AFC-Crypto](/docs/afc-crypto.md)) for more details on AFC. 
-
 
 Just like AFC, the Quic Channels plane is split in two different sub-planes: the Quic channels 
 control plane and the Quic channels data plane. The Quic channels control plane is responsible for 
@@ -273,27 +273,6 @@ Ideally, embedded devices that implement a subset of Aranya library should still
 clients that have the full product integrated. AFC should also be compatible between subset implementations
 and the full implementation. This compatibility is Post-MVP.
 
-#### Quic Channels Control Plane
-
-- `CreateQuicChannel(team_id, net_identifier, label) -> channel_id` - Open a channel to the dest  
-with the given label. The device API transparently handles sending the ephemeral command to the 
-peer. Channel keys are automatically rotated after a specific byte count.
-- `DeleteQuicChannel(team_id, channel_id)` - Close a channel with the given ID. The device API   
-transparently handles sending the ephemeral command to the peer.
-
-#### Quic Channels Data Plane
-
-TODO: (post-mvp?) improving AFC polling in rust API
-
-- `PollData(timeout) -> bool` - blocks with timeout, returns true if there is data on the channel 
-to read using `ReadData`.
-  - TODO: polling needs improvement, so don't copy over to Quic Channels
-  - TODO: need separate mechanisms for C and Rust
-- `ReadData(bytes_buffer) -> Result<(len_written, remote_net_identifier, label, channel_id)>` - 
-read the channel data, returning the plaintext, sender, and label (or an error). Returns one 
-channel message at a time.
-- `SendData(bytes, channel_id, timeout) -> bool` - encrypts and sends the data to the given channel 
-with a timeout. This call is blocking until the timeout is complete.
 
 ## Roles & Permissions
 
@@ -475,3 +454,5 @@ transparently by the client library. In the future, control messages can be pass
 to the device to be manually forwarded to the daemon using a different API.
 
 TODO (post-mvp): pass policy through Init command config object.
+
+TODO: (post-mvp?) improving AFC polling in rust API. "Different mechanism for Quic channels will be used. Improving the API for AFC specifically is not part of MVP but if improvements are needed for Quic channel then they might happen for MVP - see Quic channels spec." - YC
