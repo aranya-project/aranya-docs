@@ -205,12 +205,15 @@ Easy to implement, key moving is done by integration.
 #### Graph Querying APIs
 
 FactDB queries over the current perspective of the graph should be possible through ephemeral 
-commands in the policy that will return query results in their emitted effects.
+commands in the policy that will return query results in their emitted effects. These APIs
+are likely to be moved to nice-to-have or Post-MVP.
 
-TODO: List out query APIs against fact db
-    - Role lookup: input device ID ; output assigned role(s)
-    - KeyBundle lookup: input device ID ; output stored KeyBundle
-    - ...
+- `QueryFactRole(user_id) -> Role`
+- `QueryFactKeybundle(user_id) -> Keybundle`
+- `QueryFactNetworkId(user_id) -> network_str`
+- `QueryFactLabelAssignments(user_id) -> Vec<label>`
+- `QueryFactLabelExists(user_id) -> Vec<label>`
+
 
 ### IDAM Control Plane API
 
@@ -233,22 +236,19 @@ messages. Can take either DNS name, IPv4, or IPv6. Current implementation uses a
 reverse lookup.
 - `UnsetNetworkName(team_id, device_id, net_identifier)` - disassociate a network address from a 
 device.
-- `CreateLabel(team_id, label)` - create a label
-- `DeleteLabel(team_id, label)` - delete a label
-- `AssignLabel(team_id, device_id, label)` - assign a label to a device so that it can be used for 
-Quic Channels (or AFC)
-- `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
 - `Finalization(team_id)` - create a truncation checkpoint of the graph. Any command received after 
 a Finalization must be its descendant, otherwise, it will be dropped. Post-MVP.
 
 
-TODO: Custom roles actions (Client APIs for static policy or Control Plane APIs for dynamic policy?)
-  - `DefineRole(role_name)` - define a new role type that can be assigned to devices
-  - `ReplaceCommandRole(command_name, authoring_role)` - allow a particular role type to author the 
-  specified command type
-  - `ReplaceEntityClass(team_id, device_id, entity_class)` - replace the entity class associated to 
-  a device
-  - CLI to manage permissions, etc 
+Custom roles actions (Client APIs for static policy or Control Plane APIs for dynamic policy?). A seperate
+spec will be created to better define the new role system.
+
+- `DefineRole(role_name)` - define a new role type that can be assigned to devices
+- `ReplaceCommandRole(command_name, authoring_role)` - allow a particular role type to author the 
+specified command type
+- `ReplaceEntityClass(team_id, device_id, entity_class)` - replace the entity class associated to 
+a device
+- CLI to manage permissions, etc 
 
 ### Aranya Quic Channels API
 
@@ -275,9 +275,9 @@ and the full implementation. This compatibility is Post-MVP.
 
 ## Roles & Permissions
 
-TODO: update default roles so that each command can be authored by single role type.
-
-There will be 4 different roles with the following set of permissions for each.
+There will be 4 default roles with the following set of permissions for each. The MVP will also
+include an expansion of the role system, allowing the user to create custom roles and reassign
+permissions for specific commands to custom roles.
 
 `owner`
 
@@ -371,6 +371,7 @@ Anything moved to Post-MVP but would be nice to get into the MVP if we have reso
 
 -  Implement `Finalization`
 -  Implement `AwaitCommand` and `IsPresent`.
+-  Fact DB queries via session commands
 
 ### Uncategorized
 
@@ -448,6 +449,17 @@ For the initial implementation in the beta, AFC control messages should be handl
 transparently by the client library. In the future, control messages can be passed
 to the device to be manually forwarded to the daemon using a different API.
 
+##### AFC API 
+
+These API endpoints will be moved to behind the experimental flag:
+
+- `CreateAfcLabel(team_id, label)` - create a label
+- `DeleteAfcLabel(team_id, label)` - delete a label
+- `AssignAfcLabel(team_id, device_id, label)` - assign a label to a device so that it can be used for 
+Quic Channels (or AFC)
+- `RevokeAfcLabel(team_id, device_id, label)` - revoke a label from a device
+
+
 TODO (post-mvp): pass policy through Init command config object.
 
 TODO: (post-mvp?) improving AFC polling in rust API. "Different mechanism for Quic channels will be used. Improving the API for AFC specifically is not part of MVP but if improvements are needed for Quic channel then they might happen for MVP - see Quic channels spec." - YC
@@ -459,6 +471,8 @@ TODO (post-mvp): add support for other languages.
 - All Rust APIs use Result unless stated otherwise
 - C APIs return the AranyaError type, and use parameters for return values unless
 some other pattern is required.
+
+
 
 ## Appendix D: Glossary
 
