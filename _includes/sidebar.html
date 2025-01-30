@@ -29,39 +29,38 @@
             {% assign sorted_collection = site.collections | sort:"menu-order" %}
             {% for collection in sorted_collection %}
                 {% unless collection.label == "posts" or collection.output == false %}
+                    {% assign hasActiveSubPage = false %}
+                    {% for node in site[collection.label] %}
+                        {% if page.url == node.url %}
+                            {% assign hasActiveSubPage = true %}
+                        {% endif %}
+                    {% endfor %}
 
-                {% assign hasActiveSubPage = false %}
-                {% for node in site[collection.label] %}
-                    {% if page.url == node.url %}
-                        {% assign hasActiveSubPage = true %}
-                    {% endif %}
-                {% endfor %}
-
-                <li class="sidebar-nav-item sub-menu{% if hasActiveSubPage %} open{% endif %}">
-                    <a class="toggle-sub-menu{% if hasActiveSubPage %} active{% endif %}" href="#">{{ collection.menu-name }}</a>
-                    <ul class="sub-nav">
-                        <div>
-                            {% for node in site[collection.label] %}
-                            <li class="sidebar-nav-item">
-                                <a class="{% if page.url == node.url %}active{% endif %}" href="{{ node.url }}">{{ node.title }}</a>
-                            </li>
-                            {% endfor %}
-                        </div>
-                    </ul>
-                </li>
+                    <li class="sidebar-nav-item sub-menu{% if hasActiveSubPage %} open{% endif %}">
+                        <a onClick=toggleSubMenu(event) class="toggle-sub-menu{% if hasActiveSubPage %} active{% endif %}" href="#">{{ collection.menu-name }}</a>
+                        <ul class="sub-nav">
+                            <div>
+                                {% for node in site[collection.label] %}
+                                <li class="sidebar-nav-item">
+                                    <a class="{% if page.url == node.url %}active{% endif %}" href="{{ node.url }}">{{ node.title }}</a>
+                                </li>
+                                {% endfor %}
+                            </div>
+                        </ul>
+                    </li>
                 {% endunless %}
             {% endfor %}
 
             {% assign pages_list = site.pages | sort:"url" %}
             {% assign hasActiveSubPage = false %}
             {% for node in pages_list %}
-                {% if page.url == node.url %}
+                {% if page.url == node.url and node.title != 'Home' %}
                     {% assign hasActiveSubPage = true %}
                 {% endif %}
             {% endfor %}
 
             <li class="sidebar-nav-item sub-menu{% if hasActiveSubPage %} open{% endif %}">
-                <a class="toggle-sub-menu{% if hasActiveSubPage %} active{% endif %}" href="#">Specifications</a>
+                <a onClick=toggleSubMenu(event) class="toggle-sub-menu{% if hasActiveSubPage %} active{% endif %}" href="#">Specifications</a>
                 <ul class="sub-nav">
                     <div>
                         {% for node in pages_list %}
