@@ -16,7 +16,7 @@ The API includes methods for the following types of operations:
 - Create encrypted AFC channels
 - Send encrypted data via AFC channels
 
-# Doxygen Docs
+## Doxygen Docs
 
 The C API docs are generated with Doxygen and hosted on GitHub pages.
 
@@ -38,7 +38,7 @@ Doxgygen docs can be manually generated from source by running this `cargo make`
 cargo make build-capi-docs
 ```
 
-# Example Application Using The Aranya C API
+## Example Application Using The Aranya C API
 
 An example application for interacting with Aranya via the C API is provided here:
 [Aranya C Example](https://github.com/aranya-project/aranya/tree/main/examples/c)
@@ -48,7 +48,7 @@ To run the example C application, execute this `cargo make` task in the [aranya]
 cargo make run-capi-example
 ```
 
-# Integrating The C API Into A C Application
+## Integrating The C API Into A C Application
 
 In order to integrate the C library into an application, include the [aranya-client.h](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/output/aranya-client.h) header file and compile the application with the Aranya client library.
 
