@@ -18,10 +18,8 @@ The API includes methods for the following types of operations:
 
 ## Doxygen Docs
 
-The C API docs are generated with Doxygen and hosted on GitHub pages.
-
+The [Aranya C API](https://github.com/aranya-project/aranya/tree/main/crates/aranya-client-capi) docs are generated with [Doxygen](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/Doxyfile) and hosted on GitHub pages:
 <!-- TODO: generate directory tree automatically -->
-C API Docs:
 {% assign capi_url = 'https://aranya-project.github.io/aranya/capi' %}
 <ul>
     <li><a href="{{ capi_url }}/v0.4.0">latest</a></li>
@@ -30,36 +28,12 @@ C API Docs:
     <li><a href="{{ capi_url }}/v0.2.0">v0.2.0</a></li>
 </ul>
 
-Doxygen docs are uploaded to each Aranya release here:
-[Aranya releases](https://github.com/aranya-project/aranya/releases)
+The docs are uploaded to each Aranya [release](https://github.com/aranya-project/aranya/releases) and can be generated locally by running `cargo make build-capi-docs` in the [aranya](https://github.com/aranya-project/aranya) repo.
 
-Doxgygen docs can be manually generated from source by running this `cargo make` task in the [aranya](https://github.com/aranya-project/aranya) repo:
-```
-cargo make build-capi-docs
-```
+## Example Application
 
-## Example Application Using The Aranya C API
+There is an [example application](https://github.com/aranya-project/aranya/tree/main/examples/c) which includes the [header file](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/output/aranya-client.h) and builds the library into the application with `cmake`. A [CMakeLists.txt](https://github.com/aranya-project/aranya/blob/main/examples/c/CMakeLists.txt) is provided to make it easier to build the library into an application.
 
-An example application for interacting with Aranya via the C API is provided here:
-[Aranya C Example](https://github.com/aranya-project/aranya/tree/main/examples/c)
+Pre-built versions of the library are uploaded (along with the [header file](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/output/aranya-client.h)) to each Aranya [release](https://github.com/aranya-project/aranya/releases).
 
-To run the example C application, execute this `cargo make` task in the [aranya](https://github.com/aranya-project/aranya) repo:
-```
-cargo make run-capi-example
-```
-
-## Integrating The C API Into A C Application
-
-In order to integrate the C library into an application, include the [aranya-client.h](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/output/aranya-client.h) header file and compile the application with the Aranya client library.
-
-Pre-built versions of the library are uploaded (along with the C header) to Aranya releases here:
-[Aranya releases](https://github.com/aranya-project/aranya/releases)
-
-The library can be built from source by running the following `cargo make` command in the [aranya](https://github.com/aranya-project/aranya) repo:
-```
-cargo make build-capi
-```
-
-A [CMakeLists.txt](https://github.com/aranya-project/aranya/blob/main/examples/c/CMakeLists.txt) is provided to make it easier to build the C library into an application using `cmake`.
-
-It is recommended to start with the [Aranya C Example](https://github.com/aranya-project/aranya/tree/main/examples/c) and modify it into another application rather than attempting to build an application from scratch using the C API documentation. 
+After running the example, the locally built library can be found in the `target/release` folder of the [aranya](https://github.com/aranya-project/aranya) repo.
