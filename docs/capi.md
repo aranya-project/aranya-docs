@@ -28,7 +28,7 @@ The [Aranya C API](https://github.com/aranya-project/aranya/tree/main/crates/ara
     <li><a href="{{ capi_url }}/v0.2.0">v0.2.0</a></li>
 </ul>
 
-The docs are uploaded to each Aranya [release](https://github.com/aranya-project/aranya/releases) and can be generated locally by running `cargo make build-capi-docs` in the [aranya](https://github.com/aranya-project/aranya) repo.
+The docs are uploaded to each Aranya [release](https://github.com/aranya-project/aranya/releases) and can be generated locally by running `cargo make build-capi-docs` in a local clone of the [aranya](https://github.com/aranya-project/aranya) repo.
 
 ## Example Application
 
@@ -36,4 +36,4 @@ There is an [example application](https://github.com/aranya-project/aranya/tree/
 
 Pre-built versions of the library are uploaded (along with the [header file](https://github.com/aranya-project/aranya/blob/main/crates/aranya-client-capi/output/aranya-client.h)) to each Aranya [release](https://github.com/aranya-project/aranya/releases).
 
-After running the example, the locally built library can be found in the `target/release` folder of the [aranya](https://github.com/aranya-project/aranya) repo.
+After running the example, the locally built library can be found in the `target/release` folder of the locally cloned [aranya](https://github.com/aranya-project/aranya) repo.
