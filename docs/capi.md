@@ -1,7 +1,7 @@
 ---
 layout: page
 title: Aranya Client C API
-permalink: "/"
+permalink: "/capi/"
 ---
 
 # Aranya Client C API
@@ -22,7 +22,7 @@ The C API docs are generated with Doxygen and hosted on GitHub pages.
 
 <!-- TODO: generate directory tree automatically -->
 C API Docs:
-{% assign capi_url = https://aranya-project.github.io/aranya/capi %}
+{% assign capi_url = 'https://aranya-project.github.io/aranya/capi' %}
 <ul>
     <li><a href="{{ capi_url }}/v0.4.0">latest</a></li>
     <li><a href="{{ capi_url }}/v0.4.0">v0.4.0</a></li>
@@ -34,7 +34,9 @@ Doxygen docs are uploaded to each Aranya release here:
 [Aranya releases](https://github.com/aranya-project/aranya/releases)
 
 Doxgygen docs can be manually generated from source by running this `cargo make` task in the [aranya](https://github.com/aranya-project/aranya) repo:
-`cargo make build-capi-docs`
+```
+cargo make build-capi-docs
+```
 
 # Example Application Using The Aranya C API
 
@@ -42,7 +44,9 @@ An example application for interacting with Aranya via the C API is provided her
 [Aranya C Example](https://github.com/aranya-project/aranya/tree/main/examples/c)
 
 To run the example C application, execute this `cargo make` task in the [aranya](https://github.com/aranya-project/aranya) repo:
-`cargo make run-capi-example`
+```
+cargo make run-capi-example
+```
 
 # Integrating The C API Into A C Application
 
@@ -52,7 +56,9 @@ Pre-built versions of the library are uploaded (along with the C header) to Aran
 [Aranya releases](https://github.com/aranya-project/aranya/releases)
 
 The library can be built from source by running the following `cargo make` command in the [aranya](https://github.com/aranya-project/aranya) repo:
-`cargo make build-capi`
+```
+cargo make build-capi
+```
 
 A [CMakeLists.txt](https://github.com/aranya-project/aranya/blob/main/examples/c/CMakeLists.txt) is provided to make it easier to build the C library into an application using `cmake`.
 
