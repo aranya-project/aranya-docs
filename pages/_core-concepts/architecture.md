@@ -4,6 +4,8 @@ title: Architecture
 category: Core Concepts
 ---
 
+# Architecture
+
 <img src="{{ site.url }}/assets/images/overview-image1.png"  class="doc-image" alt="A diagram of a software application Description automatically generated" />
 
 _Figure 1: System Architecture Overview Diagram_

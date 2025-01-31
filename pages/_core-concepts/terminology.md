@@ -4,7 +4,7 @@ title: Terminology
 category: Core Concepts
 ---
 
-### Terminology
+# Terminology
 
 The following terms will be used throughout this document to describe Aranya deployments on **endpoints.** These deployments, or **instances,** are further defined as specific **entities,** or devices, once the instance is assigned a specific set of cryptographic keys used for identity and authentication and are governed by written **policy**.
 
