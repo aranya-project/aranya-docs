@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Overview
-category: Policy
 ---
 
 # Overview

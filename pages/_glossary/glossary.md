@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Glossary
-category: Glossary
 ---
 
 # Glossary
