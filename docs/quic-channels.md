@@ -16,59 +16,50 @@ for congestion control.
 
 ## Connections
 
-Quic connections will be stored in an `FnvIndexMap` with a max size of `32`. 
+A connection allows two peers to communicate and will be used for one channel.
+When receiving a QUIC connection the TLS key used to connect will identify the 
+channel.
+
+When a channel is created the peer who creates the channel will connect to
+the other peer and open a bidirectional stream. The connection and stream 
+will remain open until the channel is deleted.
+
+Both peers will spawn an async task to await messages from the `ReceiveStream`.
+When a message is received it will be sent on the `qc_sender` channel. 
+Quic may split messages into several pieces so a data chunk in the channel 
+may not represent a complete message.
+
+The `SendStreams` will be stored in an `FnvIndexMap`. 
 Creating a connection when the map is full will close and remove the 
 connection that has gone the longest without being used.
-A connection allows two peers to communicate and can be used for any number of 
-channels.
-
-```rust
-/// FNVIndexMap requires that the size be a power of 2.
-const MAXIMUM_CONNECTIONS: usize = 32;
-/// For a given SocketAddr stores the BiDirectionalStream and the last time the 
-/// stream was used.
-type ConnectionMap = FNVIndexMap<
-    SocketAddr, (BiDirectionalStream, SystemTime), MAXIMUM_CONNECTIONS
->
-
-/// Quic messages will be read as soon as they're received and appended to
-/// this Vec. When calling ReceiveQuicMessage the first message will be 
-/// returned.
-type QuicMessages = Vec<(QuicChannel, Bytes)>
-```
-
-## Channels
-
-Peers may have an unlimited number of channels between them. 
 
 ```rust
 /// Identifies a unique channel between two peers.
 pub struct QuicChannel {
-    /// The address of the peer.
-    addr: SocketAddr,
-    /// The team ID.
-    team_id: GraphID,
-    /// The channel label. This allows multiple channels for a team and peer.
-    label: String,
+    /// The node id of the peer.
+    node_id: NodeId,
+    /// The channel label. This allows multiple channels between two peers.
+    label: Label,
 }
 
-/// Peers will use a single connection to communicate so this enum will 
-/// identify the purpose of the message. 
-pub enum QuicMessage {
-    /// The type of sync message
-    Sync {
-        sync_type: aranya_runtime::SyncType,
-    },
-    /// This identifies the channel the message is for. This enum will be
-    /// serialized with postcard and the message will be in the remaining
-    /// bytes.
-    ChannelMessage {
-        /// The team ID.
-        team_id: GraphID,
-        /// The channel label. This allows multiple channels for a team and peer.
-        label: String,
-    }
-}
+/// FNVIndexMap requires that the size be a power of 2.
+const MAXIMUM_CONNECTIONS: usize = 32;
+
+/// For a given SendStream stores the Connection and the last time it 
+/// was used.
+type ConnectionMap = FNVIndexMap<
+    QuicChannel, (SendStream, SystemTime), MAXIMUM_CONNECTIONS
+>
+
+/// Quic data chunks will be read as soon as they're received and sent into this
+/// channel. When the channel is full we will wait to read new chunks until
+/// the channel has room.
+/// 
+/// The default maximum message size for QUIC is 1MB so this channel will
+/// be just over 1 MB.
+let (qc_sender, mut qc_receiver): (
+    Sender<(QuicChannel, Bytes)>, Receiver<(QuicChannel, Bytes)>
+) = mpsc::channel(1);
 ```
 
 ## API Methods
@@ -79,12 +70,10 @@ receiving Quic channel messages.
 ```rust
 /// This will either create a new connection or retrieve an existing connection
 /// from the ConnectionMap. It will then send the message to the peer.
-SendQuicMessage(addr: SocketAddr, team_id: GraphID, label: String, message: &[u8])
+SendQuicMessage(channel: QuicChannel, message: &[u8])
     -> Result<(), QuicMessageError>
-/// Return Some((QuicChannel, message_len)) if a message exists or None if 
-/// there are no messages. If there are multiple messages the oldest will be 
-/// returned first.
-ReceiveQuicMessage(target: &mut [u8])
+/// Returns the next message from qc_receiver or none if the channel is empty. 
+ReceiveQuicData(target: &mut [u8])
     -> Result<Option<(QuicChannel, usize)>, QuicMessageError>  
 /// Closes the connection if it exists and is open and removes the connection 
 /// from the `ConnectionMap`.
