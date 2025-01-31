@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Real-time Data Exchange
-category: Core Concepts
 ---
 
 # Real-time Data Exchange (Data Plane)

@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Aranya C API
-category: Technical APIs
 ---
 
 # Aranya C API

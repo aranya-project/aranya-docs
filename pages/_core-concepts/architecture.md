@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Architecture
-category: Core Concepts
 ---
 
 # Architecture

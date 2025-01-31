@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Development Ecosystem
-category: Integration
 ---
 
 # Daemon

@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Main Concepts
-category: Policy
 ---
 
 # Main Concepts

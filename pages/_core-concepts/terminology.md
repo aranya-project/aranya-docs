@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Terminology
-category: Core Concepts
 ---
 
 # Terminology

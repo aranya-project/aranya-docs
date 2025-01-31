@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Graph
-category: Core Concepts
 ---
 
 # Graph

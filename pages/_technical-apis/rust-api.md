@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Aranya Rust API
-category: Technical APIs
 ---
 
 # Aranya Rust API

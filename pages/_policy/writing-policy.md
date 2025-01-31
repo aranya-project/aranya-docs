@@ -1,7 +1,6 @@
 ---
 layout: page
 title: Writing Policy
-category: Policy
 ---
 
 # Writing Policy
