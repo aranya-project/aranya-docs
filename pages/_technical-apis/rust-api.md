@@ -3,13 +3,35 @@ layout: page
 title: Aranya Rust API
 ---
 
+{% assign gh_aranya_url = 'https://github.com/aranya-project/aranya' %}
+
 # Aranya Rust API
+Aranya provides Rust APIs to interact with the Aranya Client and Daemon. The Rust <a href="https://crates.io/crates/aranya-client" target="_blank">Client</a> library is used as an interface to the <a href="https://crates.io/crates/aranya-daemon" target="_blank">Daemon</a>, the Aranya Daemon maintains the state of Aranya and syncs with peers.
 
-## Section
-Lorem ipsum odor amet, consectetuer adipiscing elit. Maximus consequat cubilia at quis ultrices. Enim lacinia neque aliquam taciti elit. Tempus netus fusce lacinia, curae venenatis erat. Mollis nisl consectetur inceptos per nam aenean parturient elementum facilisi. Hac justo netus consectetur vitae fermentum maximus feugiat faucibus. Fermentum inceptos magnis elementum gravida mus est senectus. Senectus class molestie at vulputate ipsum nullam eleifend viverra. Proin vulputate egestas luctus felis, amet orci. Vel sagittis ridiculus mi at lorem interdum.
+### Aranya Client
+Aranya's Rust Client is the library that your application will interface with. By integrating the library into an application, IDAM/RBAC and secure data transmission can be easily added without needing to develop complex security architectures, protocols, and cryptography.
 
-## Section
-Ante massa torquent felis semper purus posuere. Sem cubilia sem fringilla etiam rhoncus. Mi inceptos magna molestie augue integer. Sagittis morbi litora nascetur viverra pharetra consequat mi turpis ante. Id posuere risus a senectus cubilia in class ad vivamus. Metus sagittis hac dignissim; metus sagittis molestie cras litora. Velit cubilia consequat nunc maximus ultrices; suspendisse dui platea. Aptent ridiculus habitant fringilla diam tempus penatibus sapien.
+The client provides the following functionality:
 
-## Section
-Vestibulum turpis amet faucibus tristique; molestie turpis sagittis mauris. Eget luctus vehicula amet velit ultrices morbi aenean sed mi. Ullamcorper elit mi sem faucibus condimentum tellus. Blandit proin cras potenti fermentum sapien. Consequat parturient integer nibh eu facilisis dui id venenatis. Massa purus congue cubilia dictum adipiscing. Odio tempor interdum sagittis, vivamus ut placerat tempor. Duis venenatis nisl senectus dolor nisl eu gravida pulvinar nibh. Consectetur porttitor gravida lorem interdum nisi.
+- Add and remove sync peers. The daemon will periodically attempt to sync Aranya state with any peers (as long as it is able to communicate with the peer over the network) in its configured sync peer list.
+- Add and remove users from the team as determined by the implemented policy.
+- Assign and revoke user roles as determined by the implemented policy.
+- Create, delete, assign and revoke labels used for attribute based controls and segmentation of data communicated between peers within Aranya Fast Channels as determined by the implemented policy.
+- Create and delete Fast Channels channels as determined by the implemented policy.
+- Send and receive encrypted data using Aranya Fast Channels. Fast Channels supports bidirectional encrypted data exchange over TCP transport. Note: The functionality noted 'as determined by the implemented policy' are defined in the <a href="{{ gh_aranya_url }}/blob/HEAD/crates/aranya-daemon/src/policy.md" target="_blank">default policy</a>. As such, these may differ depending on the policy implemented in your application.
+
+### Aranya Daemon
+The Aranya Daemon is a long-running executable that is used to maintain the state of Aranya after adding commands to the graph or syncing commands from other peers by interacting directly with the <a href="https://github.com/aranya-project/aranya-core" target="_blank">Aranya Core</a> library. See <a href="{{ gh_aranya_url }}/blob/HEAD/crates/aranya-daemon-api/src/service.rs" target="_blank">here</a> for details on the Aranya functionality available through the daemon.
+
+The daemon's responsibilities include:
+
+- Periodically syncing state between networked Aranya peers to ensure they all have consistent state. This includes the ability to add and remove sync peers, available to your application through the <a href="{{ gh_aranya_url }}/blob/HEAD/crates/aranya-client/" target="_blank">Rust Client</a> library.
+- Invokes actions received from the client and handles effects from the <a href="https://github.com/aranya-project/aranya-core" target="_blank">Aranya Core</a> library. See the [walkthrough]({{ site.url }}/getting-started/walkthrough/) for more details.
+- Generates and maintains cryptographic keys for encrypting and decrypting data for Aranya and Fast Channels.
+
+
+
+## Rust API docs
+- <a href="https://docs.rs/aranya-client/latest/aranya_client/" target="_blank">Aranya Client API docs</a>
+- <a href="https://docs.rs/aranya-daemon/latest/aranya_daemon/" target="_blank">Aranya Daemon API docs</a>
+

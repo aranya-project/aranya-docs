@@ -1,15 +1,40 @@
 ---
 layout: page
-title: Aranya C API
+title: Aranya Client C API
 ---
 
-# Aranya C API
+{% assign gh_aranya_url = 'https://github.com/aranya-project/aranya' %}
+{% assign capi_url = 'https://aranya-project.github.io/aranya/capi' %}
 
-## Section
-Lorem ipsum odor amet, consectetuer adipiscing elit. Maximus consequat cubilia at quis ultrices. Enim lacinia neque aliquam taciti elit. Tempus netus fusce lacinia, curae venenatis erat. Mollis nisl consectetur inceptos per nam aenean parturient elementum facilisi. Hac justo netus consectetur vitae fermentum maximus feugiat faucibus. Fermentum inceptos magnis elementum gravida mus est senectus. Senectus class molestie at vulputate ipsum nullam eleifend viverra. Proin vulputate egestas luctus felis, amet orci. Vel sagittis ridiculus mi at lorem interdum.
+# Aranya Client C API
 
-## Section
-Ante massa torquent felis semper purus posuere. Sem cubilia sem fringilla etiam rhoncus. Mi inceptos magna molestie augue integer. Sagittis morbi litora nascetur viverra pharetra consequat mi turpis ante. Id posuere risus a senectus cubilia in class ad vivamus. Metus sagittis hac dignissim; metus sagittis molestie cras litora. Velit cubilia consequat nunc maximus ultrices; suspendisse dui platea. Aptent ridiculus habitant fringilla diam tempus penatibus sapien.
+The Aranya Client provides a C API to allow an application to interact with it.
 
-## Section
-Vestibulum turpis amet faucibus tristique; molestie turpis sagittis mauris. Eget luctus vehicula amet velit ultrices morbi aenean sed mi. Ullamcorper elit mi sem faucibus condimentum tellus. Blandit proin cras potenti fermentum sapien. Consequat parturient integer nibh eu facilisis dui id venenatis. Massa purus congue cubilia dictum adipiscing. Odio tempor interdum sagittis, vivamus ut placerat tempor. Duis venenatis nisl senectus dolor nisl eu gravida pulvinar nibh. Consectetur porttitor gravida lorem interdum nisi.
+The API includes methods for the following types of operations:
+- Create a new Aranya team with unique cryptographic identities
+- Add/remove users on a team
+- Assign roles to users based on a policy
+- Configure peers to sync with so the Aranya DAG stays up-to-date
+- Create encrypted AFC channels
+- Send encrypted data via AFC channels
+
+## Doxygen Docs
+
+The <a href="{{ gh_aranya_url }}/tree/main/crates/aranya-client-capi" target="_blank">Aranya C API</a> docs are generated with <a href="{{ gh_aranya_url }}/blob/main/crates/aranya-client-capi/Doxyfile" target="_blank">Doxygen</a> and hosted on GitHub pages:
+<!-- TODO: generate directory tree automatically -->
+<ul>
+    <li><a href="{{ capi_url }}/v0.4.0" target="_blank">latest</a></li>
+    <li><a href="{{ capi_url }}/v0.4.0" target="_blank">v0.4.0</a></li>
+    <li><a href="{{ capi_url }}/v0.3.0" target="_blank">v0.3.0</a></li>
+    <li><a href="{{ capi_url }}/v0.2.0" target="_blank">v0.2.0</a></li>
+</ul>
+
+The docs are uploaded to each Aranya <a href="{{ gh_aranya_url }}/releases" target="_blank">release</a> and can be generated locally by running `cargo make build-capi-docs` in a local clone of the <a href="{{ gh_aranya_url }}" target="_blank">aranya</a> repo.
+
+## Example Application
+
+There is an <a href="{{ gh_aranya_url }}/tree/main/examples/c" target="_blank">example application</a> which includes the <a href="{{ gh_aranya_url }}/blob/main/crates/aranya-client-capi/output/aranya-client.h" target="_blank">header file</a> and builds the library into the application with `cmake`. A <a href="{{ gh_aranya_url }}/blob/main/examples/c/CMakeLists.txt" target="_blank">CMakeLists.txt</a> is provided to make it easier to build the library into an application.
+
+Pre-built versions of the library are uploaded (along with the <a href="{{ gh_aranya_url }}/blob/main/crates/aranya-client-capi/output/aranya-client.h" target="_blank">header file</a>) to each Aranya <a href="{{ gh_aranya_url }}/releases" target="_blank">release</a>.
+
+After running the example, the locally built library can be found in the `target/release` folder of the locally cloned <a href="{{ gh_aranya_url }}" target="_blank">aranya</a> repo.

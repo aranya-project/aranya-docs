@@ -46,7 +46,7 @@ collections:
     technical-apis:
         menu-order: 06
         menu-name: Technical APIs
-        output: false
+        output: true
         order:
         - rust-api.md
         - c-api.md
