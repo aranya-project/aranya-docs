@@ -29,9 +29,15 @@ The daemon's responsibilities include:
 - Invokes actions received from the client and handles effects from the <a href="https://github.com/aranya-project/aranya-core" target="_blank">Aranya Core</a> library. See the [walkthrough]({{ site.url }}/getting-started/walkthrough/) for more details.
 - Generates and maintains cryptographic keys for encrypting and decrypting data for Aranya and Fast Channels.
 
-
-
 ## Rust API docs
 - <a href="https://docs.rs/aranya-client/latest/aranya_client/" target="_blank">Aranya Client API docs</a>
 - <a href="https://docs.rs/aranya-daemon/latest/aranya_daemon/" target="_blank">Aranya Daemon API docs</a>
 
+## Rust example
+There is a <a href="{{ gh_aranya_url }}/blob/main/templates/aranya-example/README.md" target="_blank">Rust example</a> application that runs a `cargo-generate` template to give a quick way to get up and running. During setup, the example application starts an instance of the aranya-daemon for multiple Aranya user in the background. The daemon automatically handles syncing the Aranya graph states between peers so the Aranya client can focus on the operations it wants to perform on the team.
+
+The example app shows how to use the `aranya-client` library to:
+- Setup a team
+- Sync Aranya graphs
+- Create an Aranya Fast Channel
+- Send encrypted data between peers
