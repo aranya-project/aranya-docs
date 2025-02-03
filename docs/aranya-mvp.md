@@ -81,10 +81,10 @@ of generating leaf keybundles per team. This also removes the one-keybundle-per-
 For MVP we can lay the groundwork for the multi-keybundle approach, and better management of identities
 can be added post-MVP or as time allows for MVP.
 
-![daemon subsystems](/docs/images/new_daemon_arch_block.png)
+![daemon subsystems](/docs/images/new_daemon_arch.png)
 
-TODO: update diagrams to remove AFC (https://github.com/aranya-project/aranya-docs/issues/6)
-![daemon subsystems with additional detail](/docs/images/new_daemon_arch_block_detail.png)
+![daemon subsystems with additional daemon](/docs/images/new_daemon_arch_detail.png)
+
 
 ## Config
 
