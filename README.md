@@ -1,5 +1,4 @@
 # Aranya Docs
-
 This repository contains documentation for the Aranya project [website](https://aranya-project.github.io/aranya-docs/). Specs and documentation are written in [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax), utilizing YAML [Front Matter](https://jekyllrb.com/docs/front-matter/) and then deployed to Github Pages using [Jekyll](https://jekyllrb.com/). We used the Jekyll theme from [lanyon](https://github.com/poole/lanyon) as the basis of the site.
 
 ## Adding new pages
@@ -18,8 +17,11 @@ permalink: /"url-slug"/
 ---
 ```
 
-## Deploying the site
-Deploying is easy, just merge a PR to the `main` branch. The documentation repo is configured to use Github's built in branch push actions to trigger builds and deploys to GH pages. The target branch and directory can be configured in the GH Pages settings section of the repo, if you need to test a deployment. Just note however, we don't have a proper staging environment, so these deployments will go live to the production github.io site.
+## Contributing
+Before opening a PR please test your changes locally, this ensures that formatting, links, and images have been thoroughly tested before anything goes live. See the [Develop Locally](#develop-locally) section for instructions.
 
 ## Develop Locally
-We currently deploy directly to GitHub Pages, so there isn't a staging site to preview any changes. The best way to test documentation is to deploy a local server using `Jekyll`. Follow the [install instructions](https://jekyllrb.com/docs/installation/) to install Jekyll on your system, and then simply run `jekyll serve -w` which will launch a web server on your machine.
+We currently deploy directly to GitHub Pages, so there isn't a staging site to preview any changes. The best way to test documentation is to deploy a local server using `Jekyll`. Follow the [install instructions](https://jekyllrb.com/docs/installation/) to install Jekyll on your system, and then simply run `jekyll serve -w` which will launch a local web server on your machine.
+
+## Deploying the site
+Deploying is easy, just merge your PR to the `main` branch. The documentation repo is configured to use Github's built-in branch push actions to trigger builds and deploys to GH pages. Just note however, we don't have a proper staging environment, deployments go live to the production <a href="https://aranya-project.github.io/aranya-docs/" target="_blank">https://aranya-project.github.io/aranya-docs/</a> site.

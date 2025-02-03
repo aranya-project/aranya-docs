@@ -5,7 +5,7 @@ title: Aranya Walkthrough
 
 # Getting Started with Aranya
 
-In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust template](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
+In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust example](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
 There are a few things to note:
 
