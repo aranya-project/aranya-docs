@@ -59,4 +59,6 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 <!-- Data flow diagram -->
 
-### Support section
+## Support
+If you need support or assistance integrating with Aranya, please don't hesitate to reach out to us. You can ask a question on our [GitHub](https://github.com/aranya-project/aranya-docs/discussions/categories/q-a) or start a [discussion](https://github.com/aranya-project/aranya-docs/discussions). If you'd like to speak to someone at [SpiderOak](https://spideroak.com/contact-us/) or have a question about [licensing](https://spideroak.com/product/), please drop us a line.
+

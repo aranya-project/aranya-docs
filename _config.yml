@@ -11,7 +11,7 @@ collections:
     core-concepts:
         menu-order: 01
         menu-name: Core Concepts
-        output: true
+        output: false
         order:
         - terminology.md
         - architecture.md
@@ -25,14 +25,14 @@ collections:
     integration:
         menu-order: 03
         menu-name: Integration
-        output: true
+        output: false
         order:
         - deployment-ecosystem.md
         - daemon.md
     policy:
         menu-order: 04
         menu-name: Policy
-        output: true
+        output: false
         order:
         - overview.md
         - main-concepts.md
@@ -40,13 +40,13 @@ collections:
     glossary:
         menu-order: 05
         menu-name: Glossary
-        output: true
+        output: false
         order:
         - glossary.md
     technical-apis:
         menu-order: 06
         menu-name: Technical APIs
-        output: true
+        output: false
         order:
         - rust-api.md
         - c-api.md
