@@ -161,7 +161,7 @@ scheme. Ideally, this can be used to serialize to either human readable or machi
 scheme.
 - `SerializeId(id) -> bytes` - serialize an ID to the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
 - `DeserializeId(bytes) -> id` - deserialize an ID from the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
-- `IsPresent(command_id) -> bool` - looks for command ID in the graph.
+- `IsPresent(command_id, max_cut) -> bool` - looks for command ID in the graph.
 
 
 #### Sync API
@@ -219,12 +219,12 @@ The IDAM control plane is for managing identity and authorization by interacting
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the 
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 
-- `CreateTeam(owner) -> team_id` - initialize the graph, creating the team with the author as the 
+- `CreateTeam(owner_keybundle) -> team_id` - initialize the graph, creating the team with the author as the 
 owner. Includes policy for bootstrapping.
 - `CloseTeam(team_id)` - close the team and stop all operations on the graph.
-- `AddDevice(team_id, keybundle, common_name) -> device_id` - add a device to the team with the 
+- `AddDeviceToTeam(team_id, keybundle, common_name) -> device_id` - add a device to the team with the 
 default role
-- `RemoveDevice(team_id, device_id)` - remove a device from the team
+- `RemoveDeviceFromTeam(team_id, device_id)` - remove a device from the team
 - `AssignRole(team_id, device_id, role)` - assign a role to a device
 - `RevokeRole(team_id, device_id, role)` - remove a role from a device
 - `SetNetworkName(team_id, device_id, net_identifier)` - associate a network address to a device 
@@ -361,6 +361,8 @@ subject to change. This list is unordered within the sections.
 -  Fact DB queries via session commands
 -  Standardize C API names to follow naming scheme.
 -  Update key agreement commands to have a field for the sender's graph head ID. https://github.com/aranya-project/aranya-docs/pull/24#discussion_r1937642908
+-  Update `AddTeam` to take a config
+-  Update `AddSyncPeer` to take a config
 
 ### Low
 -  Set up CI to measure resource usage
