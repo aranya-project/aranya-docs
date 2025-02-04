@@ -268,6 +268,21 @@ Embedded devices that implement a subset of Aranya library should still be able 
 clients that have the full product integrated. AFC should also be compatible between subset implementations
 and the full implementation. This compatibility is planned for Post-MVP.
 
+##### AFC API 
+
+The AFC API is being moved to a lower level in the API. They will still be available via a build flag to allow embedded devices and advanced users to access them. 
+
+- `CreateAfcLabel(team_id, label)` - create a label
+- `DeleteAfcLabel(team_id, label)` - delete a label
+- `AssignAfcLabel(team_id, device_id, label)` - assign a label to a device so that it can be used for 
+Quic Channels (or AFC)
+- `RevokeAfcLabel(team_id, device_id, label)` - revoke a label from a device
+- `CreateBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
+- `DeleteChannel(team_id, channel_id)` - delete a channel.
+- `PollData(timeout)` - blocks until new AFC data is available, or timeout elapsed
+- `SendData(channel_id, data)` - send data on the given channel.
+- `RecvData() -> (data, metadata)` - recv data from AFC.
+
 
 ## Roles & Permissions
 
@@ -363,6 +378,7 @@ subject to change. This list is unordered within the sections.
 -  Update key agreement commands to have a field for the sender's graph head ID. https://github.com/aranya-project/aranya-docs/pull/24#discussion_r1937642908
 -  Update `AddTeam` to take a config
 -  Update `AddSyncPeer` to take a config
+-  Move AFC to behind build flag
 
 ### Low
 -  Set up CI to measure resource usage

@@ -40,16 +40,6 @@ For the initial implementation in the beta, AFC control messages should be handl
 transparently by the client library. In the future, control messages can be passed
 to the device to be manually forwarded to the daemon using a different API.
 
-##### AFC API 
-
-These API endpoints will be moved to behind the experimental flag:
-
-- `CreateAfcLabel(team_id, label)` - create a label
-- `DeleteAfcLabel(team_id, label)` - delete a label
-- `AssignAfcLabel(team_id, device_id, label)` - assign a label to a device so that it can be used for 
-Quic Channels (or AFC)
-- `RevokeAfcLabel(team_id, device_id, label)` - revoke a label from a device
-
 
 TODO (post-mvp): pass policy through Init command config object.
 
