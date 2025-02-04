@@ -18,7 +18,7 @@ permalink: /"url-slug"/
 ```
 
 ## Contributing
-Before opening a PR please test your changes locally, this ensures that formatting, links, and images have been thoroughly tested before anything goes live. See the [Develop Locally](#develop-locally) section for instructions.
+Before opening a PR, please test your changes locally. This ensures that formatting, links, and images have been thoroughly tested before anything goes live. See the [Develop Locally](#develop-locally) section for instructions.
 
 ## Develop Locally
 We currently deploy directly to GitHub Pages, so there isn't a staging site to preview any changes. The best way to test documentation is to deploy a local server using `Jekyll`. Follow the [install instructions](https://jekyllrb.com/docs/installation/) to install Jekyll on your system, and then simply run `jekyll serve -w` which will launch a local web server on your machine.
