@@ -5,12 +5,5 @@ title: Terminology
 
 # Terminology
 
-The following terms will be used throughout this document to describe Aranya deployments on **endpoints.** These deployments, or **instances,** are further defined as specific **entities,** or devices, once the instance is assigned a specific set of cryptographic keys used for identity and authentication and are governed by written **policy**.
-
-**Endpoint:** A piece of hardware (e.g. IoT device, computer, cellular phone, etc.) or software (e.g. application) on which Aranya is integrated.
-
-**Instance:** A single deployment of the Aranya software. To note, each endpoint can have one or many instances deployed on it.
-
-**Entity:** You can think of this as a specific device identity and it is used to identify an instance by assigning it a set of cryptographic keys used for identity and authentication, allowing it to govern the behavior of the endpoint.
-
-**Policy:** Defines specific behaviors, or accepted actions with corresponding commands, that will be generated and executed on the endpoint.
+## Section
+Lorem ipsum odor amet, consectetuer adipiscing elit. Maximus consequat cubilia at quis ultrices. Enim lacinia neque aliquam taciti elit. Tempus netus fusce lacinia, curae venenatis erat. Mollis nisl consectetur inceptos per nam aenean parturient elementum facilisi. Hac justo netus consectetur vitae fermentum maximus feugiat faucibus. Fermentum inceptos magnis elementum gravida mus est senectus. Senectus class molestie at vulputate ipsum nullam eleifend viverra. Proin vulputate egestas luctus felis, amet orci. Vel sagittis ridiculus mi at lorem interdum.
