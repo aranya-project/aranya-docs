@@ -42,7 +42,7 @@
                             <div>
                                 {% for node in site[collection.label] %}
                                 <li class="sidebar-nav-item">
-                                    <a class="{% if page.url == node.url %}active{% endif %}" href="{{ node.url }}">{{ node.title }}</a>
+                                    <a class="{% if page.url == node.url %}active{% endif %}" href="{{ node.url | absolute_url }}">{{ node.title }}</a>
                                 </li>
                                 {% endfor %}
                             </div>
