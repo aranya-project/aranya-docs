@@ -13,7 +13,7 @@
             <div class="masthead">
                 <div class="container">
                     <h3 class="masthead-title">
-                        <a href="{{ site.url }}/" title="Home">{{ site.title }}</a>
+                        <a href="{{ site.url }}" title="Home">{{ site.title }}</a>
                         <small>{{ site.tagline }}</small>
                     </h3>
                 </div>
@@ -24,7 +24,7 @@
             </div>
         </div>
         <div for="sidebar-checkbox" class="sidebar-toggle"></div>
-        <script src='{{ site.url }}/public/js/script.js'></script>
+        <script type="text/javascript" defer src='{{ site.url }}/public/js/script.js'></script>
         {% if page.mermaid %}
         <script type="module" src='{{ site.url }}/public/js/mermaid.js'></script>
         {% endif %}

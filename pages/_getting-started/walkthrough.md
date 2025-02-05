@@ -1,12 +1,11 @@
 ---
 layout: page
 title: Aranya Walkthrough
-permalink: "/walkthrough/"
 ---
 
 # Getting Started with Aranya
 
-In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust template](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
+In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust example](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
 There are a few things to note:
 
@@ -152,16 +151,16 @@ This input is then used to instantiate a policy engine and storage provider.
 
 ```rust
 use aranya_crypto::{
-	default::{DefaultCipherSuite, DefaultEngine},
-	keystore::fs_keystore::Store as KeyStore,
+    default::{DefaultCipherSuite, DefaultEngine},
+    keystore::fs_keystore::Store as KeyStore,
 };
 
 use aranya_runtime::{
-	storage::linear::libc::{
-		FileManager,
-		LinearStorageProvider
-	},
-	ClientState,
+    storage::linear::libc::{
+        FileManager,
+        LinearStorageProvider
+    },
+    ClientState,
 };
 
 use crate::vm_policy::PolicyEngine;
@@ -170,23 +169,23 @@ const TEST_POLICY: &str = "/path/to/policy.md";
 
 /// Creates the Aranya client and server.
 async fn setup_aranya(
-	&self,
-	eng: DefaultEngine,
-	store: KeyStore,
-	pk: &PublicKeys<DefaultCipherSuite>,
-	external_sync_addr: Addr,
+    &self,
+    eng: DefaultEngine,
+    store: KeyStore,
+    pk: &PublicKeys<DefaultCipherSuite>,
+    external_sync_addr: Addr,
 ) -> Result<(Client, Server)> {
-	let user_id = pk.ident_pk.id()?;
+    let user_id = pk.ident_pk.id()?;
 
-	let aranya = ClientState::new(
-		PolicyEngine<DefaultEngine, KeyStore>::new(
-			TEST_POLICY, eng, store, user_id
-		)?,
-		LinearStorageProvider<FileManager>::new(
-			FileManager::new(self.cfg.storage_path())
-				.context("unable to create `FileManager`")?,
-		),
-	);
+    let aranya = ClientState::new(
+        PolicyEngine<DefaultEngine, KeyStore>::new(
+            TEST_POLICY, eng, store, user_id
+        )?,
+        LinearStorageProvider<FileManager>::new(
+            FileManager::new(self.cfg.storage_path())
+                .context("unable to create `FileManager`")?,
+        ),
+    );
 }
 ```
 
@@ -319,19 +318,19 @@ const char *member_b_sync_addr = "127.0.0.1:10005";
 const u64 interval = ARANYA_DURATION_MILLISECONDS * 100;
 
 err = aranya_add_sync_peer(&team->owner.client, &team->id,
-				admin_sync_addr, interval);
+                admin_sync_addr, interval);
 EXPECT("Failed to add admin sync peer", err);
 
 err = aranya_add_sync_peer(&team->owner.client, &team->id,
-				operator_sync_addr, interval);
+                operator_sync_addr, interval);
 EXPECT("Failed to add operator sync peer", err);
 
 err = aranya_add_sync_peer(&team->owner.client, &team->id,
-				member_a_sync_addr, interval);
+                member_a_sync_addr, interval);
 EXPECT("Failed to add member a sync peer", err);
 
 err = aranya_add_sync_peer(&team->owner.client, &team->id,
-				member_b_sync_addr, interval);
+                member_b_sync_addr, interval);
 EXPECT("Failed to add member b sync peer", err);
 ```
 
@@ -395,12 +394,12 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 ```C
 // add admin to team.
 err = aranya_add_device_to_team(&team->clients.owner.client, &team->id,
-					&team->clients.admin.pk);
+                    &team->clients.admin.pk);
 EXPECT("error adding admin to team", err);
 
 // upgrade role to admin.
 err = aranya_assign_role(&team->clients.owner.client, &team->id,
-				&team->clients.admin.id, ARANYA_ROLE_ADMIN);
+                &team->clients.admin.id, ARANYA_ROLE_ADMIN);
 EXPECT("error assigning admin role", err);
 ```
 
@@ -433,12 +432,12 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 ```C
 // add operator to team.
 err = aranya_add_device_to_team(&team->clients.owner.client, &team->id,
-				&team->clients.operator.pk);
+                &team->clients.operator.pk);
 EXPECT("error adding operator to team", err);
 
 // upgrade role to operator.
 err = aranya_assign_role(&team->clients.owner.client, &team->id,
-			&team->clients.operator.id, ARANYA_ROLE_OPERATOR);
+            &team->clients.operator.id, ARANYA_ROLE_OPERATOR);
 EXPECT("error assigning operator role", err);
 ```
 
@@ -465,12 +464,12 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 ```C
 // add membera to team.
 err = aranya_add_device_to_team(&team->clients.owner.client, &team->id,
-				&team->clients.membera.pk);
+                &team->clients.membera.pk);
 EXPECT("error adding membera to team", err);
 
 // add memberb to team.
 err = aranya_add_device_to_team(&team->clients.owner.client, &team->id,
-				&team->clients.memberb.pk);
+                &team->clients.memberb.pk);
 EXPECT("error adding memberb to team", err);
 ```
 
@@ -507,13 +506,13 @@ const char *member_b_afc_addr = "127.0.0.1:11005";
 
 // assign AFC network addresses.
 err = aranya_assign_net_identifier(&team->clients.operator.client, &team->id,
-					&team->clients.membera.id,
-					member_a_afc_addr);
+                    &team->clients.membera.id,
+                    member_a_afc_addr);
 EXPECT("error assigning net name to membera", err);
 
 err = aranya_assign_net_identifier(&team->clients.operator.client, &team->id,
-					&team->clients.memberb.id,
-					member_b_afc_addr);
+                    &team->clients.memberb.id,
+                    member_b_afc_addr);
 EXPECT("error assigning net name to memberb", err);
 ```
 
@@ -588,11 +587,11 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 
 ```C
 err = aranya_assign_label(&team->clients.operator.client, &team->id,
-				&team->clients.membera.id, label);
+                &team->clients.membera.id, label);
 EXPECT("error assigning afc label to membera", err);
 
 err = aranya_assign_label(&team->clients.operator.client, &team->id,
-				&team->clients.memberb.id, label);
+                &team->clients.memberb.id, label);
 EXPECT("error assigning afc label to memberb", err);
 ```
 
@@ -626,7 +625,7 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 // create AFC channel between membera and memberb.
 AranyaChannelId chan_id;
 err = aranya_create_bidi_channel(&team->clients.membera.client, &team->id,
-					member_b_afc_addr, label, &chan_id);
+                    member_b_afc_addr, label, &chan_id);
 EXPECT("error creating afc channel", err);
 ```
 
@@ -661,7 +660,7 @@ the [C example](https://github.com/aranya-project/aranya/blob/main/examples/c/ex
 // send AFC data.
 const char *send = "hello world";
 err              = aranya_send_data(&team->clients.membera.client, chan_id,
-					(const uint8_t *)send, (int)strlen(send));
+                    (const uint8_t *)send, (int)strlen(send));
 EXPECT("error sending data", err);
 ```
 
@@ -695,7 +694,7 @@ instead.
 // send AFC data.
 const char *send = "hello world";
 err = aranya_send_data(&team->clients.memberb.client, chan_id,
-			(const uint8_t *)send, (int)strlen(send));
+            (const uint8_t *)send, (int)strlen(send));
 ```
 
 Great job, you've now successfully stood up Aranya daemons, created an Aranya
