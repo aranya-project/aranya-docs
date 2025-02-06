@@ -45,7 +45,7 @@ pub struct QuicChannel {
 /// FNVIndexMap requires that the size be a power of 2.
 const MAXIMUM_CONNECTIONS: usize = 32;
 
-/// For a given SendStream stores the Connection and the last time it 
+/// For a given QuicChannel stores the SendStream and the last time it 
 /// was used.
 type ConnectionMap = FNVIndexMap<
     QuicChannel, (SendStream, SystemTime), MAXIMUM_CONNECTIONS
