@@ -6,7 +6,7 @@ permalink: "/policy-language-v2/"
 
 # Policy Language v2
 
-All elements of [Policy Language v1]({{ site.url }}/policy-language-v1) not modified by this document are unchanged.
+All elements of [Policy Language v1]({{ '/policy-language-v1' | absolute_url }}) not modified by this document are unchanged.
 
 ## File Format
 
