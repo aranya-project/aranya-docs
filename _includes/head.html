@@ -3,11 +3,11 @@
 <head>
     <link href="http://gmpg.org/xfn/11" rel="profile">
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
-    <link rel="icon" type="image/png" href="{{ '/public/img/favicon-96x96.png' | absolute_url }}" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="{{ '/public/img/favicon.svg' | absolute_url }}" />
-    <link rel="shortcut icon" href="{{'/public/img/favicon.ico' | absolute_url}}" />
-    <link rel="apple-touch-icon" sizes="180x180" href="{{'/public/img/apple-touch-icon.png' | absolute_url}}" />
-    <link rel="manifest" href="{{'/site.webmanifest' | absolute_url}}" />
+    <link rel="icon" type="image/png" href="{{ '/public/img/favicon-96x96.png' | relative_url }}" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="{{ '/public/img/favicon.svg' | relative_url }}" />
+    <link rel="shortcut icon" href="{{'/public/img/favicon.ico' | relative_url}}" />
+    <link rel="apple-touch-icon" sizes="180x180" href="{{'/public/img/apple-touch-icon.png' | relative_url}}" />
+    <link rel="manifest" href="{{'/site.webmanifest' | relative_url}}" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 
@@ -20,16 +20,16 @@
     </title>
 
     {% if page.url and site.baseurl %}
-        <link rel="canonical" href="{{ page.url | absolute_url }}">
+        <link rel="canonical" href="{{ page.url | relative_url }}">
     {% endif %}
 
-    <link rel="stylesheet" href="{{ '/public/css/poole.css' | absolute_url }}">
-    <link rel="stylesheet" href="{{ '/public/css/syntax.css' | absolute_url }}">
-    <link rel="stylesheet" href="{{ '/public/css/lanyon.css' | absolute_url }}">
-    <link rel="stylesheet" href="{{ '/public/scss/spideroak.css' | absolute_url }}">
+    <link rel="stylesheet" href="{{ '/public/css/poole.css' | relative_url }}">
+    <link rel="stylesheet" href="{{ '/public/css/syntax.css' | relative_url }}">
+    <link rel="stylesheet" href="{{ '/public/css/lanyon.css' | relative_url }}">
+    <link rel="stylesheet" href="{{ '/public/scss/spideroak.css' | relative_url }}">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=PT+Serif:400,400italic,700%7CPT+Sans:400">
 
-    <link rel="alternate" type="application/rss+xml" title="RSS" href="{{ '/atom.xml' | absolute_url }}">
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="{{ '/atom.xml' | relative_url }}">
 
     {% if site.google_analytics_id %}
         <script>

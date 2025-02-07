@@ -134,7 +134,7 @@ To ensure that participating entities are acting over a common authoritative sta
 
 Other core components of our system that enable the control plane and data plane functionalities are detailed below and can be seen in Figure 1 below.
 
-<img src="{{ '/assets/images/overview-image1.png' | absolute_url }}"  class="doc-image" alt="A diagram of a software application Description automatically generated" />
+<img src="{{ '/assets/images/overview-image1.png' | relative_url }}"  class="doc-image" alt="A diagram of a software application Description automatically generated" />
 
 _Figure 1: System Architecture Overview Diagram_
 
@@ -190,7 +190,7 @@ All endpoints participating in the graph will receive all updates to the graph r
 
 The general workflow for exchanging control plane commands on-graph across two endpoints can be seen below in Figure 2. This workflow assumes a policy has been written and validated for all actions desired in the architecture.
 
-<img src="{{ '/assets/images/overview-image2.png' | absolute_url }}" class="doc-image" alt="A diagram of a diagram Description automatically generated" />
+<img src="{{ '/assets/images/overview-image2.png' | relative_url }}" class="doc-image" alt="A diagram of a diagram Description automatically generated" />
 
 _Figure 2: General On-Graph Workflow_
 
@@ -275,7 +275,7 @@ A channel is used to group together a fixed number of devices based on specific 
 
 Once the command is validated, the crypto engine generates an encryption key associated with the entity and exposes it through shared memory. If the channel is specified as unidirectional, the entity creating the channel is only assigned an encryption key. If the channel is bidirectional, the entity will also be assigned a decryption key. Aranya stores the key(s) in its own database and associates the key or key pair with this specific channel for this specific entity. After the channel creator's keys have been assigned, a "create channel" command is sent to the specified receiver. Like the process for the initial sender entity, the command is processed by the receiver's associated policy and the crypto engine generates a decryption key (if unidirectional), or encryption/decryption keys (if bidirectional). After the sender and receiver have both processed the "create channel" command, they are free to send and receive messages over their new channel and no further messages will be processed by their policy.
 
-<img src="{{ '/assets/images/overview-image5.png' | absolute_url }}" class="doc-image" alt="A diagram of a system Description automatically generated" />
+<img src="{{ '/assets/images/overview-image5.png' | relative_url }}" class="doc-image" alt="A diagram of a system Description automatically generated" />
 
 _Figure 5: Workflow when creating a Channel_
 
@@ -285,7 +285,7 @@ To send data over the channel, an entity will prepare the bytes to submit to the
 
 While channels are one-to-one, a policy may define rules for an entity to send messages to multiple other entities over individual channels. This is facilitated by topic labels, which are defined in a policy and act on the permission system. A label is assigned to entities that want to communicate under a specific topic and a channel can only be created for entities assigned to that same topic. Labels cannot be used to send a message to more than one entity as they are specifically used by policy to allow two entities to talk to each other using that label (if both points have that label assigned to them).
 
-<img src="{{ '/assets/images/overview-image6.png' | absolute_url }}" class="doc-image" alt="A blue rectangular sign with white text Description automatically generated" />
+<img src="{{ '/assets/images/overview-image6.png' | relative_url }}" class="doc-image" alt="A blue rectangular sign with white text Description automatically generated" />
 
 _Figure 6: Workflow to Send Data on a Channel_
 
@@ -309,7 +309,7 @@ Aranya provides interfaces for secure peer-to-peer data exchange, guaranteeing d
 
 Figure 7 below outlines the data flow between two endpoints, both with an Aranya instance and an application which will utilize the data. The two instances will leverage any transport that has been configured between the endpoints to exchange data via either the sync protocol (on-graph) or a high-throughput data exchange (off-graph), both defined below.
 
-<img src="{{ '/assets/images/overview-image7.png' | absolute_url }}" class="doc-image" alt="A diagram of a data transfer Description automatically generated" />
+<img src="{{ '/assets/images/overview-image7.png' | relative_url }}" class="doc-image" alt="A diagram of a data transfer Description automatically generated" />
 
 _Figure 7: Endpoint Integration Overview Diagram_
 
