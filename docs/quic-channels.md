@@ -4,7 +4,7 @@ title: Aranya Quic Channels
 permalink: "/aranya-quic-channels/"
 ---
 
-# Aranya Quic Channels
+# Aranya Quic Channels (AQC)
 
 ## Overview
 
@@ -26,7 +26,7 @@ will remain open until the channel is deleted.
 
 Both peers will spawn an async task to await messages from the `ReceiveStream`.
 When a message is received it will be sent on the `qc_sender` channel. 
-Quic may split messages into several pieces so a data chunk in the channel 
+QUIC may split messages into several pieces so a data chunk in the channel 
 may not represent a complete message.
 
 The `SendStreams` will be stored in an `FnvIndexMap`. 
@@ -35,7 +35,7 @@ connection that has gone the longest without being used.
 
 ```rust
 /// Identifies a unique channel between two peers.
-pub struct QuicChannel {
+pub struct AqcChannel {
     /// The node id of the peer.
     node_id: NodeId,
     /// The channel label. This allows multiple channels between two peers.
@@ -45,10 +45,10 @@ pub struct QuicChannel {
 /// FNVIndexMap requires that the size be a power of 2.
 const MAXIMUM_CONNECTIONS: usize = 32;
 
-/// For a given QuicChannel stores the SendStream and the last time it 
+/// For a given AqcChannel stores the SendStream and the last time it 
 /// was used.
 type ConnectionMap = FNVIndexMap<
-    QuicChannel, (SendStream, SystemTime), MAXIMUM_CONNECTIONS
+    AqcChannel, (SendStream, SystemTime), MAXIMUM_CONNECTIONS
 >
 
 /// Quic data chunks will be read as soon as they're received and sent into this
@@ -58,7 +58,7 @@ type ConnectionMap = FNVIndexMap<
 /// The default maximum message size for QUIC is 1MB so this channel will
 /// be just over 1 MB.
 let (qc_sender, mut qc_receiver): (
-    Sender<(QuicChannel, Bytes)>, Receiver<(QuicChannel, Bytes)>
+    Sender<(AqcChannel, Bytes)>, Receiver<(AqcChannel, Bytes)>
 ) = mpsc::channel(1);
 ```
 
@@ -69,13 +69,13 @@ receiving Quic channel messages.
 
 ```rust
 /// This will either create a new connection or retrieve an existing connection
-/// from the ConnectionMap. It will then send the message to the peer.
-SendQuicMessage(channel: QuicChannel, message: &[u8])
+/// from the ConnectionMap. It will then send the data to the peer.
+SendAqcData(channel: AqcChannel, data: &[u8])
     -> Result<(), QuicMessageError>
-/// Returns the next message from qc_receiver or none if the channel is empty. 
-ReceiveQuicData(target: &mut [u8])
-    -> Result<Option<(QuicChannel, usize)>, QuicMessageError>  
-/// Closes the connection if it exists and is open and removes the connection 
+/// Returns the next chunk of data from qc_receiver or none if the channel is empty. 
+ReceiveAqcData(target: &mut [u8])
+    -> Result<Option<(AqcChannel, usize)>, QuicMessageError>  
+/// Closes the channel if it exists and is open and removes the channel 
 /// from the `ConnectionMap`.
-CloseQuicConnection(addr: SocketAddr) 
+CloseAqcConnection(channel: AqcChannel) 
 ```
