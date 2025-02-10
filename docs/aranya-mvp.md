@@ -148,8 +148,8 @@ The client APIs are local-only API endpoints that do not create commands on the 
 mostly used to manage the local state. Depending on the language, the endpoints may be a different
 format that is more idiomatic to that language such as snake_case for C.
 
-- `InitDevice() -> device_id` - init a device if not exists, generate keys, create the API 
-instance, etc.
+- `Connect(daemon_sock, afc_shm_path, max_chans, afc_listen_addr) -> client` - creates a client 
+connection to the daemon.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
 - `AddTeam(team_id, config) -> bool` - add an existing team to the local device store. Not an 
@@ -185,7 +185,6 @@ a sync config is provided, use that. If no config arg is provided, fallback to t
 the peer was added via AddSyncPeer. If the peer was not added, use a default config or error. 
 https://github.com/aranya-project/aranya-docs/pull/24/files#r1917188406
 
-
 #### Onboarding API
 
 Easy to implement, key moving is done by integration.
@@ -198,52 +197,23 @@ Easy to implement, key moving is done by integration.
 6. Add team_id to client (AddTeam)
 7. Sync with device on team (AddSyncPeer)
 
-
-#### Graph Querying APIs
-
-FactDB queries over the current perspective of the graph should be possible through ephemeral 
-commands in the policy that will return query results in their emitted effects. These APIs
-are likely to be moved to nice-to-have or Post-MVP, but are currently planned for MVP.
-
-- `QueryFactRole(user_id) -> Role`
-- `QueryFactKeybundle(user_id) -> Keybundle`
-- `QueryFactNetworkId(user_id) -> network_str`
-- `QueryFactLabelAssignments(user_id) -> Vec<label>`
-- `QueryFactLabelExists(user_id) -> Vec<label>`
-
-
 ### IDAM Control Plane API
 
 The IDAM control plane is for managing identity and authorization by interacting with the graph. 
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the 
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 
-- `CreateTeam(owner_keybundle) -> team_id` - initialize the graph, creating the team with the author as the 
-owner. Includes policy for bootstrapping.
-- `CloseTeam(team_id)` - close the team and stop all operations on the graph.
-- `AddDeviceToTeam(team_id, keybundle, common_name) -> device_id` - add a device to the team with the 
-default role
-- `RemoveDeviceFromTeam(team_id, device_id)` - remove a device from the team
-- `AssignRole(team_id, device_id, role)` - assign a role to a device
-- `RevokeRole(team_id, device_id, role)` - remove a role from a device
-- `SetNetworkName(team_id, device_id, net_identifier)` - associate a network address to a device 
-for use with Quic Channels (or AFC). If the address already exists for this device, it is replaced 
-with the new address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving
-messages. Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can
-reverse lookup.
-- `UnsetNetworkName(team_id, device_id, net_identifier)` - disassociate a network address from a 
-device.
-
-
-Custom roles actions (Client APIs for static policy or Control Plane APIs for dynamic policy?). A seperate
-spec will be created to better define the new role system.
-
-- `DefineRole(role_name)` - define a new role type that can be assigned to devices
-- `ReplaceCommandRole(command_name, authoring_role)` - allow a particular role type to author the 
-specified command type
-- `ReplaceEntityClass(team_id, device_id, entity_class)` - replace the entity class associated to 
-a device
-- CLI to manage permissions, etc 
+- `CreateTeam(owner_keybundle, config) -> team_id` - initialize the graph, creating the team with the author as the owner. Includes policy for bootstrapping.
+- `CloseTeam(team_id) -> bool` - close the team and stop all operations on the graph.
+- `AddDeviceToTeam(team_id, keybundle) -> bool` - add a device to the team with the default role.
+- `RemoveDeviceFromTeam(team_id, device_id) -> bool` - remove a device from the team.
+- `AssignRole(team_id, device_id, role) -> bool` - assign a role to a device.
+- `RevokeRole(team_id, device_id, role) -> bool` - remove a role from a device.
+- `DefineRole(role_name) -> bool` - define a new role type that can be assigned to devices.
+- `ReplaceCommandRole(command_name, authoring_role) -> bool` - allow a particular role type to 
+author the specified command type.
+- `ReplaceEntityClass(team_id, device_id, entity_class) -> bool` - replace the entity class 
+associated to a device.
 
 ### Aranya Channels API
 
@@ -265,28 +235,48 @@ Embedded devices that implement a subset of Aranya library should still be able 
 clients that have the full product integrated. AFC should also be compatible between subset 
 implementations and the full implementation. This compatibility is planned for Post-MVP.
 
-##### AFC API 
+The following APIs are used both for AQC and AFC:
+
+- `CreateLabel(team_id, label)` - create a label
+- `DeleteLabel(team_id, label)` - delete a label
+- `AssignLabel(team_id, device_id, label)` - assign a label to a device 
+- `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
+
+#### AFC API 
 
 The AFC APIs are being moved to a lower level in the API. They will still be available via a build 
 flag to allow embedded devices and advanced users to access them. 
 
-- `CreateAfcLabel(team_id, label)` - create a label
-- `DeleteAfcLabel(team_id, label)` - delete a label
-- `AssignAfcLabel(team_id, device_id, label)` - assign a label to a device so that it can be used for 
-Quic Channels (or AFC)
-- `RevokeAfcLabel(team_id, device_id, label)` - revoke a label from a device
-- `CreateBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
-- `DeleteChannel(team_id, channel_id)` - delete a channel.
-- `PollData(timeout)` - blocks until new AFC data is available, or timeout elapsed
-- `SendData(channel_id, data)` - send data on the given channel.
-- `RecvData() -> (data, metadata)` - recv data from AFC.
+- `SetAfcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a 
+device for use with AFC. If the address already exists for this device, it is replaced with the new 
+address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages. 
+Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse 
+lookup.
+- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
+- `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
+- `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
+- `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
+- `SendAfcData(channel_id, data)` - send data on the given channel.
+- `ReceiveAfcData() -> (data, metadata)` - receive data from AFC.
+
+### Graph Querying APIs
+
+FactDB queries over the current perspective of the graph should be possible through ephemeral 
+commands in the policy that will return query results in their emitted effects. These APIs
+are likely to be moved to nice-to-have or Post-MVP, but are currently planned for MVP.
+
+- `QueryRoleAssignment(device_id) -> Role`
+- `QueryDeviceKeybundle(device_id) -> Keybundle`
+- `QueryAfcNetworkId(device_id) -> network_str`
+- `QueryAfcLabelAssignments(device_id) -> Vec<label>`
+- `QueryAfcLabelExists(device_id) -> Vec<label>`
 
 
 ## Roles & Permissions
 
 There will be 4 default roles with the following set of permissions for each. The MVP will also
 include an expansion of the role system, allowing the user to create custom roles and reassign
-permissions for specific commands to custom roles.
+permissions for specific commands to custom roles. There will be a CLI for managing permissions.
 
 `owner`
 
@@ -297,7 +287,6 @@ permissions for specific commands to custom roles.
 - define/undefine channel labels
 - assign/remove addresses/names for Aranya channels
 - assign/revoke channel labels
-- sync
 
 `admin`
 
@@ -305,7 +294,6 @@ permissions for specific commands to custom roles.
 - define/undefine channel labels
 - assign/remove addresses/names for Aranya channels
 - cannot send data on channel labels
-- sync
 
 `operator`
 
@@ -314,31 +302,23 @@ permissions for specific commands to custom roles.
 - assign/revoke channel labels
 - assign/remove addresses/names for channel
 - cannot send data on channel labels
-- sync
 
 `member`
 
 - use Aranya channel
-- sync
-
-`sync-role`
-
-- sync
 
 Notes:
 
 - Devices can always remove and demote themselves
-- Devices of equal role cannot remove or demote each other (hence, capabilities
-of an owner can only be self-reduced)
+- Devices can only remove or demote another device of equal role when their entity class is higher.
 
 ## Documentation
 
-API documentation must be provided for the client API covering the functions
-and behavior of each API call. Most likely, this will take the form of a doxygen-like
-web page. Developers can use this to look up language agnostic functions for operating
-the client API. The documentation should also include tutorials and a quickstart
-to get developers up and running with the product as soon as possible. Documentation
-should also be provided for the daemon so that developers and sysadmins can
+API documentation must be provided for the client API covering the functions and behavior of each 
+API call. Most likely, this will take the form of a doxygen-like web page. Developers can use this 
+to look up language agnostic functions for operating the client API. The documentation should also 
+include tutorials and a quickstart to get developers up and running with the product as soon as 
+possible. Documentation should also be provided for the daemon so that developers and sysadmins can
 understand the requirements and operations of the daemon.
 
 
@@ -374,8 +354,6 @@ subject to change. This list is unordered within the sections.
 -  Fact DB queries via session commands
 -  Standardize C API names to follow naming scheme.
 -  Update key agreement commands to have a field for the sender's graph head ID. https://github.com/aranya-project/aranya-docs/pull/24#discussion_r1937642908
--  Update `AddTeam` to take a config
--  Update `AddSyncPeer` to take a config
 -  Move AFC to behind build flag
 
 ### Low
