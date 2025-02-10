@@ -82,7 +82,7 @@ For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate ChannelKeys (from a buggy CSPRNG), it mixes in the ID
 of the command that created the channel. (Command IDs are assumed
-to be unique; for more information, see the [Aranya spec]({{ site.url }}/aranya-beta).)
+to be unique; for more information, see the [Aranya spec]({{ '/aranya-beta' | relative_url }}).)
 
 The key derivation scheme is as follows:
 
@@ -171,7 +171,7 @@ For domain separation purposes, the key derivation scheme
 includes both UserIDs. Additionally, in order to prevent
 duplicate keys (from a buggy CSPRNG), it mixes in the ID of the
 command that created the channel. (Command IDs are assumed to be
-unique; for more information, see the [Aranya spec]({{ site.url }}/aranya-beta).)
+unique; for more information, see the [Aranya spec]({{ '/aranya-beta' | relative_url }}).)
 
 The key derivation scheme is as follows:
 

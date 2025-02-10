@@ -26,7 +26,7 @@ The Aranya Daemon is a long-running executable that is used to maintain the stat
 The daemon's responsibilities include:
 
 - Periodically syncing state between networked Aranya peers to ensure they all have consistent state. This includes the ability to add and remove sync peers, available to your application through the <a href="{{ gh_aranya_url }}/blob/HEAD/crates/aranya-client/" target="_blank">Rust Client</a> library.
-- Invokes actions received from the client and handles effects from the <a href="https://github.com/aranya-project/aranya-core" target="_blank">Aranya Core</a> library. See the [walkthrough]({{ site.url }}/getting-started/walkthrough/) for more details.
+- Invokes actions received from the client and handles effects from the <a href="https://github.com/aranya-project/aranya-core" target="_blank">Aranya Core</a> library. See the [walkthrough]({{ '/getting-started/walkthrough/' | relative_url }}) for more details.
 - Generates and maintains cryptographic keys for encrypting and decrypting data for Aranya and Fast Channels.
 
 ## Rust API docs
