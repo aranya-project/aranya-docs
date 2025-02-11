@@ -57,9 +57,7 @@ collections:
     glossary:
         menu-order: 05
         menu-name: Glossary
-        output: false
-        order:
-        - glossary.md
+        output: true
     technical-apis:
         menu-order: 06
         menu-name: Technical APIs
