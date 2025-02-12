@@ -6,7 +6,7 @@ title: Glossary
 # Glossary
 
 <a name="action"></a>**Action**\
-An operation that may be called by a client to produce a [command](#command), which is then processed and, if valid, may affect state.
+An operation that may be called by a client to produce a [command](#command), which is then processed and, if valid, may affect the state of the Aranya DAG.
 
 <a name="afc"></a>**AFC**\
 Aranya Fast Channels. A low-latency, high-throughput encryption engine that uses Aranya for key management and authorization. Find more details in the [AFC spec]({{ '/afc' | relative_url }}).
@@ -63,13 +63,13 @@ Static description of the names and function signatures provided by FFI modules.
 Directed acyclic graph (DAG) where the nodes are [commands](#command), which represents the total ordering of commands. Each command in the graph may contain a new version of its parent's or parents' [factDB](#factdb). Sometimes used to refer to a [team](#team).
 
 <a name="idam"></a>**IdAM**\
-Identity and access management (IdAM), controls access to a resource based on the user.
+Identity and Access Management (IdAM), controls access to a resource based on the user.
 
 <a name="label"></a>**Label**\
 An identifier that binds an AFC [channel](#channel) to a set of Aranya policy rules, ensuring that both channel users meet some specified criteria.
 
 <a name="latency"></a>**Latency**\
-Amount of time it takes data to travel from one point to another. Read more [latency](https://en.wikipedia.org/wiki/Latency_(engineering)).
+Amount of time it takes data to travel from one point to another. Read more about [latency](https://en.wikipedia.org/wiki/Latency_(engineering)).
 
 <a name="linear-storage"></a>**Linear Storage**\
 An implementation of the storage APIs using a file-like byte storage interface that is suitable for many different systems without making many assumptions on the underlying storage.
@@ -90,7 +90,7 @@ The key used by the side that decrypts in a _unidirectional_ [channel](#channel)
 In storage, a version of the [graph](#graph) from a specific [command](#command), or point-in-time.
 
 <a name="policy"></a>**Policy**\
-Defines rules for evaluating [actions](#action) to publish commands on the graph, resulting in effects emitted to [Aranya](#aranya) clients. More information on the Aranya Policy Language can be found in the [specification]({{ '/policy-language-v1' | relative_url }}).
+Defines rules for evaluating [actions](#action) to publish commands on the graph, resulting in effects emitted to [Aranya](#aranya) clients. More information on the Aranya Policy Language can be found in the [specification]({{ '/policy-language-v2' | relative_url }}).
 
 <a name="policy-compiler"></a>**Policy Compiler**\
 Compiles policy code into a module to be consumed by the policy VM.
@@ -108,16 +108,16 @@ Compiled policy code.
 Policy virtual machine. Consumes a compiled policy module to execute and perform policy decisions.
 
 <a name="quic"></a>**QUIC**\
-[UDP](#udp) but better. Read more [here](https://en.wikipedia.org/wiki/QUIC).
+A general-purpose transport layer network protocol, that utilizes several multiplexed [UDP](#udp) connections. Read more about the [QUIC protocol](https://en.wikipedia.org/wiki/QUIC).
 
 <a name="rbac"></a>**RBAC**\
-Role-based access control. A version of Identity Access Management that uses roles to grant a user or group of users' permission(s) to interact with a [graph](#graph).
+Role-based access control. A version of Identity Access and Management that uses roles to grant a user or group of users permission(s) to interact with a [graph](#graph).
 
 <a name="role"></a>**Role**\
-Defines capabilities a user or group of users may be assigned to perform operations in a policy that uses an RBAC system.
+Defines capabilities a user or group of users may be assigned to perform operations in a policy that uses an [RBAC](#rbac) system.
 
 <a name="rtt"></a>**RTT**\
-Round-trip time. How long it takes data to travel from one point to another and back. Read more [here](https://en.wikipedia.org/wiki/Round-trip_delay).
+Round-trip time. How long it takes data to travel from one point to another and back. Read more about [round-trip delay](https://en.wikipedia.org/wiki/Round-trip_delay).
 
 <a name="sealkey"></a>**SealKey**\
 The key used to encrypt on either side of a _bidirectional_ [channel](#channel).
@@ -129,22 +129,22 @@ The key used by the side that encrypts in a _unidirectional_ [channel](#channel)
 In storage, a nonempty sequence of [commands](#command) that have been persisted to the graph.
 
 <a name="sync"></a>**Sync**\
-Implementations that allow remote [Aranya](#aranya) clients to share state. More details on syncing in Aranya can be found in the [specification]({{ '/sync' | relative_url }}).
+Implementations that allow remote [Aranya](#aranya) clients to share state. More details on syncing in Aranya can be found in the [sync]({{ '/sync' | relative_url }}) specification.
 
 <a name="tcp"></a>**TCP**\
-Transmission Control Protocol. Transport that supports resending dropped packets. Read more [here](https://en.wikipedia.org/wiki/Transmission_Control_Protocol).
+Transmission Control Protocol. Transport that supports resending dropped packets. Read more about [tcp](https://en.wikipedia.org/wiki/Transmission_Control_Protocol).
 
 <a name="team"></a>**Team**\
-A group of users who interact over a graph. Sometimes used interchangeably with graph as a team is necessarily associated with a single graph.
+A group of users who interact over a [graph](#graph). Sometimes used interchangeably with graph as a team is necessarily associated with a single graph.
 
 <a name="throughput"></a>**Throughput**\
-The amount of data that can actually be transferred over the network over a certain period of time. This is a measurement rather than a theoretical estimate. Read more [here](https://en.wikipedia.org/wiki/Network_throughput).
+The amount of data that can actually be transferred over the network over a certain period of time. This is a measurement rather than a theoretical estimate. Read more about [throughput](https://en.wikipedia.org/wiki/Network_throughput).
 
 <a name="ttl"></a>**TTL**\
-Time to live. This value is set to the number of hops a packet should exist on the network before it is dropped. Read more [here](https://en.wikipedia.org/wiki/Time_to_live).
+Time to live. This value is set to the number of hops a packet should exist on the network before it is dropped. Read more about [ttl](https://en.wikipedia.org/wiki/Time_to_live).
 
 <a name="udp"></a>**UDP**\
-User Datagram Protocol. Simple transport. Read more [here](https://en.wikipedia.org/wiki/User_Datagram_Protocol).
+User Datagram Protocol. A simple connectionless protocol that prioritizes speed over error checking and correction. Read more about [udp](https://en.wikipedia.org/wiki/User_Datagram_Protocol).
 
 <a name="uds"></a>**UDS**\
-Unix domain socket. An endpoint for exchanging data. Read more [here](https://en.wikipedia.org/wiki/Unix_domain_socket).
+Unix domain socket. An endpoint for exchanging data. Read more about [UDS](https://en.wikipedia.org/wiki/Unix_domain_socket).
