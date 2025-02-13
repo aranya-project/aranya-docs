@@ -21,16 +21,16 @@ An abstract syntax tree (AST), is a tree data structure that represents code. It
 How much data can be theoretically transferred over the network over a certain period of time. Read more about [bandwidth](https://en.wikipedia.org/wiki/Bandwidth_(computing)).
 
 <a name="braid"></a>**Braid**\
-In storage, enforces deterministic ordering while merging two branches, or sets of [commands](#command), in a [graph](#graph) based on properties of the affected commands.
+The braid algorithm enforces deterministic ordering while merging two [DAG](#dag)s, or sets of [commands](#command), each may have multiple branches.
 
 <a name="channel"></a>**Channel**\
-An [AFC](#afc) _channel_ facilitates one-to-one communication in either a unidirectional or bidirectional manner. Both channel types use unique symmetric [AEAD](https://datatracker.ietf.org/doc/html/rfc5116) key(s); a unidirectional channel uses one key and a bidirectional channel uses two keys.
+An [AFC](#afc) _channel_ facilitates one-to-one communication in either a unidirectional or bidirectional manner. Both channel types use unique symmetric [AEAD](https://datatracker.ietf.org/doc/html/rfc5116) key(s). A unidirectional channel uses one key to function as the seal key on one side, and the open key on the other side. While a bidirectional channel uses two unique symmetric keys as open and seal keys on both side, allowing it to secure returned data with a unique key.
 
 <a name="channelkeys"></a>**ChannelKeys**\
-Two unique symmetric keys, (`k1`, `k2`), that enable encryption and decryption for each user in a _bidirectional_ channel. One side of the channel uses `k1` for encryption and `k2` for decryption, while the other side uses `k1` for decryption and `k2` for encryption.
+Two unique symmetric keys, (`k1`, `k2`), that enable encryption and decryption for each user in a _bidirectional_ [channel](#channel). One side of the channel uses `k1` for encryption and `k2` for decryption, while the other side uses `k1` for decryption and `k2` for encryption.
 
 <a name="cicd"></a>**CI/CD**\
-Continuous Integration and Development. A development best practice that ensures software is tested, integrated, and deliverable/deployable which each commit and pull request against the repositories.
+Continuous Integration and Continuous Delivery. A development best practice that ensures software is tested, integrated, and deliverable/deployable which each commit and pull request against the repositories. Read more about [CICD](https://en.wikipedia.org/wiki/CI/CD).
 
 <a name="command"></a>**Command**\
 An object containing new state used while evaluating a [policy](#policy).
@@ -38,14 +38,17 @@ An object containing new state used while evaluating a [policy](#policy).
 <a name="crypto-engine"></a>**Crypto Engine**\
 Provides a set of APIs for encryption, decryption, and key authentication.
 
+<a name="dag"></a>**DAG**\
+Directed Acyclic Graph. We use this term interchangeably with the [Graph](#graph). Read more about [directed acyclic graphs](https://en.wikipedia.org/wiki/Directed_acyclic_graph).
+
 <a name="effect"></a>**Effect**\
 Data, as defined in a policy, that may be emitted to clients when a [command](#command) is processed.
 
 <a name="ephemeral-session"></a>**Ephemeral Session**\
-Commands that are locally processed by a policy at some [perspective](#perspective) of the [graph](#graph) but do not persist to the graph. Read the [sessions spec]({{ '/aranya-sessions' | relative_url }}) for more details.
+In ephemeral sessions, [commands](#command) are locally processed by a policy but do not persist to the [graph](#graph). An ephemeral session only lasts as long as the lifetime of the Aranya daemon that it's running in. Once a daemon stops/restarts, the session will no longer be available. Read the [sessions]({{ '/aranya-sessions' | relative_url }}) spec for more details.
 
 <a name="fact"></a>**Fact**\
-Key-value pair that is produced by processing a [command](#command).
+[Key-value pair](https://en.wikipedia.org/wiki/Name%E2%80%93value_pair) that is produced by processing a [command](#command).
 
 <a name="factdb"></a>**FactDB**\
 Fact storage within the graph at any given command. The factDB is accessed from a perspective of the graph, therefore, its values change depending on the access point.
@@ -54,19 +57,19 @@ Fact storage within the graph at any given command. The factDB is accessed from 
 Foreign function interface. Mechanism to perform operations that are written or compiled in a different programming language. Some examples include policy code calling functions written in Rust and Rust code calling functions written in C. More details on Rust FFIs can be found in the [Rust by Example](https://doc.rust-lang.org/rust-by-example/std_misc/ffi.html) Book.
 
 <a name="ffi-module"></a>**FFI Module**\
-Set of FFI operations that can be imported by a [policy](#policy).
+Set of [FFI](#ffi) operations that can be imported by a [policy](#policy).
 
 <a name="ffi-schema"></a>**FFI Schema**\
-Static description of the names and function signatures provided by FFI modules. This allows the [policy Compiler](#policy-compiler) to validate the FFI is being used correctly in policy code.
+Static description of the names and function signatures provided by [FFI modules](#ffi-module). This allows the [policy Compiler](#policy-compiler) to validate the FFI is being used correctly in policy code.
 
 <a name="graph"></a>**Graph**\
-Directed acyclic graph (DAG) where the nodes are [commands](#command), which represents the total ordering of commands. Each command in the graph may contain a new version of its parent's or parents' [factDB](#factdb). Sometimes used to refer to a [team](#team).
+Directed acyclic graph (DAG) where the nodes are [commands](#command), which represents the total ordering of commands. Each command in the graph may contain a new version of its parent's [factDB](#factdb), sometimes refer to as a [team](#team).
 
 <a name="idam"></a>**IdAM**\
-Identity and Access Management (IdAM), controls access to a resource based on the user.
+Identity and Access Management (IdAM), controls access to a resource based on the user. Read more about [Identity and Access Management](https://en.wikipedia.org/wiki/Identity_and_access_management).
 
 <a name="label"></a>**Label**\
-An identifier that binds an AFC [channel](#channel) to a set of Aranya policy rules, ensuring that both channel users meet some specified criteria.
+An identifier that binds an AFC [channel](#channel) to a set of Aranya policy rules, ensuring that both channel users are authorized to transmit data via the channel according to rule defined by the policy.
 
 <a name="latency"></a>**Latency**\
 Amount of time it takes data to travel from one point to another. Read more about [latency](https://en.wikipedia.org/wiki/Latency_(engineering)).
@@ -90,10 +93,10 @@ The key used by the side that decrypts in a _unidirectional_ [channel](#channel)
 In storage, a version of the [graph](#graph) from a specific [command](#command), or point-in-time.
 
 <a name="policy"></a>**Policy**\
-Defines rules for evaluating [actions](#action) to publish commands on the graph, resulting in effects emitted to [Aranya](#aranya) clients. More information on the Aranya Policy Language can be found in the [specification]({{ '/policy-language-v2' | relative_url }}).
+Defines rules for evaluating [actions](#action) to publish commands on the graph, resulting in [effects](#effect) emitted to [Aranya](#aranya) clients. More information on the Aranya Policy Language can be found in the [specification]({{ '/policy-language-v2' | relative_url }}).
 
 <a name="policy-compiler"></a>**Policy Compiler**\
-Compiles policy code into a module to be consumed by the policy VM.
+Compiles policy code into a module to be consumed by the [policy VM](policy-vm).
 
 <a name="policy-document"></a>**Policy Document**\
 Markdown file that describes and implements the objects and operations used to create, update, and delete state, including a [graph](#graph) and [factDB](#factdb).
@@ -108,7 +111,7 @@ Compiled policy code.
 Policy virtual machine. Consumes a compiled policy module to execute and perform policy decisions.
 
 <a name="quic"></a>**QUIC**\
-A general-purpose transport layer network protocol, that utilizes several multiplexed [UDP](#udp) connections. Read more about the [QUIC protocol](https://en.wikipedia.org/wiki/QUIC).
+A general-purpose transport layer network protocol, that utilizes several multiplexed [UDP](#udp) connections and encrypts traffic with TLS. Read more about the [QUIC protocol](https://en.wikipedia.org/wiki/QUIC).
 
 <a name="rbac"></a>**RBAC**\
 Role-based access control. A version of Identity Access and Management that uses roles to grant a user or group of users permission(s) to interact with a [graph](#graph).
@@ -128,6 +131,9 @@ The key used by the side that encrypts in a _unidirectional_ [channel](#channel)
 <a name="segment"></a>**Segment**\
 In storage, a nonempty sequence of [commands](#command) that have been persisted to the graph.
 
+<a name="shm"></a>**Shm**\
+Shared memory or shared local memory allows processes to communicate information by sharing a region of memory. It's used to store channel keys for ephemeral sessions and APS channels in Aranya.
+
 <a name="sync"></a>**Sync**\
 Implementations that allow remote [Aranya](#aranya) clients to share state. More details on syncing in Aranya can be found in the [sync]({{ '/sync' | relative_url }}) specification.
 
@@ -135,7 +141,7 @@ Implementations that allow remote [Aranya](#aranya) clients to share state. More
 Transmission Control Protocol. Transport that supports resending dropped packets. Read more about [tcp](https://en.wikipedia.org/wiki/Transmission_Control_Protocol).
 
 <a name="team"></a>**Team**\
-A group of users who interact over a [graph](#graph). Sometimes used interchangeably with graph as a team is necessarily associated with a single graph.
+A group of users who interact over a [graph](#graph). Sometimes used interchangeably with graph, as a team is associated with a single graph.
 
 <a name="throughput"></a>**Throughput**\
 The amount of data that can actually be transferred over the network over a certain period of time. This is a measurement rather than a theoretical estimate. Read more about [throughput](https://en.wikipedia.org/wiki/Network_throughput).
