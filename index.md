@@ -18,7 +18,7 @@ A key discriminating attribute of Aranya is the decentralized, zero trust archit
 
 -   **Secure Sensitive Data:** Ensure your data is secured from unauthorized access or potential breaches using cryptographic algorithms to encrypt the data.
 
--   **Data Protection and Privacy:** Granular controls which can grant or revoke access, defined through policy that dictate whether an entity can or can't access data.
+-   **Data Protection and Privacy:** Granular controls which can grant or revoke access, defined through policy that dictate whether a device can or can't access data.
 
 -   **Secure Data Exchange:** Enable unidirectional or bidirectional secure data exchange between two devices without the need for access to any form of centralized IT infrastructure.
 
@@ -30,11 +30,11 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 -   **Identity & Access Management (IdAM)**
 
-    -   **RBAC (Roles):** Entities, or a group of entities, are given permission to interact with data or applications based on pre-defined roles.
+    -   **RBAC (Roles):** Devices, or a group of devices, are given permission to interact with data or applications based on pre-defined roles.
 
-    -   **ABAC (Attributes):** Entities, or a group of entities, can be given permission to interact with data or applications based on dynamic attributes.
+    -   **ABAC (Attributes):** Devices, or a group of devices, can be given permission to interact with data or applications based on dynamic attributes.
 
-    -   **Revocation:** Entities or whole RBAC/ABAC roles can be removed from access just as easily as it is to grant access.
+    -   **Revocation:** Devices or whole RBAC/ABAC roles can be removed from access just as easily as it is to grant access.
 
 -   **Decentralized Peer-to-Peer Messaging**
 
@@ -46,11 +46,11 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 -   **Data Segmentation**
 
-    -   Data can be segmented based on pre-defined roles or attributes through topic labels. For example, certain roles may be restricted from gaining access to a topic and other roles may be prerequisites for gaining access. In addition to roles, any attribute stored about the entity may be used to control access to a topic.
+    -   Data can be segmented based on pre-defined roles or attributes through topic labels. For example, certain roles may be restricted from gaining access to a topic and other roles may be prerequisites for gaining access. In addition to roles, any attribute stored about the device may be used to control access to a topic.
 
 -   **Audit Log of Immutable Commands**
 
-    -   Using the control plane, Aranya provides a high-assurance audit log of all commands, or instructions given by an entity to perform a specific task, providing data integrity and provenance for the movement of your data throughout your infrastructure.
+    -   Using the control plane, Aranya provides a high-assurance audit log of all commands, or instructions given by a device to perform a specific task, providing data integrity and provenance for the movement of your data throughout your infrastructure.
 
     -   The native data structure _is_ the audit log of all commands. The log, which is distributed and synchronized across all endpoints, provides a cryptographically authenticated, tamper-evident, high-assurance replication of all commands taken. For more details, see the Aranya Syncing [specification]({{ '/sync' | relative_url }}).
 

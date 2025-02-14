@@ -14,8 +14,8 @@ Aranya's Rust Client is the library that your application will interface with. B
 The client provides the following functionality:
 
 - Add and remove sync peers. The daemon will periodically attempt to sync Aranya state with any peers (as long as it is able to communicate with the peer over the network) in its configured sync peer list.
-- Add and remove users from the team as determined by the implemented policy.
-- Assign and revoke user roles as determined by the implemented policy.
+- Add and remove devices from the team as determined by the implemented policy.
+- Assign and revoke device roles as determined by the implemented policy.
 - Create, delete, assign and revoke labels used for attribute based controls and segmentation of data communicated between peers within Aranya Fast Channels as determined by the implemented policy.
 - Create and delete Fast Channels channels as determined by the implemented policy.
 - Send and receive encrypted data using Aranya Fast Channels. Fast Channels supports bidirectional encrypted data exchange over TCP transport. Note: The functionality noted 'as determined by the implemented policy' are defined in the <a href="{{ gh_aranya_url }}/blob/HEAD/crates/aranya-daemon/src/policy.md" target="_blank">default policy</a>. As such, these may differ depending on the policy implemented in your application.
@@ -34,7 +34,7 @@ The daemon's responsibilities include:
 - <a href="https://docs.rs/aranya-daemon/latest/aranya_daemon/" target="_blank">Aranya Daemon API docs</a>
 
 ## Rust example
-There is a <a href="{{ gh_aranya_url }}/blob/main/templates/aranya-example/README.md" target="_blank">Rust example</a> application that runs a `cargo-generate` template to give a quick way to get up and running. During setup, the example application starts an instance of the aranya-daemon for multiple Aranya user in the background. The daemon automatically handles syncing the Aranya graph states between peers so the Aranya client can focus on the operations it wants to perform on the team.
+There is a <a href="{{ gh_aranya_url }}/blob/main/templates/aranya-example/README.md" target="_blank">Rust example</a> application that runs a `cargo-generate` template to give a quick way to get up and running. During setup, the example application starts an instance of the aranya-daemon for multiple Aranya devices in the background. The daemon automatically handles syncing the Aranya graph states between peers so the Aranya client can focus on the operations it wants to perform on the team.
 
 The example app shows how to use the `aranya-client` library to:
 - Setup a team
