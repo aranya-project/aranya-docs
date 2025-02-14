@@ -34,7 +34,7 @@ The first two challenges have prior art we can borrow from:
 
 The third challenge, adversarial branching, is a new topic with little published research on the topic. What research does exist is on the topic of byzantine CRDTs, but does not offer a solution we can use. This challenge of adversarial branching will be a core topic to cover in this document. This concept is stated concretely as *Goal-1*:
 
-> **Goal-1**: Given an acyclic graph of commands which are indexed as a collection of key value pairs known as facts. At every state *s*, if an entity is not able to transition to state *s+1* by evaluating policy over a new command `A` and the set of facts produced by *s*, they should not be able to produce a branch from an ancestor state (i.e. from evaluating a sub-state), which when merged with state *s* results in a state containing `A`.
+> **Goal-1**: Given an acyclic graph of commands which are indexed as a collection of key value pairs known as facts. At every state *s*, if a device is not able to transition to state *s+1* by evaluating policy over a new command `A` and the set of facts produced by *s*, they should not be able to produce a branch from an ancestor state (i.e. from evaluating a sub-state), which when merged with state *s* results in a state containing `A`.
 ```alloy
 // State this as an assertion in alloy
 ```
@@ -90,7 +90,7 @@ In this approach Validators have large amounts of freedom over the total order. 
 Before describing the system we will define some terms used in our discussion.
 
 ### Command
-A command is a typed message serialized using the Aranya Event Format. Each message has a static list of user fields defined by a schema as well as a common set of base fields: *id*, *policy*, *group*, *parent*, and *priority*.
+A command is a typed message serialized using the Aranya Event Format. Each message has a static list of device fields defined by a schema as well as a common set of base fields: *id*, *policy*, *group*, *parent*, and *priority*.
 
 
 The *policy* field specifies which policy rule should be used to process the command.
@@ -118,7 +118,7 @@ abstract sig Command {
 Command `A` is a parent of command `B` if and only if `B` has `A` in its `parent` field.
 ```alloy
 // Test if a is a parent of b.
-pred parent[ a, b: one UserCommand ] {
+pred parent[ a, b: one DeviceCommand ] {
   a in b.parent
 }
 ```
@@ -179,7 +179,7 @@ Policy is a set of rules which verify commands are valid given a FactDB. If foun
 ### Fact Mutation
 A fact `F` is said to be mutated by a command `A` if and only if the policy which accepts `A`, inserts, updates, or deletes, the key or value of `F`.
 ```alloy
-pred mutation[path: Path, key: one User, command: one UserCommand] {
+pred mutation[path: Path, key: one Device, command: one DeviceCommand] {
   some st: FactDB | eventually {
     st.event = command
     st.facts[path][key] != st.facts'[path][key]
@@ -415,7 +415,7 @@ The weave function will understand three concrete and two abstract command types
 The `Init` event is the common ancestor for all other Commands in any execution of a Aranya protocol. It necessarily has no parents.
 ```alloy
 sig Init extends Command {
-  roles: User -> Role,
+  roles: Device -> Role,
 } {
   no parent
   priority = 0
@@ -549,13 +549,13 @@ An example procedural approach would be:
 If there was an Aranya policy where one Admin may modify the role of a sibling Admin, this could lead to a conflict where they both remove the fact that makes them an admin creating a case with no valid weave.
 
 #### Mitigation
-The authority hierarchy must only allow a user to manage themselves and roles below them.
+The authority hierarchy must only allow a device to manage themselves and roles below them.
 
 ### Counters and Other Dependent Updates
 To implement incrementing a counter we use a test and set approach to updating a fact value. This will cause a conflict if a counter is updated on two branches.
 
 #### Mitigation
-**Option 1:** Instead of having a single counter concurrently updated by all users there should be a sub counter for each user with the current value of the counter being calculated as sum of the user counters.
+**Option 1:** Instead of having a single counter concurrently updated by all devices there should be a sub counter for each device with the current value of the counter being calculated as sum of the device counters.
 
 It is not clear how to do this when the number of sub counters is unknown as queries in the policy language only support reading static keys.
 
@@ -571,11 +571,11 @@ It is not clear how to do this when the number of sub counters is unknown as que
 ## Model
 Here we present an example use of Aranya in a toy protocol.
 
-### User Command
-Protocol specific commands will extend the User Command type. A User Command has an `author` which is a cryptographic signature asserting authorship. User Commands have exactly one `parent`.
+### Device Command
+Protocol specific commands will extend the Device Command type. A Device Command has an `author` which is a cryptographic signature asserting authorship. Device Commands have exactly one `parent`.
 ```alloy
-abstract sig UserCommand extends Command {
-  author: one User,
+abstract sig DeviceCommand extends Command {
+  author: one Device,
 } {
   one parent
 }
@@ -587,7 +587,7 @@ fact {
 }
 ```
 ### Protocol Commands
-The protocol we are building is based on four user commands: add member, set role, delete user, and send message.
+The protocol we are building is based on four device commands: add member, set role, delete device, and send message.
 ```alloy
 fact {
   all st: FactDB | {
@@ -596,7 +596,7 @@ fact {
       || merge[st]
       || addMember[st]
       || setRole[st]
-      || deleteUser[st]
+      || deleteDevice[st]
       || sendMessage[st]
     }
   }
@@ -612,11 +612,11 @@ pred ignore[st: one FactDB] {
   st.facts' = st.facts
 }
 ```
-The facts in our system use users as keys, and their roles as values.
+The facts in our system use devices as keys, and their roles as values.
 ```alloy
 one sig RolePath extends Path {}
 
-sig User extends Key {}
+sig Device extends Key {}
 
 abstract sig Role extends Value {}
 
@@ -631,9 +631,9 @@ pred subordinateRole[ higher: one Role, lower: one Role] {
 }
 ```
 
-In our model we tie the priority of user events to the role of the author of the event.
+In our model we tie the priority of device events to the role of the author of the event.
 ```alloy
-pred setDynamicPrority[st: one FactDB, ev: one UserCommand] {
+pred setDynamicPrority[st: one FactDB, ev: one DeviceCommand] {
 
   let role = st.facts[RolePath][ev.author] | {
     role = Owner implies {
@@ -665,7 +665,7 @@ Show Init in example protocol.
 pred showInit[] {
   weave[Command]
 
-  one u: User |
+  one u: Device |
     Init.roles = u -> Owner
 }
 
@@ -673,14 +673,14 @@ run showInit for 0 but
   1 Group,
   2 Command,
   2 Id,
-  1 User,
+  1 Device,
   exactly 1 FactDB
 ```
 
 The `AddMember` command is used to add a new member and can only be performed by roles greater then Member.
 ```alloy
-sig AddMember extends UserCommand {
-  member: one User,
+sig AddMember extends DeviceCommand {
+  member: one Device,
 } {
   one parent
 }
@@ -709,7 +709,7 @@ pred checkAddMember[st: one FactDB, ev: one AddMember] {
 pred showAddMember[] {
   weave[Command]
 
-  one u: User |
+  one u: Device |
     Init.roles = u -> Owner
 
   eventually checkAddMember[FactDB, AddMember]
@@ -720,14 +720,14 @@ run showAddMember for 0 but 3..3 steps,
   exactly 1 Init,
   exactly 1 AddMember,
   exactly 2 Id,
-  2 User,
+  2 Device,
   exactly 1 FactDB
 ```
 
-The `SetRole` command is used to change the role of a user. It is required that the affected user be the author or have a lower role than the affected user. Additionally, the new role must be at the same level or lower than the author's role.
+The `SetRole` command is used to change the role of a device. It is required that the affected device be the author or have a lower role than the affected device. Additionally, the new role must be at the same level or lower than the author's role.
 ```alloy
-sig SetRole extends UserCommand {
-  user: one User,
+sig SetRole extends DeviceCommand {
+  device: one Device,
   role: one Role,
 } {
   one parent
@@ -739,8 +739,8 @@ pred setRole[st: one FactDB] {
 
     checkSetRole[st, ev] implies {
       st.facts' = st.facts
-        - RolePath -> ev.user -> st.facts[RolePath][ev.user]
-        + RolePath -> ev.user -> ev.role
+        - RolePath -> ev.device -> st.facts[RolePath][ev.device]
+        + RolePath -> ev.device -> ev.role
 
     } else ignore[st]
   }
@@ -748,10 +748,10 @@ pred setRole[st: one FactDB] {
 
 pred checkSetRole[st: one FactDB, ev: one SetRole] {
   setDynamicPrority[st, ev]
-  some st.facts[RolePath][ev.user]
+  some st.facts[RolePath][ev.device]
 
-  let ar = st.facts[RolePath][ev.author], ur = st.facts[RolePath][ev.user]| {
-    subordinateRole[ar, ur] || ev.author = ev.user
+  let ar = st.facts[RolePath][ev.author], ur = st.facts[RolePath][ev.device]| {
+    subordinateRole[ar, ur] || ev.author = ev.device
     subordinateRole[ar, ev.role]
   }
 }
@@ -759,14 +759,14 @@ pred checkSetRole[st: one FactDB, ev: one SetRole] {
 pred showSetRole [] {
   weave[Command]
 
-  one u: User | {
+  one u: Device | {
     Init.roles = u -> Owner
 
     AddMember.author = u
     AddMember.member != u
 
     SetRole.parent = AddMember
-    SetRole.user   = AddMember.member
+    SetRole.device   = AddMember.member
     SetRole.author = u
   }
 
@@ -779,63 +779,63 @@ run showSetRole for 0 but 4..4 steps,
   exactly 1 AddMember,
   exactly 1 SetRole,
   exactly 3 Id,
-  2 User,
+  2 Device,
   exactly 1 FactDB
 ```
 
-The `DeleteUser` command removes a user from the FactDB. The affected users must have a lower role than the author except for the case that the author removes themselves.
+The `DeleteDevice` command removes a device from the FactDB. The affected devices must have a lower role than the author except for the case that the author removes themselves.
 ```alloy
-sig DeleteUser extends UserCommand {
-  user: one User,
+sig DeleteDevice extends DeviceCommand {
+  device: one Device,
 } {
   one parent
 }
 
-pred deleteUser[st: one FactDB] {
-  one ev: DeleteUser | {
+pred deleteDevice[st: one FactDB] {
+  one ev: DeleteDevice | {
     st.event = ev
 
-    checkDeleteUser[st, ev] implies {
+    checkDeleteDevice[st, ev] implies {
       st.facts' = st.facts
-        - RolePath -> ev.user -> st.facts[RolePath][ev.user]
+        - RolePath -> ev.device -> st.facts[RolePath][ev.device]
 
     } else ignore[st]
   }
 }
 
-pred checkDeleteUser[st: one FactDB, ev: one DeleteUser] {
+pred checkDeleteDevice[st: one FactDB, ev: one DeleteDevice] {
   setDynamicPrority[st, ev]
-  some st.facts[RolePath][ev.user]
+  some st.facts[RolePath][ev.device]
 
-  let ar = st.facts[RolePath][ev.author], ur = st.facts[RolePath][ev.user]|
-    subordinateRole[ar, ur] || ev.author = ev.user
+  let ar = st.facts[RolePath][ev.author], ur = st.facts[RolePath][ev.device]|
+    subordinateRole[ar, ur] || ev.author = ev.device
 }
 
-pred showDeleteUser [] {
+pred showDeleteDevice [] {
   weave[Command]
 
-  all i: Init | one u: User |
+  all i: Init | one u: Device |
     i.roles = u -> Owner
 
-	DeleteUser.author != DeleteUser.user
-  DeleteUser.parent = AddMember
+	DeleteDevice.author != DeleteDevice.device
+  DeleteDevice.parent = AddMember
 
-  eventually checkDeleteUser[FactDB, DeleteUser]
+  eventually checkDeleteDevice[FactDB, DeleteDevice]
 }
 
-run showDeleteUser for 0 but 4..4 steps,
+run showDeleteDevice for 0 but 4..4 steps,
   1 Group,
   exactly 1 Init,
   exactly 1 AddMember,
-  exactly 1 DeleteUser,
+  exactly 1 DeleteDevice,
   exactly 3 Id,
-  2 User,
+  2 Device,
   exactly 1 FactDB
 ```
 
 The `SendMessage` command can be performed by any author that has a role in the FactDB
 ```alloy
-sig SendMessage extends UserCommand {} {
+sig SendMessage extends DeviceCommand {} {
   one parent
 }
 
@@ -860,7 +860,7 @@ Here we show an example of a merge between an `AddMember` and a `SetRole` event.
 pred showMerge [] {
   weave[Command]
 
-  one u: User | {
+  one u: Device | {
     Init.roles = u -> Owner
     AddMember.parent = Init
     AddMember.author = u
@@ -887,20 +887,20 @@ run showMerge for 0 but 5..5 steps,
   exactly 1 SetRole,
   exactly 1 Merge,
   exactly 4 Id,
-  2 User,
+  2 Device,
   exactly 1 FactDB
 ```
 
-Here we show an example `DeleteUser` merging before `AddMember`.
+Here we show an example `DeleteDevice` merging before `AddMember`.
 ```alloy
 pred showAdversialMerge1 [] {
   weave[Command]
 
-  one disj u1, u2: User |
+  one disj u1, u2: Device |
     Init.roles = u1 -> Owner
       + u2 -> Admin
 
-  one add2: AddMember, del1: DeleteUser, m: Merge | {
+  one add2: AddMember, del1: DeleteDevice, m: Merge | {
 
     add2.parent = Init
     add2.author = Init.roles.Admin
@@ -908,12 +908,12 @@ pred showAdversialMerge1 [] {
 
     eventually {
       FactDB.event = del1
-      checkDeleteUser[FactDB, del1]
+      checkDeleteDevice[FactDB, del1]
     }
 
     del1.parent = Init
     del1.author = Init.roles.Owner
-    del1.user   = add2.author
+    del1.device   = add2.author
 
     m.parent = del1 + add2
   }
@@ -923,10 +923,10 @@ run showAdversialMerge1 for 0 but 5..5 steps,
   1 Group,
   exactly 1 Init,
   exactly 1 AddMember,
-  exactly 1 DeleteUser,
+  exactly 1 DeleteDevice,
   exactly 1 Merge,
   exactly 4 Id,
-  exactly 3 User,
+  exactly 3 Device,
   exactly 1 FactDB
 ```
 
@@ -950,12 +950,12 @@ A - C - B - D - M
 
 Example to consider forward merge:
 ```
-AddUser(x)[0] - y.SendMessage[1]
+AddDevice(x)[0] - y.SendMessage[1]
                                  \
                                   M
                                  /
-RemoveUser(x)[3] - y.SendMessage[0]
+RemoveDevice(x)[3] - y.SendMessage[0]
 
-AddUser(x) - y.SendMessage - RemoveUser(x) - y.SendMessage
+AddDevice(x) - y.SendMessage - RemoveDevice(x) - y.SendMessage
 ```
 --->
