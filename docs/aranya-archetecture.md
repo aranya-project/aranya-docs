@@ -23,17 +23,17 @@ flowchart-elk TB
     a5 -- AFC Ctr/Data <br> TCP Transport --> b1
     c5 -- Aranya Sync <br> TCP Transport --> e1
     subgraph ClientLibrary["Client Library"]
-            a1("User Application")
+            a1("Device Application")
             a2("C-API")
             a3("Rust API")
             a4("UDS Client")
             a5("AFC Router")
             a6("AFC")
     end
-    subgraph UserProcess["User Process"]
+    subgraph DeviceProcess["Device Process"]
             ClientLibrary
     end
-    subgraph PeerUserProcess["Peer User Process"]
+    subgraph PeerDeviceProcess["Peer Device Process"]
             b1("AFC Router")
     end
     subgraph Daemon["Daemon"]
