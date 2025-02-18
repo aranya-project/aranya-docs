@@ -1,6 +1,10 @@
 
 ## Appendix C: Notes and Post-MVP information
 
+Embedded devices that implement a subset of Aranya library should still be able to sync with
+clients that have the full product integrated. AFC should also be compatible between subset 
+implementations and the full implementation. This compatibility is planned for Post-MVP.
+
 ## TODO: Post-MVP (unordered)
 
 Ideally, embedded devices that implement a subset of Aranya library should still be able to sync with
