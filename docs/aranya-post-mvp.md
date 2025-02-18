@@ -28,6 +28,7 @@ an invite code instead of passing a KeyBundle.
 
 ### API
 
+- `IsPresent(command_id, max_cut) -> bool` - looks for command ID in the graph.
 - `AwaitCommand(command_id)` - waits until command ID is present in the graph. (Post-MVP)
 - `Finalization(team_id)` - create a truncation checkpoint of the graph. Any command received after 
 a Finalization must be its descendant, otherwise, it will be dropped. Post-MVP. https://github.com/aranya-project/aranya-docs/pull/24/files#r1927632474

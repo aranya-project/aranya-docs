@@ -91,14 +91,12 @@ management of identities can be added post-MVP or as time allows for MVP.
 
 On startup, the daemon requires a path to the working directory. That directory contains a 
 configuration file with the path to the unix domain socket that should be created and other values. 
-The daemon working directory will structured to be compatible with the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/). 
-Adhering to the XDG Base Directory Specification will increase the interoperability of Aranya 
-across multiple system configurations.
+The daemon working directory will structured to be easily understood and contain the required state information. The directory structure will have subdirectories (example: storage, config, etc.) to better organize the content.
 
 All other config values are provided when a client context is initialized and passed to the daemon  
 over the Unix Domain Socket. This approach allows the device API to drive the configuration of the 
 daemon, and can help reduce errors in config mismatch by minimizing the number of duplicate config 
-values.
+values. The daemon will need to validate the configuration files and be able to handle cases of partial initialization.
 
 The daemon will expose a simple API that clients can use to request connection information for data 
 planes like AFC. The client will be able to request the AFC config from the daemon and use that 
@@ -162,7 +160,6 @@ scheme. Ideally, this can be used to serialize to either human readable or machi
 scheme.
 - `SerializeId(id) -> bytes` - serialize an ID to the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
 - `DeserializeId(bytes) -> id` - deserialize an ID from the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
-- `IsPresent(command_id, max_cut) -> bool` - looks for command ID in the graph.
 
 #### Sync API
 
@@ -429,5 +426,4 @@ autonomous entities.
 pull only, so the device that requests a sync receives commands from the requestee.
 - `team` - a group of devices with an associated policy.
 - `user` - a person who may operate a device.
-- `XDG` - A specification for cross-platform interoperability. In this spec, we are referencing the XDG Base Directory Specification https://specifications.freedesktop.org/basedir-spec/latest/
 
