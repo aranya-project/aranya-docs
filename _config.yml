@@ -1,0 +1,71 @@
+# Setup
+title: Aranya Documentation
+tagline: 'An overview of the Aranya project'
+description: 'Aranya is an access governance and secure data exchange platform for organizations to control their critical data and services.'
+url: https://aranya-project.github.io
+project-repo: https://github.com/aranya-project/aranya
+baseurl: /aranya-docs
+
+collections_dir: pages
+collections:
+    core-concepts:
+        menu-order: 01
+        menu-name: Core Concepts
+        output: false
+        order:
+        - terminology.md
+        - architecture.md
+        - graph.md
+        - access-management.md
+        - real-time-data-exchange.md
+    getting-started:
+        menu-order: 02
+        menu-name: Getting Started
+        output: true
+    integration:
+        menu-order: 03
+        menu-name: Integration
+        output: false
+        order:
+        - deployment-ecosystem.md
+        - daemon.md
+    policy:
+        menu-order: 04
+        menu-name: Policy
+        output: false
+        order:
+        - overview.md
+        - main-concepts.md
+        - writing-policy.md
+    glossary:
+        menu-order: 05
+        menu-name: Glossary
+        output: false
+        order:
+        - glossary.md
+    technical-apis:
+        menu-order: 06
+        menu-name: Technical APIs
+        output: true
+        order:
+        - rust-api.md
+        - c-api.md
+
+defaults:
+    -
+        scope:
+            path: pages/*
+        values:
+            permalink: /:collection/:name/
+
+# Excludes
+exclude:
+  - .editorconfig
+  - .git
+  - .jekyll-cache
+  - Gemfile
+  - Gemfile.lock
+  - LICENSE.md
+  - README.md
+  - CODEOWNERS
+
