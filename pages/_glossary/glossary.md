@@ -8,17 +8,17 @@ title: Glossary
 <a name="action"></a>**Action**\
 An action is a generated function defined in the [policy language]({{ '/policy-language-v2' | relative_url }}) that can affect state. Actions create new [commands](#command) to be evaluated by the [policy](#policy) and, if valid, added to the graph (DAG). When new commands arrive (from either local creation, or synced from other nodes), the policy for those commands is evaluated, which may produce fact changes and effects. Actions can be thought of as providing a contract (along with effects) to the application which is implemented by the policy.
 
-<a name="abac"></a>**ABAC**\
-Attribute-based Access Control. A version of Identity Access Management that uses attributes over defined roles to grant an entity or group of entities' permission(s) to interact with a graph.
+<a name="abac"></a>**Attribute-Based Access Control (ABAC)**\
+A version of Identity Access Management that uses attributes over defined roles to grant an entity or group of entities' permission(s) to interact with a graph.
 
-<a name="afc"></a>**AFC**\
-Aranya Fast Channels. A low-latency, high-throughput encryption engine that uses Aranya for key management and authorization. Find more details in the [AFC spec]({{ '/afc' | relative_url }}).
+<a name="afc"></a>**Aranya Fast Channels (AFC)**\
+A low-latency, high-throughput encryption engine that uses Aranya for key management and authorization. Find more details in the [AFC spec]({{ '/afc' | relative_url }}).
 
 <a name="aranya"></a>**Aranya**\
 Manages distributed data by representing state as a [graph](#graph), which contains commands and [factDBs](#factdb), that is evaluated by a [policy](#policy). Aranya includes components for evaluating policy, cryptography, storage, conflict resolution and syncing. Find more details in the [Aranya spec]({{ '/aranya-beta' | relative_url }}).
 
-<a name="ast"></a>**AST**\
-An abstract syntax tree (AST), is a tree data structure that represents code. It's used in the policy engine to parse the policy language. Learn more about the [AST data structure](https://en.wikipedia.org/wiki/Abstract_syntax_tree).
+<a name="ast"></a>**Abstract Syntax Tree (AST)**\
+An abstract syntax tree, is a tree data structure that represents code. It's used in the policy engine to parse the policy language. Learn more about the [AST data structure](https://en.wikipedia.org/wiki/Abstract_syntax_tree).
 
 <a name="audit-monitoring"></a>**Audit and Monitoring**\
 Regularly review and monitor activities and detect suspicious behavior. Use network monitoring tools to track access patterns and machine learning algorithms to detect anomalies.
@@ -41,8 +41,8 @@ Instruction given by an device to perform a specific task. It is the object that
 <a name="crypto-engine"></a>**Crypto Engine**\
 Provides a set of APIs for encryption, decryption, and key authentication.
 
-<a name="dag"></a>**DAG**\
-Directed Acyclic Graph. We use this term interchangeably with the [Graph](#graph). Read more about [directed acyclic graphs](https://en.wikipedia.org/wiki/Directed_acyclic_graph).
+<a name="dag"></a>**Directed Acyclic Graph (DAG)**\
+We use this term interchangeably with the [Graph](#graph). Read more about [directed acyclic graphs](https://en.wikipedia.org/wiki/Directed_acyclic_graph).
 
 <a name="device"></a>**Device**\
 Represents an instance and has an identity associated to it, as well as other crypto material which govern how it behaves on the endpoint. An entity could be used to describe a specific user on the platform.
@@ -62,8 +62,8 @@ In ephemeral sessions, [commands](#command) are locally processed by a policy bu
 <a name="factdb"></a>**FactDB**\
 Fact storage within the graph at any given command. The factDB is accessed from a [perspective](#perspective) of the [graph](#graph), therefore, its values change depending on the specific [command](#command) or point-in-time the graph is evaluated.
 
-<a name="ffi"></a>**FFI**\
-Foreign function interface. Mechanism to perform operations that are written or compiled in a different programming language. Some examples include policy code calling functions written in Rust and Rust code calling functions written in C. More details on Rust FFIs can be found in the [Rust by Example](https://doc.rust-lang.org/rust-by-example/std_misc/ffi.html) Book.
+<a name="ffi"></a>**Foreign Function Interface (FFI)**\
+Mechanism to perform operations that are written or compiled in a different programming language. Some examples include policy code calling functions written in Rust and Rust code calling functions written in C. More details on Rust FFIs can be found in the [Rust by Example](https://doc.rust-lang.org/rust-by-example/std_misc/ffi.html) Book.
 
 <a name="ffi-module"></a>**FFI Module**\
 Set of [FFI](#ffi) operations that can be imported by a [policy](#policy).
@@ -74,8 +74,8 @@ Static description of the names and function signatures provided by [FFI modules
 <a name="graph"></a>**Graph**\
 Directed acyclic graph (DAG) where the nodes are [commands](#command), which represents the total ordering of commands. Each command in the graph may contain a new version of its parent's [factDB](#factdb), sometimes refer to as a [team](#team). Each command is connected by a line to the command that occurred immediately before it, as seen from the device's local state.
 
-<a name="idam"></a>**IdAM**\
-Identity and Access Management (IdAM), controls access to a resource based on the user. Read more about [Identity and Access Management](https://en.wikipedia.org/wiki/Identity_and_access_management).
+<a name="idam"></a>**Identity and Access Management (IdAM)**\
+Identity and Access Management, controls access to a resource based on the user. Read more about [Identity and Access Management](https://en.wikipedia.org/wiki/Identity_and_access_management).
 
 <a name="Instance"></a>**Instance**\
 Individual deployment of the Aranya software. A single endpoint can have one or many instances.
@@ -131,8 +131,8 @@ Policy virtual machine. Consumes a compiled policy module to execute and perform
 <a name="quic"></a>**QUIC**\
 A general-purpose transport layer network protocol, that utilizes several multiplexed [UDP](#udp) connections and encrypts traffic with TLS. Read more about the [QUIC protocol](https://en.wikipedia.org/wiki/QUIC).
 
-<a name="rbac"></a>**RBAC**\
-Role-based access control. A version of Identity Access and Management that uses roles to grant a user or group of users permission(s) to interact with a [graph](#graph).
+<a name="rbac"></a>**Role-Based Access Control (RBAC)**\
+A version of Identity Access and Management that uses roles to grant a user or group of users permission(s) to interact with a [graph](#graph).
 
 <a name="revocation"></a>**Revocation**\
 Removal of access to a specific data set.
@@ -140,8 +140,8 @@ Removal of access to a specific data set.
 <a name="role"></a>**Role**\
 Defines capabilities a user or group of users may be assigned to perform operations in a policy that uses an [RBAC](#rbac) system.
 
-<a name="rtt"></a>**RTT**\
-Round-trip time. How long it takes data to travel from one point to another and back. Read more about [round-trip delay](https://en.wikipedia.org/wiki/Round-trip_delay).
+<a name="rtt"></a>**Round-Trip Time (RTT)**\
+How long it takes data to travel from one point to another and back. Read more about [round-trip delay](https://en.wikipedia.org/wiki/Round-trip_delay).
 
 <a name="sealkey"></a>**SealKey**\
 The key used to encrypt on either side of a _bidirectional_ [channel](#channel).
@@ -161,7 +161,7 @@ Data segmentation is the process of organizing data into groups based on shared 
 <a name="segregation-of-duties"></a>**Segregation of Duties**\
 Responsibilities should be distributed among different individuals to prevent fraud or error. This is especially important in mesh networks, where one error can have significant consequences.
 
-<a name="shm"></a>**Shm**\
+<a name="shm"></a>**Shared memory (Shm)**\
 Shared memory or shared local memory allows processes to communicate information by sharing a region of memory. It's used to store channel keys for ephemeral sessions and APS channels in Aranya.
 
 <a name="state"></a>**State**\
@@ -170,8 +170,8 @@ All the information that defines how the software platform is currently function
 <a name="sync"></a>**Sync**\
 Implementations that allow remote [Aranya](#aranya) clients to share state. More details on syncing in Aranya can be found in the [sync]({{ '/sync' | relative_url }}) specification.
 
-<a name="tcp"></a>**TCP**\
-Transmission Control Protocol. Transport that supports resending dropped packets. Read more about [tcp](https://en.wikipedia.org/wiki/Transmission_Control_Protocol).
+<a name="tcp"></a>**Transmission Control Protocol (TCP)**\
+Transport that supports resending dropped packets. Read more about [tcp](https://en.wikipedia.org/wiki/Transmission_Control_Protocol).
 
 <a name="team"></a>**Team**\
 A group of users who interact over a [graph](#graph). Sometimes used interchangeably with graph, as a team is associated with a single graph.
@@ -179,14 +179,14 @@ A group of users who interact over a [graph](#graph). Sometimes used interchange
 <a name="throughput"></a>**Throughput**\
 The amount of data that can actually be transferred over the network over a certain period of time. This is a measurement rather than a theoretical estimate. Read more about [throughput](https://en.wikipedia.org/wiki/Network_throughput).
 
-<a name="ttl"></a>**TTL**\
-Time to live. This value is set to the number of hops a packet should exist on the network before it is dropped. Read more about [ttl](https://en.wikipedia.org/wiki/Time_to_live).
+<a name="ttl"></a>**Time To Live (TTL)**\
+This value is set to the number of hops a packet should exist on the network before it is dropped. Read more about [ttl](https://en.wikipedia.org/wiki/Time_to_live).
 
 <a name="udp"></a>**User Datagram Protocol (UDP)**\
 A simple connectionless protocol that prioritizes speed over error checking and correction. Read more about [udp](https://en.wikipedia.org/wiki/User_Datagram_Protocol).
 
-<a name="uds"></a>**UDS**\
-Unix domain socket. An endpoint for exchanging data. Read more about [UDS](https://en.wikipedia.org/wiki/Unix_domain_socket).
+<a name="uds"></a>**Unix Domain Socket (UDS)**\
+An endpoint for exchanging data. Read more about [UDS](https://en.wikipedia.org/wiki/Unix_domain_socket).
 
 <a name="weave"></a>**Weave**\
 The weave algorithm enforces deterministic ordering while merging two [DAG](#dag)s, or sets of [commands](#command), each may have multiple branches.
