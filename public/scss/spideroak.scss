@@ -156,7 +156,8 @@ a.sidebar-nav-item:focus {
     }
 }
 
-.doc-image {
+.doc-image,
+.mermaid {
     margin: 0 auto 1rem;
     max-width: 50rem;
     width: 100%;
@@ -166,19 +167,6 @@ a.sidebar-nav-item:focus {
     }
 }
 
-/* Hide raw Mermaid code to stop flash of unstyled content */
 .mermaid {
-    height: 0;
-    margin-bottom: 1rem;
-    overflow: hidden;
-
-    &.processed {
-        height: auto;
-        overflow: unset;
-    }
-
-    svg {
-        margin: 0 auto;
-        display: block;
-    }
+    max-width: 30rem;
 }

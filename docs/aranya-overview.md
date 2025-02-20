@@ -2,7 +2,6 @@
 layout: page
 title: Overview
 permalink: "/overview/"
-mermaid: true
 ---
 
 # ARANYA OVERVIEW
@@ -174,13 +173,13 @@ Policy evaluation in Aranya relies on the set of facts stored in the fact databa
 
 To call an Action, the entity will follow the following process:
 
-<div class="mermaid">
+```mermaid
 flowchart TB
     A(Entity) -- Calls an action --> B(Action) -- Action issues Command --> C(Command) -- Command is evaluated by the policy --> D(Policy)
     D -- Command is accepted --> E(Accepted)
     D -- Command is rejected --> F(Rejected)
     E -- Command is stored on graph and (potentially) updates FactDB -->H(Graph)
-</div>
+```
 
 _Figure 3: Calling an Action Workflow_
 
@@ -188,7 +187,7 @@ _Figure 3: Calling an Action Workflow_
 
 To sync with a peer or other entity using Aranya, the entity will follow the following process:
 
-<div class="mermaid">
+```mermaid
 flowchart TB
     I(Entity) -- Sync with peer --> J(Sync)
     J -- Sync sends new command --> K(Peer)
@@ -197,7 +196,7 @@ flowchart TB
     L -- Command is rejected --> N(Recalled)
     M --> O(Graph)
     N --> O
-</div>
+```
 
 _Figure 4: Syncing with a Peer Workflow_
 
