@@ -21,13 +21,11 @@ The API includes methods for the following types of operations:
 ## Doxygen Docs
 
 The <a href="{{ gh_aranya_url }}/tree/main/crates/aranya-client-capi" target="_blank">Aranya C API</a> docs are generated with <a href="{{ gh_aranya_url }}/blob/main/crates/aranya-client-capi/Doxyfile" target="_blank">Doxygen</a> and hosted on GitHub pages:
-<!-- TODO: generate directory tree automatically -->
-<ul>
-    <li><a href="{{ capi_url }}/v0.4.0" target="_blank">latest</a></li>
-    <li><a href="{{ capi_url }}/v0.4.0" target="_blank">v0.4.0</a></li>
-    <li><a href="{{ capi_url }}/v0.3.0" target="_blank">v0.3.0</a></li>
-    <li><a href="{{ capi_url }}/v0.2.0" target="_blank">v0.2.0</a></li>
-</ul>
+- <a href="{{ capi_url }}/v0.4.0" target="_blank">latest</a>
+- <a href="{{ capi_url }}/v0.4.0" target="_blank">v0.4.0</a>
+- <a href="{{ capi_url }}/v0.3.0" target="_blank">v0.3.0</a>
+- <a href="{{ capi_url }}/v0.2.0" target="_blank">v0.2.0</a>
+
 
 The docs are uploaded to each Aranya <a href="{{ gh_aranya_url }}/releases" target="_blank">release</a> and can be generated locally by running `cargo make build-capi-docs` in a local clone of the <a href="{{ gh_aranya_url }}" target="_blank">aranya</a> repo.
 

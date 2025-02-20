@@ -2,7 +2,6 @@
 layout: page
 title: Aranya Model
 permalink: "/aranya-model/"
-mermaid: true
 ---
 
 # Aranya Model
@@ -18,7 +17,7 @@ The APIs use simple user generated segregate Proxy IDs for the public client and
 ## Client State
 Each client in the model can be thought of as an instance of Aranya Client State or the state of its graph. To configure an Aranya client, we need to look at its component parts.
 
-<div class="mermaid">
+```mermaid
     flowchart
         A(Policy Document) --> B(Policy Parser)
         B --> C(Policy Compiler)
@@ -30,7 +29,7 @@ Each client in the model can be thought of as an instance of Aranya Client State
         F --> I(Policy Engine)
         I --> K(Client State)
         J(Storage Provider) --> K
-</div>
+```
 
 By far the biggest portion of the Client State configuration is the VMPolicy. The VMPolicy is made up of the Policy VM, Crypto Engine, and Policy FFI configuration. The Policy VM will take a compiled policy module and convert it into an executable policy which we can evaluate commands against. Let's look at how Aranya takes a raw policy markdown document and processes it into the Policy VM.
 
@@ -79,11 +78,11 @@ The client state keeps track of the state of the graph in the runtime client. Th
 
 
 ## Model Client
-<div class="mermaid">
+```mermaid
     flowchart
         A(Client State) --> B(Model Client)
         C(Public Keys) --> B
-</div>
+```
 
 Once we have the required configurations to build the client state, we can construct a model client. A model client is constructed using the client factory, which holds the client state configuration. When the `add_client` method is called on the model instance, it will create and add a model client to the model `clients` collection.
 
@@ -91,12 +90,12 @@ Once we have the required configurations to build the client state, we can const
 When key bundles are created, they are limited in scope to the factory in which they are instantiated. We need to use the public key portion of the bundle to interact with various parts of the policy. Because of this we store them as part of the model client.
 
 ## Runtime Model
-<div class="mermaid">
+```mermaid
     flowchart
         A(clients) --> B(RuntimeModel)
         C(storage_ids) --> B
         D(client_factory) --> B
-</div>
+```
 
 Once we have the model client established, we have the pieces we need to construct the runtime model. The model consists of a collection of constructed Model Clients, Storage IDs, and our Client Factory function.
 

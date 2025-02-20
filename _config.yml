@@ -6,6 +6,23 @@ url: https://aranya-project.github.io
 project-repo: https://github.com/aranya-project/aranya
 baseurl: /aranya-docs
 
+plugins:
+  - jekyll-spaceship
+
+# Where things are
+jekyll-spaceship:
+  processors:
+    - mermaid-processor
+  mermaid-processor:
+    mode: default  # mode value 'pre-fetch' for fetching image at building stage
+    css:
+      class: mermaid
+    syntax:
+      code: 'mermaid'
+    config:
+      theme: default
+    src: https://mermaid.ink/svg/
+
 collections_dir: pages
 collections:
     core-concepts:
