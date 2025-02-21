@@ -83,9 +83,7 @@ scheme of generating leaf keybundles per team. This also removes the one-keybund
 requirement. For MVP we can lay the groundwork for the multi-keybundle approach, and better 
 management of identities can be added post-MVP or as time allows for MVP.
 
-<img src="{{ '/assets/images/mvp/new_daemon_arch.png' | relative_url }}" class="doc-image" alt="daemon subsystems" />
-
-<img src="{{ '/assets/images/mvp/new_daemon_arch_detail.png' | relative_url }}" class="doc-image" alt="daemon subsystems with additional detail" />
+![daemon subsystems with detail](../assets/images/mvp/new_daemon_arch_full.png)
 
 ## Config
 
