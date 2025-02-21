@@ -6,11 +6,11 @@ permalink: "/"
 
 ## What is Aranya?
 
-Aranya is an **access governance and secure data exchange platform for organizations to control their critical data and services**. Access governance is a mechanism to define, enforce, and maintain the set of rules and procedures to secure your system's behaviors.
+Aranya gives you the ability to apply access controls over stored or shared resources all in one place. It is an **access governance and secure data exchange platform for organizations to control their critical data and services**. Access governance is a mechanism to define, enforce, and maintain the set of rules and procedures to secure your system's behaviors. Aranya gives you the ability to apply access controls over stored and shared resources all in one place.
 
 Aranya enables you to **safeguard sensitive information, maintain compliance, mitigate the risk of unauthorized data exposure, and grant appropriate access.** Aranya's decentralized platform allows you to define and enforce these sets of policies to secure and access your resources.
 
-The platform **provides a software toolkit** for policy-driven access controls and secure data exchange. The software is deployed on endpoints, integrating into applications which require granular access controls over their data and services. Endpoints can entrust Aranya with their data protection and access controls so that other applications running on the endpoint need only to focus on using the data for their intended functionality.
+The platform **provides a software toolkit** for policy-driven access controls and secure data exchange. The software is deployed on endpoints, integrating into applications which require granular access controls over their data and services. Endpoints can entrust Aranya with their data protection and access controls so that other applications running on the endpoint need only to focus on using the data for their intended functionality. Aranya has configurable end-to-end encryption built into its core as a fundamental design principle.
 
 A key discriminating attribute of Aranya is the decentralized, zero trust architecture. Through the integration of the software, access governance is implemented without the need for a connection back to centralized IT infrastructure. With Aranya's decentralized architecture, if two endpoints are connected to each other, but not back to the cloud or centralized infrastructure, **governance over data and applications will be synchronized between peers** and further operations will continue uninterrupted.
 
@@ -38,7 +38,7 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 -   **Decentralized Peer-to-Peer Messaging**
 
-    -   Enable secure data exchange between two endpoints without the need for access to any form of centralized IT infrastructure.
+    -   Enable secure data exchange between two endpoints without the need for access to any form of centralized IT infrastructure. Aranya is designed to work in decentralized environments, where connectivity may be intermittent or degraded.
 
 -   **Key Management**
 
@@ -50,12 +50,13 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 -   **Audit Log of Immutable Commands**
 
-    -   Using the Control Plane (described below), Aranya provides a high-assurance audit log of all commands, or instructions given by an entity to perform a specific task, providing data integrity and provenance for the movement of your data throughout your infrastructure.
+    -   Using the control plane, Aranya provides a high-assurance audit log of all commands, or instructions given by an entity to perform a specific task, providing data integrity and provenance for the movement of your data throughout your infrastructure.
 
     -   The native data structure _is_ the audit log of all commands. The log, which is distributed and synchronized across all endpoints, provides a cryptographically authenticated, tamper-evident, high-assurance replication of all commands taken.
 
     -   For each verified command, a cryptographic hash is created. If a previous event has been modified, the current one will no longer be valid due to the hash changing.
 
+    -   Given the nature of distributed data, each node needs a method to synchronize with each other and keep their data in a universally recognized order. Aranya handles this automatically using its built-in merge logic that utilizes CRDT (Conflict-free Replicated Data Types) updates to reconcile messages.
 
 <!-- Data flow diagram -->
 
