@@ -11,9 +11,9 @@ collections:
     core-concepts:
         menu-order: 01
         menu-name: Core Concepts
-        output: false
+        output: true
         order:
-        - terminology.md
+        - introduction.md
         - architecture.md
         - graph.md
         - access-management.md
