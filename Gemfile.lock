@@ -142,6 +142,7 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  jekyll (~> 4.4)
   jekyll-spaceship
 
 BUNDLED WITH
