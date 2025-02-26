@@ -6,4 +6,4 @@ permalink: "/aranya-architecture/"
 
 # Aranya Architecture
 
-![Aranya architecture diagram](../assets/images/aranya-architecture.svg)
+![Aranya architecture diagram](../assets/images/architecture/aranya-architecture.svg)
