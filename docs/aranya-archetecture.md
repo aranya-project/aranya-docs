@@ -6,4 +6,4 @@ permalink: "/aranya-architecture/"
 
 # Aranya Architecture
 
-<img src="{{ '/assets/images/aranya-architecture.svg' | relative_url }}"  class="doc-image" alt="Aranya architecture diagram" />
+![Aranya architecture diagram](../assets/images/aranya-architecture.svg)
