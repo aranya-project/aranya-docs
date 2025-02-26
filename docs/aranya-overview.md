@@ -133,7 +133,7 @@ All endpoints participating in the graph will receive all updates to the graph r
 
 The general workflow for exchanging control plane commands on-graph across two endpoints can be seen below in Figure 2. This workflow assumes a policy has been written and validated for all actions desired in the architecture.
 
-![A diagram of a diagram Description automatically generated](/assets/images/overview-image2.png)
+![A diagram of a diagram Description automatically generated](../assets/images/overview-image2.png)
 
 _Figure 2: General On-Graph Workflow_
 
