@@ -68,14 +68,29 @@ Methods needed by the daemon's Unix domain socket API to support sending and
 receiving Quic channel messages.
 
 ```rust
-/// This will either create a new connection or retrieve an existing connection
-/// from the ConnectionMap. It will then send the data to the peer.
-SendAqcData(channel: AqcChannel, data: &[u8])
-    -> Result<(), QuicMessageError>
-/// Returns the next chunk of data from qc_receiver or none if the channel is empty. 
-ReceiveAqcData(target: &mut [u8])
-    -> Result<Option<(AqcChannel, usize)>, QuicMessageError>  
-/// Closes the channel if it exists and is open and removes the channel 
-/// from the `ConnectionMap`.
-CloseAqcConnection(channel: AqcChannel) 
+/// Receive the next available data from a channel. If no data is available, return None.
+/// If the channel is closed, return an AqcError::ChannelClosed error.
+///
+/// This method will return data as soon as it is available, and will not block.
+/// The data is not guaranteed to be complete, and may need to be called
+/// multiple times to receive all data from a message.
+pub fn receive_data_stream(
+    &mut self,
+    target: &mut [u8],
+) -> Result<Option<(AqcChannel, usize)>, AqcError> 
+
+/// Send data to the given channel.
+pub async fn send_data_stream(
+    &mut self,
+    channel: AqcChannel,
+    data: &[u8],
+) -> Result<(), AqcError> 
+
+/// Create a new channel with the given address and label.
+pub async fn create_channel(
+    &mut self, addr: SocketAddr, label: Label
+) -> Result<AqcChannel, AqcError> 
+
+/// Close the given channel if it's open. If the channel is already closed, do nothing.
+pub fn close_channel(&mut self, channel: AqcChannel) 
 ```
