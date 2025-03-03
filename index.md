@@ -6,7 +6,7 @@ permalink: "/"
 
 ## What is Aranya?
 
-Aranya gives you the ability to apply access controls over stored or shared resources all in one place. It is an **access governance and secure data exchange platform for organizations to control their critical data and services**. Access governance is a mechanism to define, enforce, and maintain the set of rules and procedures to secure your system's behaviors. Aranya gives you the ability to apply access controls over stored and shared resources all in one place.
+Aranya is an **access governance and secure data exchange platform for organizations to control their critical data and services**. Access governance is a mechanism to define, enforce, and maintain the set of rules and procedures to secure your system's behaviors. Aranya gives you the ability to apply access controls over stored and shared resources all in one place.
 
 Aranya enables you to **safeguard sensitive information, maintain compliance, mitigate the risk of unauthorized data exposure, and grant appropriate access.** Aranya's decentralized platform allows you to define and enforce these sets of policies to secure and access your resources.
 
@@ -38,11 +38,11 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
 -   **Decentralized Peer-to-Peer Messaging**
 
-    -   Enable secure data exchange between two endpoints without the need for access to any form of centralized IT infrastructure. Aranya is designed to work in decentralized environments, where connectivity may be intermittent or degraded.
+    -   Enable secure data exchange between two endpoints without the need for access to any form of centralized IT infrastructure. Aranya is designed to work in decentralized environments, where connectivity may be intermittent or degraded. For more details, see the Aranya Fast Channels [specification]({{ '/afc/' | relative_url }}).
 
 -   **Key Management**
 
-    -   Aranya leverages the crypto module that is implemented and configured on the endpoint to perform cryptographic functions used by policy commands. This means that an authority model can be designed to utilize the crypto module for generating, storing, and/or distributing cryptographic keys securely and in accordance with the governing policy, enabling dynamic key management.
+    -   Aranya leverages the crypto module that is implemented and configured on the endpoint to perform cryptographic functions used by policy commands. This means that an authority model can be designed to utilize the crypto module for generating, storing, and/or distributing cryptographic keys securely and in accordance with the governing policy, enabling dynamic key management. For an example, see the Aranya Fast Channels cryptography [specification]({{ '/afc-cryptography/' | relative_url }}).
 
 -   **Data Segmentation**
 
@@ -52,11 +52,11 @@ Aranya provides the following capabilities in a single, low size, weight, and po
 
     -   Using the control plane, Aranya provides a high-assurance audit log of all commands, or instructions given by an entity to perform a specific task, providing data integrity and provenance for the movement of your data throughout your infrastructure.
 
-    -   The native data structure _is_ the audit log of all commands. The log, which is distributed and synchronized across all endpoints, provides a cryptographically authenticated, tamper-evident, high-assurance replication of all commands taken.
+    -   The native data structure _is_ the audit log of all commands. The log, which is distributed and synchronized across all endpoints, provides a cryptographically authenticated, tamper-evident, high-assurance replication of all commands taken. For more details, see the Aranya Syncing [specification]({{ '/sync' | relative_url }}).
 
     -   For each verified command, a cryptographic hash is created. If a previous event has been modified, the current one will no longer be valid due to the hash changing.
 
-    -   Given the nature of distributed data, each node needs a method to synchronize with each other and keep their data in a universally recognized order. Aranya handles this automatically using its built-in merge logic that utilizes CRDT (Conflict-free Replicated Data Types) updates to reconcile messages.
+    -   Given the nature of distributed data, each node needs a method to synchronize with each other and keep their data in a universally consistent order. Aranya handles this automatically using its built-in merge logic that utilizes CRDT (Conflict-free Replicated Data Types) updates to reconcile messages. For more details, see the graph [specification]({{ '/graph-auth' | relative_url }}).
 
 <!-- Data flow diagram -->
 
