@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Update md links
+        shell: bash
+        run: ./.github/workflows/update-md-links.sh
       - name: Install dependencies
         uses: aranya-project/setup-ruby@master
         with:
