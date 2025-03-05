@@ -154,31 +154,18 @@ a.sidebar-nav-item:focus {
     @media (min-width: 100em) {
         max-width: 70rem;
     }
-}
 
-.doc-image {
-    margin: 0 auto 1rem;
-    max-width: 50rem;
-    width: 100%;
+    img {
+        margin: 0 auto 1rem;
+        max-width: 50rem;
+        width: 100%;
 
-    @media (min-width: 38em) {
-        margin-bottom: 1.5rem;
-    }
-}
-
-/* Hide raw Mermaid code to stop flash of unstyled content */
-.mermaid {
-    height: 0;
-    margin-bottom: 1rem;
-    overflow: hidden;
-
-    &.processed {
-        height: auto;
-        overflow: unset;
+        @media (min-width: 38em) {
+            margin-bottom: 1.5rem;
+        }
     }
 
-    svg {
-        margin: 0 auto;
-        display: block;
+    .mermaid {
+        max-width: 30rem;
     }
 }
