@@ -13,38 +13,38 @@ Aranya Fast Channels are a way for application data to be sent over the network 
 This is the path data takes through the system:
 ```
 application plaintext <->
-device library <->
+user library <->
 fast channel seal <->
 ciphertext <->
 tcp <->
 ciphertext <->
-device library <->
+user library <->
 fast channel open <->
 application plaintext
 ```
 
-Data starts as plaintext in the application layer. The device library will encrypt/decrypt the data with fast channel open/seal operations.
-Ciphertext fast channel data is sent to other peers by the device library via TCP transport.
+Data starts as plaintext in the application layer. The user library will encrypt/decrypt the data with fast channel open/seal operations.
+Ciphertext fast channel data is sent to other peers by the user library via TCP transport.
 The TCP transport will be used instead of QUIC to communicate between peers because it does not need certificates which complicate setup for the device.
 
 The daemon's Unix domain socket API is used to invoke fast channel creation actions in the Aranya daemon and get ephemeral session commands back from Aranya.
 The ephemeral session commands will be sent in ctrl messages (with the message type set to ctrl in the header) to other peers on the network via the TCP transport.
-When a peer receives an ephemeral session command, the command will be forwarded to the daemon to be received by Aranya and processed as an ephemeral command added to an ephemeral branch on the graph. Ephemeral commands are not persisted on the graph since they are only stored in RAM. Once the ephemeral session command has been processed, the daemon will update the channel keys in the shm where the device library can read from later.
+When a peer receives an ephemeral session command, the command will be forwarded to the daemon to be received by Aranya and processed as an ephemeral command added to an ephemeral branch on the graph. Ephemeral commands are not persisted on the graph since they are only stored in RAM. Once the ephemeral session command has been processed, the daemon will update the channel keys in the shm where the user library can read from later.
 
 This is the path an ephemeral command takes through the system:
 ```
 aranya ->
-daemon (daemon writes channel keys to shm, device library reads them) ->
+daemon (daemon writes channel keys to shm, user library reads them) ->
 Unix domain socket api ->
-device library ->
+user library ->
 fast channel ctrl message ->
 tcp ->
-peer device library ->
+peer user library ->
 peer Unix domain socket api ->
 peer daemon ->
 peer aranya ->
 peer daemon writes shm channel keys ->
-peer device library reads shm channel keys
+peer user library reads shm channel keys
 ```
 
 ## Aranya Fast Channel IDs
@@ -107,7 +107,7 @@ TODO: Channel keys are automatically rotated after a specific byte count.
 
 Sending ctrl messages:
 A ctrl message will be sent whenever a new fast channel is created by Aranya. The ctrl message will be sent from the device that created the channel to its peer on the other side of the channel.
-The device library will invoke the daemon's Unix domain socket API to create a new fast channel and get the corresponding ephemeral command with `let ephemeral_command = CreateChannel(...)`.
+The user library will invoke the daemon's Unix domain socket API to create a new fast channel and get the corresponding ephemeral command with `let ephemeral_command = CreateChannel(...)`.
 This ephemeral command will be sent to the peer on the other side of the channel in a `ctrl` message so the peer can create a matching ephemeral session for the fast channel with `ReceiveSessionCommand(ephemeral_command)`.
 
 - `DeleteChannel(team_id, channel_id) -> Result<()>` - Close a channel with the given ID. The device API transparently handles sending the ephemeral command to the peer. DeleteChannel results in dropping a TCP socket and map entry for the channel.

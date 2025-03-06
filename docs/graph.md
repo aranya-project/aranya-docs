@@ -415,7 +415,7 @@ The weave function will understand three concrete and two abstract command types
 The `Init` event is the common ancestor for all other Commands in any execution of a Aranya protocol. It necessarily has no parents.
 ```alloy
 sig Init extends Command {
-  roles: Device -> Role,
+  roles: User -> Role,
 } {
   no parent
   priority = 0

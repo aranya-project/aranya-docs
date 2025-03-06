@@ -120,7 +120,7 @@ For the MVP, Aranya Quic Channels (AQC) will be built to provide a simple API fo
 receiving messages using a modified Quic transport. The Aranya Quic Channels contains its own
 control plane for control messages, as well as the main data plane for moving data between devices.
 This is similar to Aranya Fast Channels (AFC) from the beta version but with a different underlying
-transport (AFC uses TCP). See [Aranya Quic Channels API](#aranya-channels-api).
+transport (AFC uses TCP). See [Aranya Quic Channels API](#aranya-quic-channels-api).
 
 Component structure:
 
@@ -270,7 +270,7 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 ## Roles & Permissions
 
 There will be 4 default roles with the following set of permissions for each. The MVP will also
-include an expansion of the role system, allowing the user to create custom roles and reassign
+include an expansion of the role system, allowing the device to create custom roles and reassign
 permissions for specific commands to custom roles. There will be a CLI for managing permissions.
 
 `owner`
