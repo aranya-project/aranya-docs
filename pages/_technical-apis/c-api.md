@@ -12,8 +12,8 @@ The Aranya Client provides a C API to allow an application to interact with it.
 
 The API includes methods for the following types of operations:
 - Create a new Aranya team with unique cryptographic identities
-- Add/remove users on a team
-- Assign roles to users based on a policy
+- Add/remove devices on a team
+- Assign roles to devices based on a policy
 - Configure peers to sync with so the Aranya DAG stays up-to-date
 - Create encrypted AFC channels
 - Send encrypted data via AFC channels

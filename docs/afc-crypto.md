@@ -26,12 +26,12 @@ bidirectional manner.
   the double quotation marks (`"`).
 - `concat(x0, ..., xN)`: The concatenation of byte strings.
   `concat(a, b, c) = abc`.
-- `EncryptionKey(u)`: The Aranya user's `EncryptionKey`.
+- `EncryptionKey(u)`: The Aranya device's `EncryptionKey`.
 - `i2osp(n, w)`: Converts the unsigned (non-negative) integer `n`
   to a `w`-byte big-endian byte string.
 - `random(n)`: A uniform, pseudorandom byte string of `n` bytes.
 - `(x0, ..., xN) = split(x)`: The reverse of `concat`.
-- `UserId(u)`: The Aranya UserID for some user `u`.
+- `DeviceId(u)`: The Aranya DeviceID for some device `u`.
 - `ALG_Op(...)`: A cryptographic algorithm routine. E.g.,
   `AEAD_Seal(...)`, `HPKE_OneShotSeal(...)`, etc.
 
@@ -41,28 +41,28 @@ Conceptually, AFC implements this interface:
 
 ```
 // Encrypts and authenticates `plaintext` for the channel
-// (user, label).
-fn encrypt(user, label, plaintext) -> ciphertext;
+// (device, label).
+fn encrypt(device, label, plaintext) -> ciphertext;
 
-// Decrypts and authenticates `ciphertext` received from `user`.
-fn decrypt(user, ciphertext) -> (label, plaintext);
+// Decrypts and authenticates `ciphertext` received from `device`.
+fn decrypt(device, ciphertext) -> (label, plaintext);
 ```
 
 As mentioned, a _channel_ facilitates one-to-one communication.
-Logically, it is identified by a (user1, user2, label) tuple
-where _user1_ and _user2_ are [Aranya users][AranyaUsers] and
-_label_ is an identifier that both users have been granted
+Logically, it is identified by a (device1, device2, label) tuple
+where _device1_ and _device2_ are [Aranya devices][AranyaDevices] and
+_label_ is an identifier that both devices have been granted
 permission to use.
 
 The label binds a channel to a set of Aranya policy rules,
-ensuring that both channel users meet some specified criteria.
+ensuring that both channel devices meet some specified criteria.
 
-> **Note**: For performance reasons, users and labels are mapped
+> **Note**: For performance reasons, devices and labels are mapped
 > to 32-bit integers.
 
 ### Bidirectional Channels
 
-Bidirectional channels allow both users to encrypt and decrypt
+Bidirectional channels allow both devices to encrypt and decrypt
 data. Generally speaking, they're the default channel type.
 
 #### Cryptography
@@ -79,7 +79,7 @@ decryption is referred to as the _OpenKey_.
 ChannelKeys are derived using HPKE's Secret Export API.
 
 For domain separation purposes, the key derivation scheme
-includes both UserIDs. Additionally, in order to prevent
+includes both DeviceIDs. Additionally, in order to prevent
 duplicate ChannelKeys (from a buggy CSPRNG), it mixes in the ID
 of the command that created the channel. (Command IDs are assumed
 to be unique; for more information, see the [Aranya spec](/docs/aranya-beta.md).)
@@ -89,7 +89,7 @@ The key derivation scheme is as follows:
 ```rust
 // `parent_cmd_id` is the parent command ID.
 fn NewChannelKeys(us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
@@ -99,8 +99,8 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         suite_id,
         engine_id,
         parent_cmd_id,
-        UserId(us),
-        UserId(peer)
+        DeviceId(us),
+        DeviceId(peer)
         i2osp(label),
     )
     (enc, ctx) = HPKE_SetupSend(
@@ -110,17 +110,17 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         info=info,
     )
 
-    SealKey = HPKE_ExportSecret(ctx, UserId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, UserId(us))
+    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
+    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
 
-    // `enc` is sent to the other user.
+    // `enc` is sent to the other device.
     // `seal_key` and `open_key` are provided to AFC.
     return (enc, (SealKey, OpenKey))
 }
 
 // `parent_cmd_id` is the parent command ID.
 fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
@@ -131,8 +131,8 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
         engine_id,
         parent_cmd_id,
         // Note how these are swapped.
-        UserId(peer)
-        UserId(us),
+        DeviceId(peer)
+        DeviceId(us),
         i2osp(label),
     )
     ctx = HPKE_SetupRecv(
@@ -144,8 +144,8 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
     )
 
     // Remember, these are the reverse of `NewChannelKeys`.
-    SealKey = HPKE_ExportSecret(ctx, UserId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, UserId(us))
+    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
+    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
 
     return (seal_key, open_key)
 }
@@ -153,7 +153,7 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
 
 ### Unidirectional Channels
 
-Unidirectional channels allow one user to encrypt and one user to
+Unidirectional channels allow one device to encrypt and one device to
 decrypt.
 
 #### Cryptography
@@ -168,7 +168,7 @@ The SealOnlyKey/OpenOnlyKey is derived using HPKE's Secret Export
 API.
 
 For domain separation purposes, the key derivation scheme
-includes both UserIDs. Additionally, in order to prevent
+includes both DeviceIDs. Additionally, in order to prevent
 duplicate keys (from a buggy CSPRNG), it mixes in the ID of the
 command that created the channel. (Command IDs are assumed to be
 unique; for more information, see the [Aranya spec](/docs/aranya-beta.md).)
@@ -176,8 +176,8 @@ unique; for more information, see the [Aranya spec](/docs/aranya-beta.md).)
 The key derivation scheme is as follows:
 
 ```rust
-// `seal_id` is the user that is allowed to encrypt.
-// `open_id` is the user that is allowed to decrypt.
+// `seal_id` is the device that is allowed to encrypt.
+// `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
 fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
     if seal_id == open_id {
@@ -203,16 +203,16 @@ fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
 
     SealOnlyKey = HPKE_ExportSecret(ctx, "unidirectional key")
 
-    // `enc` is sent to the other user.
+    // `enc` is sent to the other device.
     // `SealOnlyKey` is provided to AFC.
     return (enc, SealOnlyKey)
 }
 
-// `seal_id` is the user that is allowed to encrypt.
-// `open_id` is the user that is allowed to decrypt.
+// `seal_id` is the device that is allowed to encrypt.
+// `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
 fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
@@ -249,14 +249,14 @@ AFC encrypts each message with a uniformly random nonce generated
 by a CSPRNG.
 
 ```rust
-fn Seal(user, label, SealKey, plaintext) {
+fn Seal(device, label, SealKey, plaintext) {
     header = concat(
         i2osp(version, 4), // version is a constant
-        i2osp(user, 4),
+        i2osp(device, 4),
         i2osp(label, 4),
     )
     nonce = random(AEAD_nonce_len())
-    SealKey = FindSealKey(user, label)
+    SealKey = FindSealKey(device, label)
     ciphertext = AEAD_Seal(
         key=SealKey,
         nonce=nonce,
@@ -268,13 +268,13 @@ fn Seal(user, label, SealKey, plaintext) {
     return concat(ciphertext, nonce, header)
 }
 
-fn Open(user, label, ciphertext) {
+fn Open(device, label, ciphertext) {
     // NB: while the header includes multiple fields, we only use
     // the `label` since we already know everything else.
     (ciphertext, nonce, header) = split(ciphertext);
     (_, _, label) = split(header);
 
-    OpenKey = FindOpenKey(user, label)
+    OpenKey = FindOpenKey(device, label)
 
     plaintext = AEAD_Open(
         key=OpenKey,
@@ -354,7 +354,7 @@ Hybrid Public Key Encryption (HPKE) per [RFC 9180].
 [AES-256-GCM]: https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf
 [AES-GCM-SIV]: https://www.rfc-editor.org/rfc/rfc8452.html
 [AFC]: https://github.com/aranya-project/aranya-core/tree/main/crates/aranya-fast-channels
-[AranyaUsers]: https://git.spideroak-inc.com/spideroak-inc/aranya-docs/blob/main/src/idam.md#member-status
+[AranyaDevices]: https://git.spideroak-inc.com/spideroak-inc/aranya-docs/blob/main/src/idam.md#member-status
 [Ascon]: https://csrc.nist.gov/News/2023/lightweight-cryptography-nist-selects-ascon
 [Bellare]: https://eprint.iacr.org/2022/268
 [CSPRNG]: https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
