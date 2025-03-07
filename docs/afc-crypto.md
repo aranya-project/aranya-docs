@@ -31,7 +31,7 @@ bidirectional manner.
   to a `w`-byte big-endian byte string.
 - `random(n)`: A uniform, pseudorandom byte string of `n` bytes.
 - `(x0, ..., xN) = split(x)`: The reverse of `concat`.
-- `UserId(u)`: The Aranya UserID for some device `u`.
+- `DeviceId(u)`: The Aranya DeviceID for some device `u`.
 - `ALG_Op(...)`: A cryptographic algorithm routine. E.g.,
   `AEAD_Seal(...)`, `HPKE_OneShotSeal(...)`, etc.
 
@@ -79,7 +79,7 @@ decryption is referred to as the _OpenKey_.
 ChannelKeys are derived using HPKE's Secret Export API.
 
 For domain separation purposes, the key derivation scheme
-includes both UserIDs. Additionally, in order to prevent
+includes both DeviceIDs. Additionally, in order to prevent
 duplicate ChannelKeys (from a buggy CSPRNG), it mixes in the ID
 of the command that created the channel. (Command IDs are assumed
 to be unique; for more information, see the [Aranya spec](/docs/aranya-beta.md).)
@@ -89,7 +89,7 @@ The key derivation scheme is as follows:
 ```rust
 // `parent_cmd_id` is the parent command ID.
 fn NewChannelKeys(us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
@@ -99,8 +99,8 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         suite_id,
         engine_id,
         parent_cmd_id,
-        UserId(us),
-        UserId(peer)
+        DeviceId(us),
+        DeviceId(peer)
         i2osp(label),
     )
     (enc, ctx) = HPKE_SetupSend(
@@ -110,8 +110,8 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         info=info,
     )
 
-    SealKey = HPKE_ExportSecret(ctx, UserId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, UserId(us))
+    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
+    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
 
     // `enc` is sent to the other device.
     // `seal_key` and `open_key` are provided to AFC.
@@ -120,7 +120,7 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
 
 // `parent_cmd_id` is the parent command ID.
 fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
@@ -131,8 +131,8 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
         engine_id,
         parent_cmd_id,
         // Note how these are swapped.
-        UserId(peer)
-        UserId(us),
+        DeviceId(peer)
+        DeviceId(us),
         i2osp(label),
     )
     ctx = HPKE_SetupRecv(
@@ -144,8 +144,8 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
     )
 
     // Remember, these are the reverse of `NewChannelKeys`.
-    SealKey = HPKE_ExportSecret(ctx, UserId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, UserId(us))
+    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
+    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
 
     return (seal_key, open_key)
 }
@@ -168,7 +168,7 @@ The SealOnlyKey/OpenOnlyKey is derived using HPKE's Secret Export
 API.
 
 For domain separation purposes, the key derivation scheme
-includes both UserIDs. Additionally, in order to prevent
+includes both DeviceIDs. Additionally, in order to prevent
 duplicate keys (from a buggy CSPRNG), it mixes in the ID of the
 command that created the channel. (Command IDs are assumed to be
 unique; for more information, see the [Aranya spec](/docs/aranya-beta.md).)
@@ -212,7 +212,7 @@ fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
 // `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
 fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
-    if UserId(us) == UserId(peer) {
+    if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 

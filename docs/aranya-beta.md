@@ -149,7 +149,7 @@ Easy to implement, key moving is done by integration.
 1. Create Device (NewDevice)
 2. Get Device Key (Current device KeyBundle (what you give to the admin))
 3. Give KeyBundle to admin on team (integration problem)
-4. Admin does AddDevice(user_key_bundle)
+4. Admin does AddDevice(device_key_bundle)
 5. Get team_id from admin (integration detail)
 6. Add team_id to client (AddTeam)
 7. Sync with device on team (AddSyncPeer)

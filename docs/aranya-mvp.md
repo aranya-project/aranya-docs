@@ -22,7 +22,7 @@ Primary Goals:
 2. Easily setup a team and onboard devices.
 3. Implement a default policy that works well enough for a wide variety of situations that
 customers can relate to.
-4. Provide stable and backwards compatible APIs that allow devices and users to interact with
+4. Provide stable and backwards compatible APIs that allow devices to interact with
 Aranya.
 5. Expose an API for point-to-point high performance encrypted communication using IP for
 transport.
