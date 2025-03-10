@@ -297,9 +297,9 @@ implemented with their own syntax as "internal functions".
 #### `query`
 
 ```
-fact Foo[userID id]=>{count int}
+fact Foo[deviceID id]=>{count int}
 
-let x = query Foo[userID: me]
+let x = query Foo[deviceID: me]
 ```
 
 Perform a query against the fact database, returning an optional struct
@@ -309,7 +309,7 @@ omitted. The type of the struct returned is the auto-generated struct
 for the fact.
 
 In the above example, `x` is an `optional struct Foo` with two fields,
-for `userID` and `count`. If no facts are found, it returns `None`.
+for `deviceID` and `count`. If no facts are found, it returns `None`.
 `query` is commonly used with `unwrap` or `check_unwrap` to terminate
 execution immediately if the fact does not exist, or to access field
 values in the returned struct if it does.
@@ -334,8 +334,8 @@ the one with the lowest sorted key will be returned.
 #### `at_least N`, `at_most N`, `exactly N`
 
 ```
-check at_most 1 Foo[userID: ?]
-let sufficient_admins = at_least 2 TeamAdmin[teamID: t, userID: ?]
+check at_most 1 Foo[deviceID: ?]
+let sufficient_admins = at_least 2 TeamAdmin[teamID: t, deviceID: ?]
 let is_highlander = exactly 1 Immortals[name: ?]
 ```
 
@@ -351,7 +351,7 @@ must be on the right.
 #### `exists`
 
 ```
-check !exists FooCounter[userID: this.userId]
+check !exists FooCounter[deviceID: this.deviceId]
 ```
 
 `exists` is syntactic sugar for `at_least 1`.
@@ -359,7 +359,7 @@ check !exists FooCounter[userID: this.userId]
 #### `count_up_to`
 
 ```
-let admin_count = count_up_to 5 TeamAdmin[teamID: t, userID: ?]
+let admin_count = count_up_to 5 TeamAdmin[teamID: t, deviceID: ?]
 ```
 
 `count_up_to` counts the number of facts up to an upper bound, and
@@ -431,8 +431,8 @@ let z = f()             # OK if `f` is a pure function
 ### Facts
 
 ```
-fact FooCounter[user id]=>{count int}
-immutable fact FooUsed[userid id]=>{}
+fact FooCounter[device id]=>{count int}
+immutable fact FooUsed[deviceid id]=>{}
 ```
 
 A fact definition defines the schema for a fact. The first set of fields
@@ -555,11 +555,11 @@ command Foo {
     policy {
         let author = envelope::author_id(envelope)
         check count_valid(this.b)
-        let fc = unwrap query FooCounter[user: author]
+        let fc = unwrap query FooCounter[device: author]
 
         let new_count = fc.count + this.a
         finish {
-            update FooCounter[user: author]=>{count: fc.count} to {count: new_count}
+            update FooCounter[device: author]=>{count: fc.count} to {count: new_count}
             emit FooEffect {
                 a: new_count,
                 b: this.b,
@@ -679,22 +679,22 @@ exception.
 Allowed:
 ```
 finish {
-    delete Bar[userID: myId]=>{}
-    create FooCount[userID: myId]=>{count: 1}
+    delete Bar[deviceID: myId]=>{}
+    create FooCount[deviceID: myId]=>{count: 1}
 }
 
 finish {
     // assuming id1 != id2
-    create FooCount[userID: id1]=>{count: count1}
-    create FooCount[userID: id2]=>{count: count2}
+    create FooCount[deviceID: id1]=>{count: count1}
+    create FooCount[deviceID: id2]=>{count: count2}
 }
 ```
 
 Not allowed:
 ```
 finish {
-    delete FooCount[userID: id3]
-    create FooCount[userID: id3]=>{count: 1}
+    delete FooCount[deviceID: id3]
+    create FooCount[deviceID: id3]=>{count: 1}
 }
 ```
 
@@ -751,8 +751,8 @@ function count_valid(v count) bool {
     return v >= 0
 }
 
-finish function increment_foo(user id, current int) {
-    update FooCounter[user: user]=>{count: current} to {count: current + 1}
+finish function increment_foo(device id, current int) {
+    update FooCounter[device: device]=>{count: current} to {count: current + 1}
 }
 ```
 
@@ -797,7 +797,7 @@ Proposed libraries:
 - envelope - for safely accessing properties of the envelope like
   `envelope::parent_id()`
 - device - for information about the current device like
-  `device::current_user_id()`
+  `device::current_device_id()`
 - perspective - for information about the current perspective like
   `perspective::head_id()`
 
@@ -816,7 +816,7 @@ functions._
 
 ```
 let x = a + 3
-let result = query FooCounter[userID: author]
+let result = query FooCounter[deviceID: author]
 ```
 
 `let` declares a new named value and assigns it a value evaluated from
@@ -856,7 +856,7 @@ _Valid in actions, pure functions, and command `policy`, `recall`,
 `seal`, and `open` blocks._
 
 ```
-check envelope::author_id(envelope) == user
+check envelope::author_id(envelope) == device
 ```
 
 `check` evaluates a boolean expression and terminates policy execution
@@ -925,7 +925,7 @@ statement with no `else`.
 _Valid only in policy `finish` blocks and finish functions._
 
 ```
-create FooCounter[userID: myId]=>{count: 0}
+create FooCounter[deviceID: myId]=>{count: 0}
 ```
 
 `create` creates a fact with the given parameters. The names and types
@@ -940,8 +940,8 @@ defined by schema should fail with a compile error.
 _Valid only in policy `finish` blocks and finish functions._
 
 ```
-update FooCounter[userID: myId] to {count: 1}
-update FooCounter[userID: myId]=>{count: 0} to {count: 1}
+update FooCounter[deviceID: myId] to {count: 1}
+update FooCounter[deviceID: myId]=>{count: 0} to {count: 1}
 ```
 
 `update` takes an existing fact and updates its value fields. It has two
@@ -957,10 +957,10 @@ exist matching key and value fields, policy evaluation terminates with a
 runtime exception. This is conceptually similar to:
 
 ```
-let unused = unwrap query FooCounter[userId: myId]
+let unused = unwrap query FooCounter[deviceId: myId]
 check unused.count == 0
 finish {
-    update FooCounter[userID: myId] to {count: 1}
+    update FooCounter[deviceID: myId] to {count: 1}
 }
 ```
 
@@ -977,8 +977,8 @@ error.
 _Valid only in policy `finish` blocks and finish functions._
 
 ```
-delete FooCounter[userID: myId]
-delete FooCounter[userID: myId]=>{count: 1}
+delete FooCounter[deviceID: myId]
+delete FooCounter[deviceID: myId]=>{count: 1}
 ```
 
 `delete` takes an existing fact and removes it. It has two forms.
@@ -1015,7 +1015,7 @@ are delivered in the order that they are produced.
 _Valid only in actions._
 
 ```
-map FooCounter[userID: ?]=>{count: ?} as counter {
+map FooCounter[deviceID: ?]=>{count: ?} as counter {
     check counter.count > 0
 }
 ```
@@ -1046,7 +1046,7 @@ to call other actions in a way that would cause recursion.
 _Valid only in pure functions and command `seal` and `open` blocks._
 
 ```
-let x = unwrap query FooCount[userID: myId]
+let x = unwrap query FooCount[deviceID: myId]
 return x.count
 ```
 
@@ -1068,11 +1068,11 @@ other errors in that it causes execution to fall to the `recall` block.
 A check failure represents a failed precondition that the policy author
 recognized could be possible in normal operation.
 
-For example, an authorization check may depend on a user being an
+For example, an authorization check may depend on a device being an
 administrator, which could be revoked by another command. If you stored
 administrator status in a fact, querying that fact would return `None`
 when the administrator status was revoked. So something like
-`check_unwrap query Administrators[userId: this.adminId]` would capture
+`check_unwrap query Administrators[deviceId: this.adminId]` would capture
 the intent to produce a check failure in that case.
 
 ### Runtime exceptions

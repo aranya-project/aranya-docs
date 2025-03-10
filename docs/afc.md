@@ -25,7 +25,7 @@ application plaintext
 
 Data starts as plaintext in the application layer. The user library will encrypt/decrypt the data with fast channel open/seal operations.
 Ciphertext fast channel data is sent to other peers by the user library via TCP transport.
-The TCP transport will be used instead of QUIC to communicate between peers because it does not need certificates which complicate setup for the user.
+The TCP transport will be used instead of QUIC to communicate between peers because it does not need certificates which complicate setup for the device.
 
 The daemon's Unix domain socket API is used to invoke fast channel creation actions in the Aranya daemon and get ephemeral session commands back from Aranya.
 The ephemeral session commands will be sent in ctrl messages (with the message type set to ctrl in the header) to other peers on the network via the TCP transport.
@@ -100,17 +100,17 @@ pub enum TxpMsg {
 
 ## Aranya Fast Channel C-API / Rust API Interface
 
-- `CreateChannel(team_id, net_identifier, label) -> channel_id` - Open a channel to the dest with the given label. The user API transparently handles sending the ephemeral command to the
+- `CreateChannel(team_id, net_identifier, label) -> channel_id` - Open a channel to the dest with the given label. The device API transparently handles sending the ephemeral command to the
 peer.
 
 TODO: Channel keys are automatically rotated after a specific byte count.
 
 Sending ctrl messages:
-A ctrl message will be sent whenever a new fast channel is created by Aranya. The ctrl message will be sent from the user that created the channel to its peer on the other side of the channel.
+A ctrl message will be sent whenever a new fast channel is created by Aranya. The ctrl message will be sent from the device that created the channel to its peer on the other side of the channel.
 The user library will invoke the daemon's Unix domain socket API to create a new fast channel and get the corresponding ephemeral command with `let ephemeral_command = CreateChannel(...)`.
 This ephemeral command will be sent to the peer on the other side of the channel in a `ctrl` message so the peer can create a matching ephemeral session for the fast channel with `ReceiveSessionCommand(ephemeral_command)`.
 
-- `DeleteChannel(team_id, channel_id) -> Result<()>` - Close a channel with the given ID. The user API transparently handles sending the ephemeral command to the peer. DeleteChannel results in dropping a TCP socket and map entry for the channel.
+- `DeleteChannel(team_id, channel_id) -> Result<()>` - Close a channel with the given ID. The device API transparently handles sending the ephemeral command to the peer. DeleteChannel results in dropping a TCP socket and map entry for the channel.
 
 - `PollData(timeout) -> Result<()>` - blocks with timeout, returns `Ok` if there is fast channel data to read using `RecvData()`.
 Behind the scenes, this `accept()`s incoming TCP client connections and polls TCP streams for incoming data.

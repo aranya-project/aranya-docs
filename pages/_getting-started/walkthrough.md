@@ -5,7 +5,7 @@ title: Aranya Walkthrough
 
 # Getting Started with Aranya
 
-In this document, we will walk through a scenario with five users initializing and running Aranya. The users will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust example](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
+In this document, we will walk through a scenario with five devices initializing and running Aranya. The devices will create a team using Aranya and send messages to each other using Aranya Fast Channels. To run this scenario using Rust, see the [Rust example](https://github.com/aranya-project/aranya/tree/main/templates/aranya-example). To run this scenario using our C API wrappers, see the [C example](https://github.com/aranya-project/aranya/tree/main/examples/c).
 
 There are a few things to note:
 
@@ -16,27 +16,27 @@ There are a few things to note:
 
 - Security tip: This walkthrough is intended as an example to be run on a
   single machine. As such, a single machine is used to build all key bundles
-  and run all daemons under a single user's profile. In production, each Aranya
-  user's key bundle should be created under separate Linux users on their
+  and run all daemons under a single device's profile. In production, each Aranya
+  device's key bundle should be created under separate Linux devices on their
   respective machines and preferably all private keys should be stored in a
   protected partition, such as an HSM, for maximum security. This avoids a
-  single access point for all Aranya user keys in case a machine is compromised.
+  single access point for all Aranya device keys in case a machine is compromised.
 
 See the [overview](https://aranya-project.github.io/aranya-docs/overview/) for more details on the components used in this walkthrough.
 
 # Outline
 
-The walkthrough includes five users who will be referred to by their user role. The actions performed by each user are based on the permissions assigned to each role in the [default policy](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/policy.md). There will be five users, `Owner`, `Admin`, `Operator`, `Member A` and `Member B`. We will use the [`daemon`](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs) implementation for this example.
+The walkthrough includes five devices who will be referred to by their device role. The actions performed by each device are based on the permissions assigned to each role in the [default policy](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/policy.md). There will be five devices, `Owner`, `Admin`, `Operator`, `Member A` and `Member B`. We will use the [`daemon`](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs) implementation for this example.
 
 Step 1. [Prepare the device environment](#prereqs)
 
 Step 2: [Configure](#daemon-config), [build](#daemon-build) and [run](#daemon-run)
-the daemon for each user
+the daemon for each device
 
 Step 3. Submit an action to the `Owner`'s daemon to [create a team](#create-team)
 
-Step 4. Submit actions to [populate the team](#add-users-team) with the rest of
-the users
+Step 4. Submit actions to [populate the team](#add-devices-team) with the rest of
+the devices
 
 Step 5. Submit an action to the `Admin`'s daemon to
 [create an Aranya Fast Channels label](#create-afc-label)
@@ -74,16 +74,16 @@ For more details, see the [Aranya Daemon's README](https://github.com/aranya-pro
 At runtime, the daemon takes in a configuration file with information used by
 the daemon to network and operate. This includes a folder that contains
 non-volatile information used by the daemon to operate, including private
-cryptographic material belonging to the user, key storage accessed by Aranya
+cryptographic material belonging to the device, key storage accessed by Aranya
 and graph storage for holding all fully processed commands. Additionally, the
 daemon's config file also includes networking for syncing and off-graph
 messaging. A complete example of a daemon configuration file can be found
 [here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/example.json).
 
-Based on this example, create a configuration file for each user. Remember to
-change the ports and other user-specific values for each user.
+Based on this example, create a configuration file for each device. Remember to
+change the ports and other device-specific values for each device.
 
-Or, directly use the [daemon configuration files](https://github.com/aranya-project/aranya/tree/main/examples/c/configs) from the C example. This example has configs for each user in this tutorial.
+Or, directly use the [daemon configuration files](https://github.com/aranya-project/aranya/tree/main/examples/c/configs) from the C example. This example has configs for each device in this tutorial.
 
 Now that the daemons have been configured, we can build and run them!
 
@@ -95,7 +95,7 @@ To build the daemon, invoke `cargo build`:
 $ cargo build --bin aranya-daemon --release
 ```
 
-Since we have separate configuration files for each user, we only need one
+Since we have separate configuration files for each device, we only need one
 build of the daemon. This step only needs to be performed once.
 
 ## <a name="daemon-run"></a>Run
@@ -106,8 +106,8 @@ To start the daemon for the owner, we run the following:
 $ target/release/aranya-daemon <path to owner's daemon config>
 ```
 
-Repeat this step for all users, substituting the associated configuration file
-for each user:
+Repeat this step for all devices, substituting the associated configuration file
+for each device:
 
 ```shell
 $ target/release/aranya-daemon <path to admin's daemon config>
@@ -175,11 +175,11 @@ async fn setup_aranya(
     pk: &PublicKeys<DefaultCipherSuite>,
     external_sync_addr: Addr,
 ) -> Result<(Client, Server)> {
-    let user_id = pk.ident_pk.id()?;
+    let device_id = pk.ident_pk.id()?;
 
     let aranya = ClientState::new(
         PolicyEngine<DefaultEngine, KeyStore>::new(
-            TEST_POLICY, eng, store, user_id
+            TEST_POLICY, eng, store, device_id
         )?,
         LinearStorageProvider<FileManager>::new(
             FileManager::new(self.cfg.storage_path())
@@ -193,7 +193,7 @@ async fn setup_aranya(
 [here](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon/src/daemon.rs#L138)
 for the current implementation details.
 
-The daemon receives actions from the user via the user client API. When the
+The daemon receives actions from the device via the device client API. When the
 client makes a call in the client library, it may invoke a command in the
 daemon using an internal API. For more details on this API, see the
 [aranya-daemon-api crate](https://github.com/aranya-project/aranya/blob/main/crates/aranya-daemon-api/src/service.rs).
@@ -230,22 +230,22 @@ the other side of the channel, the peer's router receives the traffic on its
 external network socket and uses Fast Channels to decrypt the data with the key
 corresponding to the data's label. The keys used to encrypt and decrypt are
 accessed by the client in the shared memory initialized by the daemon. The
-router component then forwards the data as plaintext to the user's application.
+router component then forwards the data as plaintext to the device's application.
 
 Now that Aranya and Fast Channels are running, the daemon is ready to submit
 actions!
 
 # <a name="join-team"></a>Join a team
 
-All Aranya operations, except for syncing, require users to join a team first.
-There are two ways a user may join a team: creating a team or being added to
+All Aranya operations, except for syncing, require devices to join a team first.
+There are two ways a device may join a team: creating a team or being added to
 one. We will walk through each of these, first creating the team and then
-adding users.
+adding devices.
 
 ## <a name="create-team"></a>Create team
 
-To create a team, the first user submits a `create_team` action which will
-initialize a new graph for the team to operate on. This user is automatically
+To create a team, the first device submits a `create_team` action which will
+initialize a new graph for the team to operate on. This device is automatically
 assigned the `Owner` role as part of the command.
 
 #### Rust
@@ -272,10 +272,10 @@ This will cause `Owner`'s daemon application to invoke the following action:
 
 `aranya_client.create_team()`
 
-A `CreateTeam` command is submitted on behalf of the first user to the daemon
-to be processed by Aranya. If valid, the command will be added to the user's
+A `CreateTeam` command is submitted on behalf of the first device to the daemon
+to be processed by Aranya. If valid, the command will be added to the device's
 graph of commands (i.e., their DAG), as the first node (or root) of the graph,
-and returns to the user the team ID that uniquely identifies the team they
+and returns to the device the team ID that uniquely identifies the team they
 created. Additionally, a fact will be stored that associates `Owner` in the new
 team with the `Owner` role. The team has now been created and the `Owner` can
 add peers to sync with.
@@ -336,20 +336,20 @@ EXPECT("Failed to add member b sync peer", err);
 
 Now, the `Owner` can start adding other team members!
 
-## <a name="add-users-team"></a>Add users to team
+## <a name="add-devices-team"></a>Add devices to team
 
-To be added to the team, a user first needs to send the public portion of their
-user keys, the user key bundle, to an existing user in the team. This key
+To be added to the team, a device first needs to send the public portion of their
+device keys, the device key bundle, to an existing device in the team. This key
 exchange is done outside of the daemon using something like `scp`. Further, the
-existing user must have permission to add a user to the team. Based on the
-implemented policy, all new users, except the `Owner`, are added to the team
-with the `Member` role. Only users with the `Owner` role or `Operator` role may
-add a new user to the team.
+existing device must have permission to add a device to the team. Based on the
+implemented policy, all new devices, except the `Owner`, are added to the team
+with the `Member` role. Only devices with the `Owner` role or `Operator` role may
+add a new device to the team.
 
 #### Rust
 
 ```rust
-// Get the keybundle of the user that should be added as an admin:
+// Get the keybundle of the device that should be added as an admin:
 let admin_kb = client.get_key_bundle()?;
 
 // Send the keybundle to the Owner
@@ -366,10 +366,10 @@ err = aranya_get_key_bundle(&owner_client->client, &owner_client->pk);
 CLIENT_EXPECT("error getting key bundle", owner_client->name, err);
 ```
 
-Let's assume `Owner` has received the second user's keys and can add them to
+Let's assume `Owner` has received the second device's keys and can add them to
 the team and assign the `Admin` role. This involves two commands, `AddMember`
 and `AssignAdmin`. The first is published by the `add_member` action which adds
-the second user to the team and the second is published by the `assign_role`
+the second device to the team and the second is published by the `assign_role`
 action which assigns the passed in role. In this case, the `Owner` is assigning
 the `Admin` role, so an `AssignAdmin` command will be added to the graph. The
 daemon's `add_device_to_team` method submits the `add_member` action and the
@@ -406,15 +406,15 @@ EXPECT("error assigning admin role", err);
 If processed successfully, new `AddMember` and `AssignAdmin` commands will be
 added to the graph and associates Admin to the team and their role.
 
-**NB**: Remember that users must process commands locally before they can act
+**NB**: Remember that devices must process commands locally before they can act
 upon them. Thus, `Admin` must sync with a peer to receive the commands `Owner`
 performed to onboard them onto the team before they can perform any commands
 themself. The `Admin` can begin syncing with peers using the `add_sync_peer`
-method described above. Remember, every user will have to add each team member
+method described above. Remember, every device will have to add each team member
 to sync with using this method.
 
-`Owner` can repeat these steps to add the rest of the users to the team. So,
-after receiving the key bundle from the third, fourth, and fifth user, the
+`Owner` can repeat these steps to add the rest of the devices to the team. So,
+after receiving the key bundle from the third, fourth, and fifth device, the
 `Owner` will perform the following:
 
 #### Rust
@@ -442,8 +442,8 @@ EXPECT("error assigning operator role", err);
 ```
 
 This subcommand will submit two actions, `add_member` and `assign_operator`.
-The first will add the user to the team as a `Member` and the second will
-assign them the `Operator` role. The last two users will only be added to the
+The first will add the device to the team as a `Member` and the second will
+assign them the `Operator` role. The last two devices will only be added to the
 team as `Member`s.
 
 #### Rust
@@ -477,12 +477,12 @@ If these actions are processed successfully, new commands exist on the graph
 that associate the team members with their newly assigned roles. Before the new
 team members can submit actions, they must retrieve the team ID (remember this
 happens externally) to sync state and receive the commands that have associated
-them with the team. Once associated with the team and assigned a role, the users
+them with the team. Once associated with the team and assigned a role, the devices
 can begin submitting actions!
 
 Finally, network identifiers need to be assigned for the members that will use
 Fast Channels. The network identifers are used by Fast Channels to properly
-translate between network names and users. The `Operator` will perform the next
+translate between network names and devices. The `Operator` will perform the next
 actions:
 
 #### Rust
@@ -518,10 +518,10 @@ EXPECT("error assigning net name to memberb", err);
 
 # <a name="message-sending"></a>Message sending
 
-Now that all users have been added to the team, they can begin sending
+Now that all devices have been added to the team, they can begin sending
 encrypted messages to each other, facilitated by Aranya Fast Channels. When
 using Fast Channels, messages are not stored on the graph and are only one to
-one between two users. We will walk through how users can send messages using
+one between two devices. We will walk through how devices can send messages using
 each of these methods.
 
 ## <a name="off-graph-messaging"></a>Off-graph messaging
@@ -533,7 +533,7 @@ being set up between `Member A` and `Member B`.
 ### <a name="create-afc-label"></a>Create an Aranya Fast Channels label
 
 As mentioned, a channel label must be created so it can be associated with the
-users and channel. Based on the default policy, an `Operator` can create a Fast
+devices and channel. Based on the default policy, an `Operator` can create a Fast
 Channels label. So, `Operator`, who was assigned the `Operator` role, will
 submit an action to the daemon to create the label.
 
@@ -568,8 +568,8 @@ Based on the default policy, the `Operator` role can assign Fast Channels
 labels. So, `Operator`, who was assigned the `Operator` role, will submit the
 action to assign the label. If processed successfully, the Aranya command for
 assigning a Fast Channels label will create a fact that associates the label,
-the user's `user_id`, and a channel operation. Since this is a bidirectional
-channel, each user will be given the `ReadWrite` channel operation.
+the device's `device_id`, and a channel operation. Since this is a bidirectional
+channel, each device will be given the `ReadWrite` channel operation.
 
 #### Rust
 
@@ -632,7 +632,7 @@ EXPECT("error creating afc channel", err);
 The client library and daemon will handle the required communication to
 transfer the ephemeral command to `Member B`. Once the command is received by
 the `Router` on `Member B`'s device it is then evaluated by the recipient's
-policy. If valid, the channel keys are stored in this user's shared memory
+policy. If valid, the channel keys are stored in this device's shared memory
 database. At this point, the channel is created and can be used for messaging
 between `Member A` and `Member B`.
 

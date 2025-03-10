@@ -43,7 +43,7 @@ To execute actions in the model, we need to write a custom policy see [policy-v1
 
 *Effect*: An Effect is a struct used in policy `finish` and `recall` blocks to describe the shape of side effects produced from processed commands.
 
-*Fact*: A fact is a schema that describes a key value pair stored in the factDB `fact Foo[key int]=>{value int}`. It should be noted that facts may have multiple fields for their keys and values `TeamAdmin[teamID: int, userID: int]=>{name: string, team: string}`.
+*Fact*: A fact is a schema that describes a key value pair stored in the factDB `fact Foo[key int]=>{value int}`. It should be noted that facts may have multiple fields for their keys and values `TeamAdmin[teamID: int, deviceID: int]=>{name: string, team: string}`.
 
 *FFI*: <a name="ffi"></a> A foreign function interface (FFI) gives us a way to bring logic and functionality that doesn't exist in the policy language (the language policy documents are written in) into our policy document.
 

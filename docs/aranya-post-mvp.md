@@ -2,7 +2,7 @@
 ## Appendix C: Notes and Post-MVP information
 
 Embedded devices that implement a subset of Aranya library should still be able to sync with
-clients that have the full product integrated. AFC should also be compatible between subset 
+clients that have the full product integrated. AFC should also be compatible between subset
 implementations and the full implementation. This compatibility is planned for Post-MVP.
 
 ## TODO: Post-MVP (unordered)
@@ -13,32 +13,32 @@ and the full implementation. This compatibility is Post-MVP.
 
 ### Peer Config
 
-Include static peer config (e.g., using JSON) so that fewer API calls will 
+Include static peer config (e.g., using JSON) so that fewer API calls will
 be needed to set up new devices. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915620683
 
 ### Onboarding
 
 We will provide an additional optional onboarding API:
 
-- `CreateInvite(server address, team_id) -> Invite code` - create an invite code that will be sent 
+- `CreateInvite(server address, team_id) -> Invite code` - create an invite code that will be sent
 to a device to onboard.
-- `PollInvite(server address, Invite Code) -> Option<Device key>` - check the status of an invite  
+- `PollInvite(server address, Invite Code) -> Option<Device key>` - check the status of an invite
 code, returns the device ID of the device that joined using that code.
-- `Join(server address, Invite Code, Device Key) -> Result<team_id>` - join a team using an invite  
+- `Join(server address, Invite Code, Device Key) -> Result<team_id>` - join a team using an invite
 code, returns the team_id of the team that was joined.
 
-The goal of this onboarding API is to simplify the process of onboarding a user/device by providing 
+The goal of this onboarding API is to simplify the process of onboarding a device by providing
 an invite code instead of passing a KeyBundle.
 
 ### API
 
 - `IsPresent(command_id, max_cut) -> bool` - looks for command ID in the graph.
 - `AwaitCommand(command_id)` - waits until command ID is present in the graph. (Post-MVP)
-- `Finalization(team_id)` - create a truncation checkpoint of the graph. Any command received after 
+- `Finalization(team_id)` - create a truncation checkpoint of the graph. Any command received after
 a Finalization must be its descendant, otherwise, it will be dropped. Post-MVP. https://github.com/aranya-project/aranya-docs/pull/24/files#r1927632474
   - TODO: include details on minimal implementation?
   - TODO: add ability to propose command to be added to graph after `n`th finalization. Not needed to support base
-      functionality of finalization. https://github.com/aranya-project/aranya-docs/pull/24/files#r1927636245 
+      functionality of finalization. https://github.com/aranya-project/aranya-docs/pull/24/files#r1927636245
 - Revisit `SetNetworkName` and `UnserNetworkName`.
 
 For the initial implementation in the beta, AFC control messages should be handled
