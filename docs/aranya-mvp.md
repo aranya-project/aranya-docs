@@ -260,12 +260,12 @@ FactDB queries over the current perspective of the graph should be possible thro
 commands in the policy that will return query results in their emitted effects. These APIs
 are likely to be moved to nice-to-have or Post-MVP, but are currently planned for MVP.
 
-- `QueryRoleAssignment(device_id) -> Role`
-- `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAfcNetworkId(device_id) -> network_str`
-- `QueryAfcLabelAssignments(device_id) -> Vec<label>`
-- `QueryAfcLabelExists(device_id) -> Vec<label>`
-
+- `QueryDevicesOnTeam(team_id) -> Vec<device_id>`
+- `QueryRoleAssignment(team_id, device_id) -> Role`
+- `QueryDeviceKeybundle(team_id, device_id) -> Keybundle`
+- `QueryAfcNetworkId(team_id, device_id) -> network_str`
+- `QueryAfcLabelExists(team_id, label) -> bool`
+- `QueryAfcLabelAssignments(team_id, device_id) -> Vec<label>`
 
 ## Roles & Permissions
 
