@@ -17,80 +17,111 @@ for congestion control.
 ## Connections
 
 A connection allows two peers to communicate and will be used for one channel.
-When receiving a QUIC connection the TLS key used to connect will identify the 
-channel.
+When receiving a QUIC connection the TLS key is used to connect will identify 
+the channel.
 
 When a channel is created the peer who creates the channel will connect to
 the other peer and open a bidirectional stream. The connection and stream 
-will remain open until the channel is deleted.
+will remain open until the channel is deleted. The bidirectional stream
+will be used to stream data. 
 
-Both peers will spawn an async task to await messages from the `ReceiveStream`.
-When a message is received it will be sent on the `qc_sender` channel. 
-QUIC may split messages into several pieces so a data chunk in the channel 
+Unidirectional streams will be opened to send messages. Each stream will 
+contain a single message.
+
+Both peers will spawn an async task to await messages from the `ReceiveStream`
+for each channel.
+
+Each channel will hold a `SendStream` for the bidirectional stream. As well
+as receivers for stream and message data. 
+
+QUIC will split messages into several pieces so a data chunk in a stream 
 may not represent a complete message.
 
-The `SendStreams` will be stored in an `FnvIndexMap`. 
-Creating a connection when the map is full will close and remove the 
-connection that has gone the longest without being used.
-
 ```rust
+/// The maximum number of channels that haven't been received.
+const MAXIMUM_UNRECEIVED_CHANNELS: usize = 10;
+
+/// An AQC client. Used to create and receive channels.
+pub struct AqcClient {
+    quic_client: Client,
+    /// Holds channels that have created, but not yet been received.
+    pub new_channels: HVec<AqcChannel, MAXIMUM_UNRECEIVED_CHANNELS>,
+}
+
+impl AqcClient {
+    /// Create an Aqc client with the given certificate chain.
+    pub fn new<T: provider::tls::Provider>(cert: T) -> Result<AqcClient, AqcError> 
+
+    /// Receive the next available channel. If no channel is available, return None.
+    /// This method will return a channel created by a peer that hasn't been received yet.
+    pub fn receive_channel(&mut self) -> Option<AqcChannel> 
+
+    /// Create a new channel to the given address.
+    pub async fn create_channel(&mut self, addr: SocketAddr, label: Label) -> Result<AqcChannel, AqcError> 
+}
+
 /// Identifies a unique channel between two peers.
-pub struct AqcChannel {
+pub struct AqcChannelID {
     /// The node id of the peer.
     node_id: NodeId,
     /// The channel label. This allows multiple channels between two peers.
     label: Label,
 }
 
-/// FNVIndexMap requires that the size be a power of 2.
-const MAXIMUM_CONNECTIONS: usize = 32;
 
-/// For a given AqcChannel stores the SendStream and the last time it 
-/// was used.
-type ConnectionMap = FNVIndexMap<
-    AqcChannel, (SendStream, SystemTime), MAXIMUM_CONNECTIONS
->
+/// A unique channel between two peers.
+/// Allows sending and receiving data over a channel.
+pub struct AqcChannel {
+    id: AqcChannelID
+    stream_receiver: mpsc::Receiver<Bytes>,
+    message_receiver: mpsc::Receiver<Bytes>,
+    send: SendStream,
+}
 
-/// Quic data chunks will be read as soon as they're received and sent into this
-/// channel. When the channel is full we will wait to read new chunks until
-/// the channel has room.
-/// 
-/// The default maximum message size for QUIC is 1MB so this channel will
-/// be just over 1 MB.
-let (qc_sender, mut qc_receiver): (
-    Sender<(AqcChannel, Bytes)>, Receiver<(AqcChannel, Bytes)>
-) = mpsc::channel(1);
-```
+impl AqcChannel {
+    /// Create a new channel with the given send stream.
+    ///
+    /// Returns the channel and the senders for the stream and message channels.
+    pub fn new(send: SendStream) -> (Self, mpsc::Sender<Bytes>, mpsc::Sender<Bytes>) 
 
-## API Methods
+    /// Receive the next available data from a channel. If no data is available, return None.
+    /// If the channel is closed, return an AqcError::ChannelClosed error.
+    ///
+    /// This method will return data as soon as it is available, and will not block.
+    /// The data is not guaranteed to be complete, and may need to be called
+    /// multiple times to receive all data from a message.
+    pub fn try_recv_stream(&mut self, target: &mut [u8]) -> Result<Option<usize>, AqcError> 
 
-Methods needed by the daemon's Unix domain socket API to support sending and 
-receiving Quic channel messages.
+    /// Receive the next available data from a channel. If the channel has been
+    /// closed, return None.
+    ///
+    /// This method will block until data is available to return.
+    /// The data is not guaranteed to be complete, and may need to be called
+    /// multiple times to receive all data from a message.
+    pub async fn recv_stream(&mut self, target: &mut [u8]) -> Option<usize> 
 
-```rust
-/// Receive the next available data from a channel. If no data is available, return None.
-/// If the channel is closed, return an AqcError::ChannelClosed error.
-///
-/// This method will return data as soon as it is available, and will not block.
-/// The data is not guaranteed to be complete, and may need to be called
-/// multiple times to receive all data from a message.
-pub fn receive_data_stream(
-    &mut self,
-    target: &mut [u8],
-) -> Result<Option<(AqcChannel, usize)>, AqcError> 
+    /// Receive the next available message from a channel. If no data is available, 
+    /// return None.
+    /// If the channel is closed, return an AqcError::ChannelClosed error.
+    ///
+    /// This method will return messages as soon as they are available, and will not block.
+    pub fn try_recv_message(&mut self, target: &mut [u8]) -> Result<Option<usize>, AqcError> 
 
-/// Send data to the given channel.
-pub async fn send_data_stream(
-    &mut self,
-    channel: AqcChannel,
-    data: &[u8],
-) -> Result<(), AqcError> 
+    /// Receive the next available message from a channel. If the channel has been
+    /// closed, return None.
+    ///
+    /// This method will block until data is available to return.
+    /// The data is not guaranteed to be complete, and may need to be called
+    /// multiple times to receive all data from a message.
+    pub async fn recv_message(&mut self, target: &mut [u8]) -> Option<usize> 
 
-/// Create a new channel with the given address and label.
-pub async fn create_channel(
-    &mut self, addr: SocketAddr, label: Label
-) -> Result<AqcChannel, AqcError> 
+    /// Stream data to the given channel.
+    pub async fn send_stream(&mut self, data: &[u8]) -> Result<(), AqcError> 
 
-/// Close the given channel if it's open. If the channel is already closed, do nothing.
-pub fn close_channel(&mut self, channel: AqcChannel) 
+    /// Send a message the given channel.
+    pub async fn send_message(&mut self, data: &[u8]) -> Result<(), AqcError> 
+
+    /// Close the given channel if it's open. If the channel is already closed, do nothing.
+    pub fn close(&mut self) 
+}
 ```
