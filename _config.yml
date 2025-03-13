@@ -5,3 +5,7 @@ description: 'Aranya is an access governance and secure data exchange platform f
 url: https://aranya-project.github.io
 project-repo: https://github.com/aranya-project/aranya
 baseurl: /aranya-docs
+
+exclude:
+  - docs
+  - assets
