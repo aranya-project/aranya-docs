@@ -21,9 +21,3 @@ permalink: /"url-slug"/
 Before opening a PR, please test your changes locally. This ensures that formatting, links, and images have been thoroughly tested before anything goes live. See the [Develop Locally](#develop-locally) section for instructions.
 
 Once the PR has been approved, please test again locally before merging it in. This will give you a second chance to make sure no unwanted formatting issues were introduced while addressing feedback.
-
-## Develop Locally
-We currently deploy directly to GitHub Pages, so there isn't a staging site to preview any changes. The best way to test documentation is to deploy a local server using `Jekyll`. Follow the [install instructions](https://jekyllrb.com/docs/installation/) to install Jekyll on your system, and then simply run `jekyll serve -w` which will launch a local web server on your machine.
-
-## Deploying the site
-Deploying is easy, just merge your PR to the `main` branch. The documentation repo is configured to use Github's built-in branch push actions to trigger builds and deploys to GH pages. Just note however, we don't have a proper staging environment, deployments go live to the production [https://aranya-project.github.io/aranya-docs](https://aranya-project.github.io/aranya-docs/) site.
