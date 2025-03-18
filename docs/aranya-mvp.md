@@ -244,16 +244,16 @@ flag to allow embedded devices and advanced users to access them.
 
 - `SetAfcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
 device for use with AFC. If the address already exists for this device, it is replaced with the new
-address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
+address.  A network identifier can be resolved by Aranya via a DNS lookup. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AFC.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AFC network address from a device.
+- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AFC network address from a device. This prevents new channels from being created until `SetAfcNetIdentifier` is called again and destroys all existing channels.
 - `SetAqcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
 device for use with AQC. If the address already exists for this device, it is replaced with the new
-address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
+address. A network identifier can be resolved by Aranya via a DNS lookup. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AQC.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AQC network address from a device.
+- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AQC network address from a device. This prevents new channels from being created until `SetAqcNetIdentifier` is called again and destroys all existing channels.
 - `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
 - `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
 - `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
