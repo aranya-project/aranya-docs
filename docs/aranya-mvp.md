@@ -267,7 +267,7 @@ commands in the policy that will return query results in their emitted effects. 
 are likely to be moved to nice-to-have or Post-MVP, but are currently planned for MVP.
 
 - `QueryDevicesOnTeam(team_id) -> Vec<device_id>`
-- `QueryRoleAssignment(team_id, device_id) -> Role`
+- `QueryDeviceRole(team_id, device_id) -> Role`
 - `QueryDeviceKeybundle(team_id, device_id) -> Keybundle`
 - `QueryAfcNetIdentifier(team_id, device_id) -> network_str`
 - `QueryAqcNetIdentifier(team_id, device_id) -> network_str`
