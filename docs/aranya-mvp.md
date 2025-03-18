@@ -272,7 +272,7 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 - `QueryAfcNetIdentifier(team_id, device_id) -> network_str`
 - `QueryAqcNetIdentifier(team_id, device_id) -> network_str`
 - `QueryLabelExists(team_id, label) -> bool`
-- `QueryLabelAssignments(team_id, device_id) -> Vec<label>`
+- `QueryDeviceLabelAssignments(team_id, device_id) -> Vec<label>`
 
 ## Roles & Permissions
 
