@@ -208,9 +208,9 @@ action frob(f Foo) {
 
 ### Struct Composition
 
-A struct `A` whose fields are a strict subset of the fields of struct
-`B` can be inserted into struct `B` with the struct composition operator
-`...`.
+A struct `A` whose fields are a subset of the fields of struct `B` can
+be inserted into a struct `B` literal with the struct composition
+operator `...`.
 
 ```
 struct Foo {
@@ -226,14 +226,39 @@ struct Bar {
 
 action frob(x Foo) {
     let b = Bar {
-        ...x,
         c: false,
+        ...x,
     }
 }
 ```
 
-This can be used more than once, but the fields in the source structs
-cannot overlap.
+As with struct conversion, fields of the same name must have the same
+type. Any structs included this way must appear after any directly
+specified fields. Fields directly specified are excluded from the
+inserted structs. Or to state that differently, directly specified
+fields always override the fields of included structs.
+
+```
+let x = Foo { a: 3, b: "hello" }
+let y = Foo { a: 4, ...x }   // y = Foo { a: 4, b: "hello" }
+```
+
+More than one struct can be inserted this way, but the fields sourced
+from any included structs must not overlap. Fields directly specified do
+not count for this requirement.
+
+```
+let z = Foo{ a: 5, ...x, ...y }   // Fails due to `b` existing in both `x` and `y`
+```
+
+It is an error to add a composed struct when all fields are directly
+specified. Even though no conflict occurs as no fields should be sourced
+from the included structs, this is disallowed because it probably
+indicates programmer error.
+
+```
+let z = Foo { a: 6, b: "goodbye", ...x }
+```
 
 ### Struct Subselection
 
