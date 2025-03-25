@@ -103,7 +103,7 @@ APIs can be exposed to change those configured values.
 
 A config object will be used to instantiate a graph, i.e. in the action to perform the Init command
 and the API call for adding an existing graph (see CreateTeam and AddTeam APIs below). The config
-object will be versioned and extensible, and should not break API compatibility.
+object will extensible by implementing a builder pattern to set optional fields, and should not break API compatibility as fields are changed.
 
 ## Components
 
