@@ -247,7 +247,7 @@ device for use with AFC. If the address already exists for this device, it is re
 address. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AFC which means different devices cannot have the same network identifier.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AFC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAfcNetIdentifier` is called again and destroys all existing channels where the device can receive data.
+- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AFC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAfcNetIdentifier` is called again. Destroys all existing channels where the device can receive data.
 - `SetAqcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
 device for use with AQC. If the address already exists for this device, it is replaced with the new
 address. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AQC which means different devices cannot have the same network identifier.
