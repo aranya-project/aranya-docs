@@ -253,7 +253,7 @@ device for use with AQC. If the address already exists for this device, it is re
 address. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AQC which means different devices cannot have the same network identifier.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AQC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAqcNetIdentifier` is called again and destroys all existing channels where the device can receive data.
+- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AQC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAqcNetIdentifier` is called again. Destroys all existing channels where the device can receive data.
 - `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
 - `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
 - `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
