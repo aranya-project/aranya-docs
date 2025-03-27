@@ -31,7 +31,7 @@ the other device to receive data. Generally speaking,
 bidirectional channels are the default channel type.
 
 The two devices participating in a channel are referred to as the
-channel participants. The participant the created the channel is
+channel participants. The participant that created the channel is
 called the "author" and the other participant is called the
 "peer". Channels can only be created by one of the two
 participants. For example, it is impossible for device A to
@@ -298,7 +298,7 @@ Additionally, trust in the device `EncryptionKey`s are rooted in
 the Aranya graph.
 
 (3) is solved by contextual binding. All channel parameters are
-includes as contextual binding, so if any channel parameters
+included as contextual binding, so if any channel parameters
 differ the resulting PSKs will also differ, preventing
 communication.
 
@@ -321,7 +321,7 @@ Both the client and server provide 256-bit nonces, so each
 connection effectively has a 512-bit nonce. However, we
 conservatively assume that only the client's nonce is truly
 random. This places the optimal bound at 2^(256/3) = 2^85
-connections. If the client creates QUIC conenctions at the
+connections. If the client creates QUIC connections at the
 impossible rate of one per nanosecond, the first collision can be
 expected in approximately 1.227 billion years.
 
@@ -397,7 +397,9 @@ In general, most privacy considerations can be found in [RFC
 
 If [Encrypted Client Hello](ECH) (ECH) is used, PSK identities
 are transmitted as ciphertext. Otherwise, if ECH is not used,
-PSKs are transmitted in clear text.
+PSKs are transmitted in clear text. (ECH is an artifact of the
+TLS implementation being used and is out of scope of this
+specification.)
 
 AQC PSK identities are the cryptographic hash of the peer's
 encapsulation, which is an IND-CCA2 ciphertext (assuming that the
