@@ -19,10 +19,13 @@ multiplexing connections, and custom congestion control
 ### Channels
 
 A channel is comprised of one or more QUIC connections between
-two devices. The total number of QUIC connections depends on the
-cryptographic secrets used to create the channel; see the
-"cryptography" section below. Channels are lightweight and can be
-easily created or destroyed.
+two devices. Any number of QUIC connections may be opened at
+a time, so long as the cumulative maximum number of QUIC
+connections over the lifetime of the channel is respected. The
+cumulative maximum number of QUIC connections over the lifetime
+of the channel depends on the cryptographic secrets used to
+create the channel; see the "cryptography" section below.
+Channels are lightweight and can be easily created or destroyed.
 
 Channels can be either bidirectional or unidirectional.
 Bidirectional channels allow both devices to send and receive
@@ -307,7 +310,7 @@ communication.
 (5) is primarily solved by [RFC 8446]. Also, see the "maximum
 number of connections" section.
 
-##### Maximum Number of Connections
+##### Cumulative Maximum Number of Connections
 
 If only using a PSK, the maximum number of connections is bounded
 by the probability of the client and server choosing the same
