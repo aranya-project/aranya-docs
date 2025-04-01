@@ -16,9 +16,7 @@ multiplexing connections, and custom congestion control
 
 ## Design
 
-### Channels
-
-#### Participants
+### Participants
 
 Each channel has exactly two _participants_. The participant that
 created the channel is called the _author_ and the other
@@ -29,7 +27,7 @@ example, given three distinct devices A, B, and C, it is
 impossible for device A to create a channel for device B and
 device C.
 
-#### Directionality
+### Directionality
 
 Channels are either bidirectional or unidirectional.
 Bidirectional channels allow both participants to send and
@@ -44,7 +42,7 @@ programmatically.
 Generally speaking, bidirectional channels are the default
 channel type.
 
-#### Sending and Receiving Data
+### Sending and Receiving Data
 
 Channel participants transmit and receive data over QUIC
 connections. Either participant may open or close a QUIC
@@ -60,7 +58,7 @@ The QUIC connections are secured with cryptographic secrets known
 only to the channel participants; see the "cryptography" section
 below.
 
-#### Topics (Labels)
+### Topics (Labels)
 
 Each channel is associated with a label, which defines the
 channel's topic.
@@ -90,7 +88,7 @@ channel with a different label must be created. Channels are
 designed to be lightweight and ephemeral, so this does not pose
 a burden on applications.
 
-#### Creation and Lifetime
+### Creation and Lifetime
 
 To create a channel, the author sends an off-graph "session"
 command containing (among other things) an encapsulated channels
@@ -104,9 +102,9 @@ cryptography being used.
 Each AQC channel is unique: creating N channels with the same
 label will create N distinct channels.
 
-#### Cryptography
+### Cryptography
 
-##### Notation
+#### Notation
 
 - `"abc"`: A byte string containing the UTF-8 characters between
   the double quotation marks (`"`).
@@ -127,7 +125,7 @@ label will create N distinct channels.
   [NIST SP 800-185].
 - `bytes(x)` returns the byte encoding of `x`.
 
-##### Overview
+#### Overview
 
 As described above, each AQC channel is comprised of one or more
 QUIC connections. QUIC secures its connections with slightly
@@ -170,7 +168,7 @@ certificates used to authenticate the (EC)DHE key exchange are
 taken from the Aranya graph. The (EC)DHE shared secret design is
 described in a following section.
 
-##### Bidirectional Channel PSK
+#### Bidirectional Channel PSK
 
 ```rust
 // Creates the HPKE encryption context and peer encapsulation for
@@ -253,7 +251,7 @@ fn psk_identity(enc) {
 }
 ```
 
-##### Unidirectional Channel PSK
+#### Unidirectional Channel PSK
 
 ```rust
 // Creates the HPKE encryption context and peer encapsulation for
@@ -338,15 +336,17 @@ fn psk_identity(enc) {
 }
 ```
 
-##### (EC)DHE Shared Secrets
+#### (EC)DHE Shared Secrets
 
 This feature is currently scheduled for after the MVP.
 
-##### TLS Authentication
+#### TLS Authentication
 
-##### Security Considerations
+TODO
 
-###### Security Model and Goals
+#### Security Considerations
+
+##### Security Model and Goals
 
 1. Only the channel participants should be able to decrypt data
    sent over a channel.
@@ -371,13 +371,13 @@ communication.
 (4) is solved by AQC policy; see the "labels" section.
 
 (5) is primarily solved by [RFC 8446]. Also, see the "maximum
-number of connections" section.
+number of QUIC connections" section.
 
-###### Cumulative Maximum Number of Connections
+##### Cumulative Maximum Number of QUIC Connections
 
-If only using a PSK, the maximum number of connections is bounded
-by the probability of the client and server choosing the same
-(client, server) nonce tuple for multiple connections.
+If only using a PSK, the maximum number of QUIC connections is
+bounded by the probability of the client and server choosing the
+same (client, server) nonce tuple for multiple connections.
 
 The optimial bound is 2^r where the collision risk is 2^-r after
 `r` connections. Per [Abdalla and Bellare](rekey), this bound can
@@ -395,7 +395,7 @@ If using a PSK and TLS certificates, each QUIC connection mixes
 in an (EC)DHE shared secret. This increases the bound so
 significantly that it is not even worth calculating.
 
-###### Contextual Binding
+##### Contextual Binding
 
 The following contextual binding is used when creating the HPKE
 encryption context:
@@ -430,19 +430,19 @@ from the HPKE encryption context:
   ensures that a bidirectional channel cannot be substituted for
   a unidirectional channel and vice versa.
 
-###### HPKE Authentication
+##### HPKE Authentication
 
 The HPKE encryption context is created using `mode_auth`,
 allowing the channel peer to verify that the channel author
 possesses a particular `EncryptionKey`.
 
-###### Forward Security
+##### Forward Security
 
 As mentioned in [RFC 8446] and [RFC 9257], PSK-only TLS
 connections lack foward security. To add forward security,
 include TLS certificates as discussed above.
 
-###### Safe Usage of PSKs
+##### Safe Usage of PSKs
 
 AQC avoids the security risks of PSKs outlined in [RFC 9257]:
 
@@ -454,12 +454,12 @@ AQC avoids the security risks of PSKs outlined in [RFC 9257]:
   sensitive. As the output of a cryptographic hash function, they
   are unlikely to collide with resumption PSK identities.
 
-###### Privacy Considerations
+##### Privacy Considerations
 
 In general, most privacy considerations can be found in [RFC
 8446], [RFC 9000], [HPKE], and Aranya's specifications.
 
-####### PSK Identities
+###### PSK Identities
 
 If [Encrypted Client Hello](ECH) (ECH) is used, PSK identities
 are transmitted as ciphertext. Otherwise, if ECH is not used,
