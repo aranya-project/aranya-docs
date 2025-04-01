@@ -531,7 +531,7 @@ specification.)
 
 AQC PSK identities are the cryptographic hash of the peer's
 encapsulation, which is an IND-CCA2 ciphertext (assuming that the
-KEM used by HPKE is IND-CCA2; see [[RFC 8190]] for more
+KEM used by HPKE is IND-CCA2; see [[RFC 9180]] for more
 information). It is infeasible for an attacker to link a PSK
 identity to a particular device without additional information
 that is out of AQC's security model.
