@@ -9,9 +9,11 @@ permalink: "/aranya-quic-channels/"
 ## Overview
 
 Aranya QUIC Channels are end-to-end encrypted, topic-segmented
-communication channels between two devices. AQC channels are
-implemented on top of QUIC, which uses TLS for security, allows
-multiplexing connections, and custom congestion control
+communication channels between two devices. The security and
+authorization for AQC channels is rooted in Aranya's graph,
+providing strong access governance and security controls. Data is
+transmitted over QUIC, which uses TLS 1.3 for security, supports
+multiplexing connections, and allows custom congestion control
 (defaulting to BBRv2).
 
 ## Design
