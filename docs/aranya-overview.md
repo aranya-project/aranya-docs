@@ -339,3 +339,87 @@ Data segmentation is enabled through topic labels, segmenting the data based on 
 Aranya leverages whichever crypto module is currently implemented and configured on the endpoint. Keys are then derived from the current authority model, defined over specific data channels. Data channels are a segmentation of devices that can exchange end-to-end encrypted data according to the authority model's pre-defined established permissions. Aranya's crypto engine generates an encryption key associated with the device. If the channel is specified as unidirectional, the device creating the channel is only assigned an encryption key. If the channel is bidirectional, the device will also be assigned a decryption key. The key, or key pair, are stored locally in its own database and associates the key or key pair with this specific channel for this specific device. After the channel creator's keys have been assigned, Aranya sends the "create channel" command to the specified receiver. Like the process for the initial device, the command is processed by the receiver's associated policy and the crypto engine generates a decryption key (if unidirectional), or encryption/decryption keys (if bidirectional).
 
 Aranya also enables revocation. Specific entities, or whole RBAC/ABAC roles, can be removed from access to data as easily as it is to add them. In addition, revocation can be retroactive if needed, allowing the endpoint to remove a larger set of permissions as needed.
+
+
+# Outline for splitting this up:
+
+Overview (index page)
+- A couple paragraphs pulled from the larger overview doc (what is Aranya and what can i use it for)
+- Include also capabilities section from wiki page and/or the "capabilities" section in overview.md
+- Include "Data Segmentation" and "Key Management" sections from Overview.md
+- Data flow diagram (not ready for this yet)
+- Support section
+
+Core concepts (drop down title)
+- Introduction (page)
+- Paragraph or two to explain that Aranya is an open-source project written in Rust with a daemon that operates over the core functionality (include references to Github).
+- Terminology section from overview.md
+- Link to Glossary
+- Reference Getting Started page (or under Home/Overview page?)
+
+Architecture (sub-drop-down title)
+- Arch diagram (subpage)
+  - diagram from Overview.md
+  - Breakdown of components from System Diagram on Wiki and Overview.md (do not separate by on-graph/off-graph; instead, combine into single list!)
+    - Client Library: <explanation... this is the Access Control APIs as well as Data Exchange APIs in diagram>. For code, see Aranya repo
+    - Daemon: <connection between client library and core functionality,.....>. See Aranya
+    - Policy doc ...See Aranya
+    - Core Functionality (everything here is part of the Aranya Core repo)
+    - runtime, crypto, etc....
+- Control plane vs. data plane (subpage)
+- content from overview.md
+
+Graph (sub-drop-down title)
+- Graph/Overview (subpage)
+  - DAG section from Overview.md combined with Graph section from Wiki
+  - Policy section with command, action,... breakdown from Overview.md combined with content from Wiki (either combine contents from overview.md section, or use just the brief descriptions from overview.md here and place everything from the wiki page under "Access management" chapter)
+  - FactDB section from Overview.md
+  - On-Graph vs. Off Graph (subpage)
+  - use section from Overview.md "Decentralized Peer-to-Peer Data Exchange" (it was a bad choice for title name)
+  - Explain difference in flow using 3 "workflow" diagrams in Overview.md
+- On-graph (sub-sub-drop-down title)
+  - Creating/Adding commands to graph (sub-subpage)
+    - combine sections on "calling an action" from overview and wiki doc
+    - use diagram from Overview.md, not Wiki
+  - Syncing commands (sub-subpage)
+    - most content from Wiki, but use diagram from Overview.md
+    - Braid algorithm? (enough detail to understand its overall purpose)
+- Off-graph (sub-sub-drop-down title)
+  - Creating a Channel (sub-subpage)
+    - section from Overview.md
+    - Ephemeral commands (take from the aranya sessions "spec"?)
+      - Indicate that ephemeral commands can be sent via any means to peers who can process/validate them and that we include a secure real-time data exchange which relies on ephemeral commands (include reference to "real-time data exchange" chapter)
+  - Sending data (sub-subpage)
+    - section from Overview.md
+    - Reference the Aranya Channels sub-whatever for off-graph exchange mechanisms
+
+Aranya Channels (sub-drop-down title)
+- AFC (sub-subpage)
+  - Use page from Wiki
+- AQC (sub-subpage)
+
+Getting started (drop-down)
+- Quickstart (subpage)
+  - Deployment Ecosystem from Overview.md
+  - Getting Started from Aranya README.md
+- Example Apps
+- Walkthrough (subpage)
+
+Policy (not ready yet)
+- Overview
+- Main concepts
+- Writing policy
+
+Glossary (page)
+- Take only Glossary section from Overview.md for now
+
+Technical APIs (drop-down)
+- Rust API
+- C API
+
+Specifications (drop-down)
+- Aranya Beta
+- Aranya Fast Channels
+- Aranya Fast Channels Cryptography
+- Policy Language v1
+- Note: content from overview.md doc should be distributed between the prior pages and should not be included as a complete doc here
