@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Aranya Quic Channels
+title: Aranya QUIC Channels
 permalink: "/aranya-quic-channels/"
 ---
 
