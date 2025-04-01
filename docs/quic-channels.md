@@ -130,44 +130,47 @@ label will create N distinct channels.
 #### Overview
 
 As described above, each AQC channel is comprised of one or more
-QUIC connections. QUIC secures its connections with slightly
-modified TLS 1.3.
+QUIC connections opened over the lifetime of the channel. QUIC
+secures its connections with TLS 1.3 [RFC 9001].
 
-Per [RFC 8446], each TLS 1.3 connection has two input secrets:
+Each TLS 1.3 [RFC 8446] connection has two input secrets:
 
 1. PSK (a pre-shared key)
 2. (EC)DHE shared secret
 
-Each AQC channel has a cryptographically secure PSK generated
-using [HPKE]. The PSK has the following security properties:
+Each AQC channel has a 256-bit (or greater) PSK with the
+following security properties:
 
+- It is cryptographically secure.
 - It is unique to that channel.
-- It is *never* used for any other purpose.
-- It is only known and used by the channel participants.
+- It is only known by the channel participants.
+- It is only used by the channel participants.
+- It is never used more than permitted by this specification.
+- It is *never* used for any other purpose, including after the
+  channel is destroyed.
+- It is destroyed after the channel is destroyed.
 
-(The generation strategies are listed in
-a following section.)
+The PSK is generated with HPKE [RFC 9180]. The generation
+strategies for bidirectional and unidirectional channels are very
+similar, differing only in their constants. They are listed in
+following sections.
 
-The PSK derivation strategies for bidirectional and
-unidirectional channels are very similar, only differing in their
-constants. The strategies are listed in the following sections.
+For operational reasons, a channel's PSK is used for each QUIC
+connection opened over the lifetime of the channel. (As opposed
+to generating a fresh PSK for each QUIC connection.) This is
+a normal, secure use for TLS 1.3 PSKs. The TLS 1.3 key schedule
+includes two 256-bit random nonces: one provided by the client,
+and one provided by the server. These nonces ensure each TLS
+connection has a unique key schedule, even when the same PSK is
+used across multiple connections.
 
-An AQC channel's PSK is used for each QUIC connection opened
+The PSK identity is a fixed size Aranya ID cryptographically
+derived from the encapsulated KEM shared secret output by HPKE.
 
-
-The TLS 1.3 key schedule includes two 256-bit random nonces: one
-provided by the client, and one provided by the server. These
-nonces ensure each connection uses different key material, even
-when the same PSK is used for multiple connections.
-
-The PSK identity is cryptographically derived from the
-encapsulated KEM shared secret output by HPKE. It is a fixed size
-Aranya ID.
-
-AQC optionally uses (EC)DHE shared secrets to provide additional
+AQC optionally uses (EC)DHE key agreement to provide additional
 security properties (e.g., forward security). The TLS
 certificates used to authenticate the (EC)DHE key exchange are
-taken from the Aranya graph. The (EC)DHE shared secret design is
+taken from the Aranya graph. The (EC)DHE key agreement design is
 described in a following section.
 
 #### Bidirectional Channel PSK
@@ -179,16 +182,21 @@ described in a following section.
 // `author` is the channel author device.
 // `peer` is the channel peer device.
 fn create_bidi_channel(author, peer) {
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
     if DeviceId(author) == DeviceId(peer) {
         raise SameIdError
     }
 
     // `suite_id` is derived from the Aranya Team's cipher suite.
     suite_id = concat(aead_id, kdf_id, signer_id, ...)
-    info = concat(
+    // `psk_length_in_bytes` is the length, in bytes, of the PSK.
+    info = tuple_hash(
         "AqcBidiPsk",
         suite_id,
         parent_cmd_id,
+        psk_length_in_bytes,
         DeviceId(author),
         DeviceId(peer),
         i2osp(label),
@@ -208,7 +216,10 @@ fn create_bidi_channel(author, peer) {
 //
 // `ctx` comes from `create_bidi_channel`.
 fn author_derive_psk(ctx) {
-    psk = ctx.Export("aqc bidi psk", 32)
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
+    psk = ctx.Export("aqc bidi psk", psk_length_in_bytes)
     return psk
 }
 
@@ -219,12 +230,18 @@ fn author_derive_psk(ctx) {
 //
 // `author` is the channel author device.
 fn peer_derive_psk(enc, author) {
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
+
     // `suite_id` is derived from the Aranya Team's cipher suite.
     suite_id = concat(aead_id, kdf_id, signer_id, ...)
-    info = concat (
+    // `psk_length_in_bytes` is the length, in bytes, of the PSK.
+    info = tuple_hash(
         "AqcBidiPsk",
         suite_id,
         parent_cmd_id,
+        psk_length_in_bytes,
         DeviceId(author),
         DeviceId(peer),
         i2osp(label),
@@ -235,7 +252,7 @@ fn peer_derive_psk(enc, author) {
         pkR=pk(EncryptionKey(author)),
         info=info,
     )
-    psk = ctx.Export("aqc bidi psk", 32)
+    psk = ctx.Export("aqc bidi psk", psk_length_in_bytes)
     return psk
 }
 
@@ -247,7 +264,7 @@ fn psk_identity(enc) {
         "ID-v1",
         suite_id,
         bytes(enc),
-        "UniChannelId",
+        "AqcBidiChannelId",
     )
     return id
 }
@@ -262,17 +279,22 @@ fn psk_identity(enc) {
 // `author` is the channel author device.
 // `peer` is the channel peer device.
 fn create_uni_channel(author, peer) {
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
     if DeviceId(author) == DeviceId(peer) {
         raise SameIdError
     }
 
     // `suite_id` is derived from the Aranya Team's cipher suite.
     suite_id = concat(aead_id, kdf_id, signer_id, ...)
-    info = concat (
+    // `psk_length_in_bytes` is the length, in bytes, of the PSK.
+    info = tuple_hash(
         "AqcUniPsk",
         suite_id,
         engine_id,
         parent_cmd_id,
+        psk_length_in_bytes,
         DeviceId(author),
         DeviceId(peer),
         i2osp(label),
@@ -292,7 +314,10 @@ fn create_uni_channel(author, peer) {
 //
 // `ctx` comes from `create_uni_channel`.
 fn author_derive_psk(ctx) {
-    psk = HPKE_Context.Export(ctx, "aqc uni psk")
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
+    psk = ctx.Export("aqc uni psk", psk_length_in_bytes)
     return psk
 }
 
@@ -303,13 +328,19 @@ fn author_derive_psk(ctx) {
 //
 // `author` is the channel author device.
 fn peer_derive_psk(enc, author) {
+    if psk_length_in_bytes < 32 {
+        raise InsecurePskLengthError
+    }
+
     // `suite_id` is derived from the Aranya Team's cipher suite.
     suite_id = concat(aead_id, kdf_id, signer_id, ...)
-    info = concat(
+    // `psk_length_in_bytes` is the length, in bytes, of the PSK.
+    info = tuple_hash(
         "AqcUniPsk",
         suite_id,
         engine_id,
         parent_cmd_id,
+        psk_length_in_bytes,
         DeviceId(author),
         DeviceId(peer),
         i2osp(label),
@@ -320,7 +351,7 @@ fn peer_derive_psk(enc, author) {
         pkR=pk(EncryptionKey(author)),
         info=info,
     )
-    psk = HPKE_Context.Export(ctx, "aqc uni psk")
+    psk = ctx.Export("aqc uni psk", psk_length_in_bytes)
     return psk
 }
 
@@ -332,19 +363,19 @@ fn psk_identity(enc) {
         "ID-v1",
         suite_id,
         bytes(enc),
-        "UniChannelId",
+        "AqcUniChannelId",
     )
     return id
 }
 ```
 
-#### (EC)DHE Shared Secrets
+#### (EC)DHE Key Agreement
 
 This feature is currently scheduled for after the MVP.
 
 #### TLS Authentication
 
-TODO
+This feature is currently scheduled for after the MVP.
 
 #### Security Considerations
 
@@ -361,8 +392,8 @@ TODO
 5. Channels should allow participants to transmit a reasonable
    amount of data without accidentally exceeding those limits.
 
-(1) and (2) are solved by [RFC 8446], [RFC 9000], and [HPKE].
-Additionally, trust in the device `EncryptionKey`s are rooted in
+(1) and (2) are solved by [RFC 8446], [RFC 9000], and [RFC 9180].
+Additionally, trust in the device `EncryptionKey`s is rooted in
 the Aranya graph.
 
 (3) is solved by contextual binding. All channel parameters are
@@ -372,8 +403,9 @@ communication.
 
 (4) is solved by AQC policy; see the "labels" section.
 
-(5) is primarily solved by [RFC 8446]. Also, see the "maximum
-number of QUIC connections" section.
+(5) is primarily solved by [RFC 8446], [RFC 9000], and [RFC
+9001]. Also, see the "Cumulative Maximum Number of QUIC
+Connections" section.
 
 ##### Cumulative Maximum Number of QUIC Connections
 
@@ -393,9 +425,9 @@ connections. If the client creates QUIC connections at the
 impossible rate of one per nanosecond, the first collision can be
 expected in approximately 1.227 billion years.
 
-If using a PSK and TLS certificates, each QUIC connection mixes
-in an (EC)DHE shared secret. This increases the bound so
-significantly that it is not even worth calculating.
+If using a PSK and (EC)DHE key agreement, each QUIC connection
+mixes in a fresh (EC)DHE shared secret. This increases the bound
+so significantly that it is not even worth calculating.
 
 ##### Contextual Binding
 
@@ -422,7 +454,7 @@ encryption context:
   This forces both participants to agree on the channel topic.
 
 These are consistent with the recommendations for non-key pair
-authentication in [HPKE] section 5.1.3 and [AKE].
+authentication in [RFC 9180] section 5.1.3 and [AKE].
 
 The following contextual binding is used when deriving the PSK
 from the HPKE encryption context:
@@ -450,16 +482,18 @@ AQC avoids the security risks of PSKs outlined in [RFC 9257]:
 
 - AQC PSKs are known to exactly one client and one server (i.e.,
   the channel participants).
-- AQC PSKs are high entropy.
+- AQC PSKs are high entropy (256 or greater bits).
 - AQC PSK identities are the cryptographic hash of the peer's
   encapsulation. They have a fixed length and are not privacy
   sensitive. As the output of a cryptographic hash function, they
-  are unlikely to collide with resumption PSK identities.
+  are it is cryptographically negligible for them to collide with
+  resumption PSK identities.
 
 ##### Privacy Considerations
 
 In general, most privacy considerations can be found in [RFC
-8446], [RFC 9000], [HPKE], and Aranya's specifications.
+8446], [RFC 9000], [RFC 9001], [RFC 9180], and Aranya's
+specifications.
 
 ###### PSK Identities
 
@@ -604,9 +638,10 @@ impl AqcSendStream {
 
 [AKE]: https://doi.org/10.1007/bf00124891
 [ECH]: https://www.ietf.org/archive/id/draft-ietf-tls-esni-24.html
-[HPKE]: https://www.rfc-editor.org/rfc/rfc9180.html
 [NIST SP 800-185]: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-185.pdf
 [RFC 8446]: https://www.rfc-editor.org/rfc/rfc8446.html
 [RFC 9000]: https://www.rfc-editor.org/rfc/rfc9000.html
+[RFC 9001]: https://www.rfc-editor.org/rfc/rfc9001
+[RFC 9180]: https://www.rfc-editor.org/rfc/rfc9180.html
 [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
 [rekey]: https://cseweb.ucsd.edu/~mihir/papers/rekey.pdf
