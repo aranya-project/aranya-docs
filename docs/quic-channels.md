@@ -124,16 +124,16 @@ label will create N distinct channels.
 - `pk(x)` the public part of the key `x`.
 - `tuple_hash(s0, ... , sN)` is a cryptographic hash over a set
   of strings such that each element is unambiguously encoded per
-  [NIST SP 800-185].
+  [[NIST SP 800-185]].
 - `bytes(x)` returns the byte encoding of `x`.
 
 #### Overview
 
 As described above, each AQC channel is comprised of one or more
 QUIC connections opened over the lifetime of the channel. QUIC
-secures its connections with TLS 1.3 [RFC 9001].
+secures its connections with TLS 1.3 [[RFC 9001]].
 
-Each TLS 1.3 [RFC 8446] connection has two input secrets:
+Each TLS 1.3 [[RFC 8446]] connection has two input secrets:
 
 1. PSK (a pre-shared key)
 2. (EC)DHE shared secret
@@ -150,7 +150,7 @@ following security properties:
   channel is destroyed.
 - It is destroyed after the channel is destroyed.
 
-The PSK is generated with HPKE [RFC 9180]. The generation
+The PSK is generated with HPKE [[RFC 9180]]. The generation
 strategies for bidirectional and unidirectional channels are very
 similar, differing only in their constants. They are listed in
 following sections.
@@ -392,9 +392,9 @@ This feature is currently scheduled for after the MVP.
 5. Channels should allow participants to transmit a reasonable
    amount of data without accidentally exceeding those limits.
 
-(1) and (2) are solved by [RFC 8446], [RFC 9000], and [RFC 9180].
-Additionally, trust in the device `EncryptionKey`s is rooted in
-the Aranya graph.
+(1) and (2) are solved by [[RFC 8446]], [[RFC 9000]], and [[RFC
+9180]]. Additionally, trust in the device `EncryptionKey`s is
+rooted in the Aranya graph.
 
 (3) is solved by contextual binding. All channel parameters are
 included as contextual binding, so if any channel parameters
@@ -403,8 +403,8 @@ communication.
 
 (4) is solved by AQC policy; see the "labels" section.
 
-(5) is primarily solved by [RFC 8446], [RFC 9000], and [RFC
-9001]. Also, see the "Cumulative Maximum Number of QUIC
+(5) is primarily solved by [[RFC 8446]], [[RFC 9000]], and [[RFC
+9001]]. Also, see the "Cumulative Maximum Number of QUIC
 Connections" section.
 
 ##### Cumulative Maximum Number of QUIC Connections
@@ -454,7 +454,7 @@ encryption context:
   This forces both participants to agree on the channel topic.
 
 These are consistent with the recommendations for non-key pair
-authentication in [RFC 9180] section 5.1.3 and [AKE].
+authentication in [[RFC 9180]] section 5.1.3 and [[AKE]].
 
 The following contextual binding is used when deriving the PSK
 from the HPKE encryption context:
@@ -472,13 +472,13 @@ possesses a particular `EncryptionKey`.
 
 ##### Forward Security
 
-As mentioned in [RFC 8446] and [RFC 9257], PSK-only TLS
+As mentioned in [[RFC 8446]] and [[RFC 9257]], PSK-only TLS
 connections lack foward security. To add forward security,
 include TLS certificates as discussed above.
 
 ##### Safe Usage of PSKs
 
-AQC avoids the security risks of PSKs outlined in [RFC 9257]:
+AQC avoids the security risks of PSKs outlined in [[RFC 9257]]:
 
 - AQC PSKs are known to exactly one client and one server (i.e.,
   the channel participants).
@@ -491,8 +491,8 @@ AQC avoids the security risks of PSKs outlined in [RFC 9257]:
 
 ##### Privacy Considerations
 
-In general, most privacy considerations can be found in [RFC
-8446], [RFC 9000], [RFC 9001], [RFC 9180], and Aranya's
+In general, most privacy considerations can be found in [[RFC
+8446]], [[RFC 9000]], [[RFC 9001]], [[RFC 9180]], and Aranya's
 specifications.
 
 ###### PSK Identities
@@ -505,10 +505,10 @@ specification.)
 
 AQC PSK identities are the cryptographic hash of the peer's
 encapsulation, which is an IND-CCA2 ciphertext (assuming that the
-KEM used by HPKE is IND-CCA2; see [HPKE] for more information).
-It is infeasible for an attacker to link a PSK identity to
-a particular device without additional information that is out of
-AQC's security model.
+KEM used by HPKE is IND-CCA2; see [[RFC 8190]] for more
+information). It is infeasible for an attacker to link a PSK
+identity to a particular device without additional information
+that is out of AQC's security model.
 
 ## Implementation
 
