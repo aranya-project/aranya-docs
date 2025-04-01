@@ -21,6 +21,21 @@ or receive incoming channels. A channel represents a quic connection
 between two peers that is secured by crypto generated for the channel.
 
 ```rust
+/// Indicates whether the channel is unidirectional or bidirectional
+pub enum CHANNEL_DIRECTION = {
+    /// Data can only be sent in one direction.
+    UNIDIRECTIONAL,
+    /// Data can be sent in either direction 
+    BIDIRECTIONAL,
+}
+
+/// Indicates the type of channel
+pub enum CHANNEL_TYPE = {
+    AqcChannelSender,
+    AqcChannelReceiver,
+    AqcBidirectionalChannel,
+}
+
 /// The maximum number of channels that haven't been received.
 const MAXIMUM_UNRECEIVED_CHANNELS: usize = 20;
 
@@ -37,10 +52,10 @@ impl AqcClient {
 
     /// Receive the next available channel. If no channel is available, return None.
     /// This method will return a channel created by a peer that hasn't been received yet.
-    pub fn receive_channel(&mut self) -> Option<AqcChannel> 
+    pub fn receive_channel(&mut self) -> Option<CHANNEL_TYPE> 
 
     /// Create a new channel to the given address.
-    pub async fn create_channel(&mut self, addr: SocketAddr, label: Label) -> Result<AqcChannel, AqcError> 
+    pub async fn create_channel(&mut self, addr: SocketAddr, label: Label, direction: CHANNEL_DIRECTION) -> Result<CHANNEL_TYPE, AqcError> 
 }
 ```
 
@@ -67,19 +82,70 @@ pub struct AqcChannelID {
     label: Label,
 }
 
-/// A unique channel between two peers.
-/// Allows sending and receiving data over a channel.
-pub struct AqcChannel {
+/// The receive end of a unidirectional channel.
+/// Allows receiving data streams over a channel.
+pub struct AqcChannelReceiver {
     id: AqcChannelID
-    stream_receiver: mpsc::Receiver<Bytes>,
-    message_receiver: mpsc::Receiver<Bytes>,
+    uni_receiver: mpsc::Receiver<ReceiveStream>,
 }
 
-impl AqcChannel {
+impl AqcChannelReceiver {
     /// Create a new channel with the given conection handle.
     ///
-    /// Returns the new channel
-    pub fn new(conn: Handle) -> Self
+    /// Returns the new channel and the sender used to send new streams to the 
+    /// channel.
+    pub fn new(conn: Handle) -> (Self, (
+            mpsc::Sender<ReceiveStream>,
+        ),)
+
+    /// Returns a unidirectional stream if one has been received. 
+    /// If no stream has been received return None. 
+    pub async fn receive_unidirectional_stream(
+        &mut self,
+    ) -> Result<Option<AqcReceiveStream>, AqcError> 
+
+    /// Close the channel if it's open. If the channel is already closed, do nothing.
+    pub fn close(&mut self) -> Result<(), AqcError>
+}
+
+/// The sending end of a unidirectional channel.
+/// Allows sending data streams over a channel.
+pub struct AqcChannelSender {
+    id: AqcChannelID
+    conn: Handle,
+}
+
+impl AqcChannelSender {
+    /// Create a new channel with the given id and conection handle.
+    ///
+    /// Returns the new channel and the sender used to send new streams to the 
+    /// channel.
+    pub fn new(id: AqcChannelID, conn: Handle) -> Self
+
+    /// Creates a new unidirectional stream for the channel. 
+    pub async fn create_unidirectional_stream(&mut self) -> Result<AqcSendStream, AqcError> 
+
+    /// Close the channel if it's open. If the channel is already closed, do nothing.
+    pub fn close(&mut self) -> Result<(), AqcError>
+}
+
+/// A unique channel between two peers.
+/// Allows sending and receiving data streams over a channel.
+pub struct AqcBidirectionalChannel {
+    sender: AqcChannelSender,
+    receiver: AqcChannelReceiver,
+    conn: Handle,
+    bi_receiver: mpsc::Receiver<BidirectionalStream>,
+}
+
+impl AqcBidirectionalChannel {
+    /// Create a new channel with the given conection handle.
+    ///
+    /// Returns the new channel and the sender used to send new streams to the 
+    /// channel.
+    pub fn new(conn: Handle) -> (Self, (
+            mpsc::Sender<ReceiveStream>,
+        ),)
 
     /// Returns a bidirectional stream if one has been received. 
     /// If no stream has been received return None. 
