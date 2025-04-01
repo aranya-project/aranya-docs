@@ -185,6 +185,9 @@ fn create_bidi_channel(author, peer) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
     }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
+    }
     if DeviceId(author) == DeviceId(peer) {
         raise SameIdError
     }
@@ -219,6 +222,9 @@ fn author_derive_psk(ctx) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
     }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
+    }
     psk = ctx.Export("aqc bidi psk", psk_length_in_bytes)
     return psk
 }
@@ -232,6 +238,9 @@ fn author_derive_psk(ctx) {
 fn peer_derive_psk(enc, author) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
+    }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
     }
 
     // `suite_id` is derived from the Aranya Team's cipher suite.
@@ -282,6 +291,9 @@ fn create_uni_channel(author, peer) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
     }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
+    }
     if DeviceId(author) == DeviceId(peer) {
         raise SameIdError
     }
@@ -317,6 +329,9 @@ fn author_derive_psk(ctx) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
     }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
+    }
     psk = ctx.Export("aqc uni psk", psk_length_in_bytes)
     return psk
 }
@@ -330,6 +345,9 @@ fn author_derive_psk(ctx) {
 fn peer_derive_psk(enc, author) {
     if psk_length_in_bytes < 32 {
         raise InsecurePskLengthError
+    }
+    if psk_length_in_bytes >= 2^16 {
+        raise PskTooLongError
     }
 
     // `suite_id` is derived from the Aranya Team's cipher suite.
