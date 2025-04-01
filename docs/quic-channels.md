@@ -196,10 +196,10 @@ fn create_bidi_channel(author, peer) {
         "AqcBidiPsk",
         suite_id,
         parent_cmd_id,
-        psk_length_in_bytes,
+        i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label),
+        i2osp(label, 4),
     )
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
@@ -241,10 +241,10 @@ fn peer_derive_psk(enc, author) {
         "AqcBidiPsk",
         suite_id,
         parent_cmd_id,
-        psk_length_in_bytes,
+        i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label),
+        i2osp(label, 4),
     )
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
@@ -294,10 +294,10 @@ fn create_uni_channel(author, peer) {
         suite_id,
         engine_id,
         parent_cmd_id,
-        psk_length_in_bytes,
+        i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label),
+        i2osp(label, 4),
     )
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
@@ -340,10 +340,10 @@ fn peer_derive_psk(enc, author) {
         suite_id,
         engine_id,
         parent_cmd_id,
-        psk_length_in_bytes,
+        i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label),
+        i2osp(label, 4),
     )
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
@@ -445,13 +445,21 @@ encryption context:
   encryption context from being used across Aranya Team cipher
   suite upgrades.
 
+- `i2osp(psk_length_in_bytes, 2)` binds the HPKE encryption
+  context to the chosen PSK length. This forces both participants
+  to agree on the PSK length. (Note that HPKE's secret export
+  interface includes the length of the exported secret as its own
+  contextual binding, making this contextual binding somewhat
+  redundant.)
+
 - `DeviceId(author)` and `DeviceId(peer)` binds the HPKE
   encryption context to the two channel participants, forcing
   both participants to agree on which devices are participating
   in the channel.
 
-- `i2osp(label)` binds the HPKE encryption context to the label.
-  This forces both participants to agree on the channel topic.
+- `i2osp(label, 4)` binds the HPKE encryption context to the
+  label. This forces both participants to agree on the channel
+  topic.
 
 These are consistent with the recommendations for non-key pair
 authentication in [[RFC 9180]] section 5.1.3 and [[AKE]].
