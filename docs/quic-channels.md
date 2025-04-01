@@ -506,7 +506,7 @@ impl AqcClient {
 }
 ```
 
-## Channels
+### Channels
 
 All peers will spawn an async task to await new connections.
 
@@ -566,7 +566,7 @@ impl AqcChannel {
 }
 ```
 
-## Streams
+### Streams
 A stream allows sending or receiving data.
 
 QUIC will split messages into several pieces so a data chunk in a stream
