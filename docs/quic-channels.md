@@ -643,7 +643,7 @@ function can_create_aqc_bidi_channel(device1 id, device2 id, label int) bool {
 
 // Reports whether the devices have permission to create
 // a unidirectional AQC channel with each other.
-function can_create_afc_uni_channel(writer_id id, reader_id id, label int) bool {
+function can_create_aqc_uni_channel(writer_id id, reader_id id, label int) bool {
     check is_valid_label(label)
 
     // Devices cannot create channels with themselves.
@@ -672,7 +672,7 @@ function can_create_afc_uni_channel(writer_id id, reader_id id, label int) bool 
 }
 ```
 
-#### AqcCreateChannel
+#### AQC Channel Creation
 
 ##### AqcCreateBidiChannel
 
