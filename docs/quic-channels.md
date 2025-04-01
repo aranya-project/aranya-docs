@@ -93,7 +93,45 @@ a burden on applications.
 
 #### Label Design
 
-TODO
+##### Overview and Background
+
+In abstract, a label is a human-readable UTF-8 string. For
+example, as discussed above, a label could be `TELEMETRY` or
+`TELEMETRY_SAT2_GS3`. However, using simple strings allows runs
+into issues when branches with duplicate labels are merged
+together. Consider this scenario:
+
+1. Alice creates the label `SECRET` on branch B1.
+2. Alice assigns the label `SECRET` to devices A, B, and C.
+3. Bob also creates the label `SECRET` on branch B2.
+4. Bob assigns the label `SECRET` to devices D, E, F.
+5. Branches B1 and B2 are eventually woven into branch B3.
+6. One of the "create label" commands published by Alice and Bob
+   must come first in the weave, and the other second.
+7. Since duplicate labels are not allowed, the second command
+   must be rejected.
+8. Since "assign label" commands are necessarily ordered after
+   "create label" commands, A, B, C, D, E, and F retain their
+   label assignments.
+
+This is problematic because Alice did not intend to grant D, E,
+or F permission to use the label `SECRET`, and Bob did not intend
+to grant A, B, or C permission to tuse the label `SECRET`, yet
+all six devices currently have permission to use the label.
+
+One potential fix for this issue is to also reject the "assign
+label" commands issued by either Alice or Bob, depending on whose
+command is ordered second. But that affects availability: either
+A, B, and C or D, E, and F will have their work disrupted.
+
+The approach outlined below side steps this problem, at the
+expense of a more verbose user experience.
+
+##### Design
+
+Labels are defined as a unique (name, author ID) tuple.
+
+TODO: expand more
 
 ### Creation and Lifetime
 
@@ -554,14 +592,29 @@ use envelope
 use idam
 use perspective
 
+// A device.
+struct Device {
+    // The device's ID.
+    device_id id,
+}
+
 // Returns a device.
-function get_valid_device(author_id id) struct Device;
+function get_valid_device(device_id id) struct Device
 
 // Returns the device's encoded public encryption key.
-function get_enc_pk(device_id id) bytes;
+function get_enc_pk(device_id id) bytes
 
 // Returns a device if one exists.
-function find_existing_device(device_id id) optional struct Device;
+function find_existing_device(device_id id) optional struct Device
+
+// Seals a serialized basic command into an envelope, using the
+// stored device signing key.
+function seal_command(payload bytes) struct Envelope
+
+// Opens an envelope using the author's public device signing
+// key, and if verification succeeds, returns the serialized
+// basic command data .
+function open_envelope(sealed_envelope struct Envelope) bytes
 ```
 
 #### Enums and Structs
@@ -707,7 +760,8 @@ action create_aqc_bidi_channel(peer_id id, label int) {
 }
 
 // The effect that is emitted when the author of a bidirectional
-// AQC channel processes the `AqcCreateBidiChannel` command.
+// AQC channel successfully processes the `AqcCreateBidiChannel`
+// command.
 effect AqcBidiChannelCreated {
     // The unique ID of the previous command.
     parent_cmd_id id,
@@ -726,7 +780,8 @@ effect AqcBidiChannelCreated {
 }
 
 // The effect that is emitted when the peer of a bidirectional
-// AQC channel processes the `AqcCreateBidiChannel` command.
+// AQC channel successfully processes the `AqcCreateBidiChannel`
+// command.
 effect AqcBidiChannelReceived {
     // The unique ID of the previous command.
     parent_cmd_id id,
@@ -766,6 +821,8 @@ command AqcCreateBidiChannel {
         // Check that both devices are allowed to participate in
         // this bidirectional channel.
         check can_create_aqc_bidi_channel(author.device_id, peer.device_id, this.label)
+
+        // NB: Check roles, other ACLs here.
 
         let parent_cmd_id = envelope::parent_id(envelope)
         let current_device_id = device::current_device_id()
@@ -849,7 +906,8 @@ action create_aqc_uni_channel(writer_id id, reader_id id, label int) {
 }
 
 // The effect that is emitted when the author of a unidirectional
-// AQC channel processes the `AqcCreateUniChannel` command.
+// AQC channel successfully processes the `AqcCreateUniChannel`
+// command.
 effect AqcUniChannelCreated {
     // The unique ID of the previous command.
     parent_cmd_id id,
@@ -870,7 +928,8 @@ effect AqcUniChannelCreated {
 }
 
 // The effect that is emitted when the peer of a unidirectional
-// AQC channel processes the `AqcCreateUniChannel` command.
+// AQC channel successfully processes the `AqcCreateUniChannel`
+// command.
 effect AqcUniChannelReceived {
     // The unique ID of the previous command.
     parent_cmd_id id,
@@ -925,6 +984,8 @@ command AqcCreateUniChannel {
         // Check that both devices are allowed to participate in
         // this unidirectional channel.
         check can_create_aqc_uni_channel(this.writer_id, this.reader_id, this.label)
+
+        // NB: Check roles, other ACLs here.
 
         let parent_cmd_id = envelope::parent_id(envelope)
         let current_device_id = device::current_device_id()
@@ -1020,6 +1081,167 @@ function create_uni_channel(
     label int,
 ) struct AqcUniChannel
 ```
+
+### Labels
+
+```policy
+// Records an AQC label.
+//
+// `author_id` is the ID of the device that created the label.
+fact AqcLabel[name string, author_id id]=>{label_id id}
+
+action create_aqc_label(name string) {
+    publish CreateAqcLabel {
+        name: label,
+    }
+}
+
+command CreateAqcLabel {
+    fields {
+        // The label name.
+        name string,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+        let label_id = envelope::command_id(envelope)
+
+        // Verify that the label does not already exist.
+        //
+        // This will happen in the `finish` block if we try to
+        // create an already true label, but checking first
+        // results in a nicer error (I think?).
+        check !exists AqcLabel[name: this.name, author_id: author.devce_id]
+
+        finish {
+            create AqcLabel[name: this.name, author_id: author.devce_id]=>{label_id: label_id}
+
+            emit LabelCreated {
+                name: this.name,
+                author_id: author.device_id,
+                label_id: label_id,
+            }
+        }
+    }
+}
+
+// The effect emitted when the `CreateAqcLabel` command is
+// successfully processed.
+effect AqcLabelCreated {
+    // The label name.
+    name string,
+    // The ID of the device that created the label.
+    label_author_id id,
+    // Uniquely identifies the label.
+    label_id id,
+}
+
+action delete_aqc_label_by_name(name string, label_author_id id) {
+    publish DeleteAqcLabel {
+        name: name,
+        label_author_id: label_author_id,
+    }
+}
+
+// TODO(eric): add `delete_aqc_label_by_id`?
+
+command DeleteAqcLabel {
+    fields {
+        // The label name.
+        name string,
+        // The device ID of the author of the label.
+        label_author_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+
+        // NB: Check roles, other ACLs here.
+
+        // Verify that the label exists.
+        //
+        // This will happen in the `finish` block if we try to
+        // create an already true label, but checking first
+        // results in a nicer error (I think?).
+        let label = check_unwrap query AqcLabel[name: this.name, author_id: label_author.devce_id]
+
+        finish {
+            delete AqcLabel[name: this.name, author_id: label_author.devce_id]=>{}
+
+            emit AqcLabelCreated {
+                name: this.name,
+                label_author_id: this.label_author_id,
+                label_id: label.label_id,
+                author_id: author.device_id,
+            }
+        }
+    }
+}
+
+// The effect emitted when the `DeleteAqcLabel` command is
+// successfully processed.
+effect AqcLabelDeleted {
+    // The label name.
+    name string,
+    // The label author's device ID.
+    label_author_id id,
+    // Uniquely identifies the label.
+    label_id id,
+    // The ID of the device that deleted the label.
+    author_id id,
+}
+
+// Emits `QueriedAfcLabel` for each label with the same name.
+action query_aqc_label(name string) {
+    map AqcLabel[name: name, author_id: ?] as f {
+        publish QueryAqcLabel {
+            label: f.name,
+            label_author_id: f.author_id,
+            label_id: f.label_id,
+        }
+    }
+}
+
+command QueryAqcLabel {
+    fields {
+        name string,
+        label_author_id id,
+        label_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        finish {
+            emit QueriedAqcLabel {
+                name: this.name,
+                label_author_id: this.author_id,
+                label_id: this.label_id,
+            }
+        }
+    }
+}
+
+effect QueriedAqcLabel {
+    // The label name.
+    name string,
+    // The ID of the device that created the label.
+    label_author_id id,
+    // The label's unique ID.
+    label_id id,
+}
+```
+
+### Labels FFI
+
+TODO: is this needed?
 
 ## Implementation
 
