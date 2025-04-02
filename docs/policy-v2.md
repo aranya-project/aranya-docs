@@ -237,7 +237,7 @@ cannot overlap.
 
 ### Struct Subselection
 
-A struct `A` whose fields are a strict subset of the fields of struct
+A struct `A` whose fields are a subset of the fields of struct
 `B` can be assigned from struct `B` with the struct subselection
 operator `substruct`.
 
