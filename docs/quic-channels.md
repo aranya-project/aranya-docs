@@ -1171,7 +1171,7 @@ command DeleteLabel {
             // Cascade the label assignments.
             delete AssignedLabel[device_id: ?, label_id: label.label_id]
 
-            emit LabelCreated {
+            emit LabelDeleted {
                 label_id: this.label_id,
                 label_name: label.name,
                 label_author_id: label.author_id,
