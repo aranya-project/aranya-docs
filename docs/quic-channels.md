@@ -1419,10 +1419,6 @@ effect QueriedLabelAssignment {
 }
 ```
 
-### Labels FFI
-
-TODO: is this needed?
-
 ## Implementation
 
 Each peer will have an AqcClient. This can be used to create new channels
