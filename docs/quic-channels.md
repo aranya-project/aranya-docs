@@ -1165,10 +1165,11 @@ command DeleteLabel {
         // results in a nicer error (I think?).
         let label = check_unwrap query Label[label_id: this.label_id]
 
-        // TODO(eric): delete label assignments?
-
         finish {
-            delete Label[label_id: this.label_id]=>{}
+            delete Label[label_id: label.label_id]=>{}
+
+            // Cascade the label assignments.
+            delete AssignedLabel[device_id: ?, label_id: label.label_id]
 
             emit LabelCreated {
                 label_id: this.label_id,
