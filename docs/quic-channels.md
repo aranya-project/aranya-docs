@@ -129,9 +129,17 @@ expense of a more verbose user experience.
 
 ##### Design
 
-Labels are defined as a unique (name, author ID) tuple.
+At a high level, labels are an (ID, name, author ID) tuple.
 
-TODO: expand more
+Labels are uniquely identified by their ID, which is the ID of
+the Aranya command used to create them. Each Aranya command has
+a globally unique ID that is cryptographically derived from the
+command and its place on the graph. This means that each label is
+unique, even if its name and author ID are the same.
+
+Since IDs are opaque, a label's name helps identify it to humans.
+The label's author ID helps differentiate multiple labels with
+the same name.
 
 ### Creation and Lifetime
 
@@ -634,14 +642,6 @@ enum ChanOp {
 }
 ```
 
-#### Facts
-
-```policy
-// Records that a device was granted permission to use a label
-// for certain channel operations.
-fact AssignedLabel[device_id id, label int]=>{op enum ChanOp}
-```
-
 #### Utility Routines
 
 ```policy
@@ -1085,18 +1085,19 @@ function create_uni_channel(
 ### Labels
 
 ```policy
-// Records an AQC label.
+// Records a label for AQC and AFC.
 //
-// `author_id` is the ID of the device that created the label.
-fact AqcLabel[name string, author_id id]=>{label_id id}
+// `name` is a short description of the label. E.g., "TELEMETRY".
+fact Label[label_id id]=>{name string, author_id id}
 
-action create_aqc_label(label_name string) {
-    publish CreateAqcLabel {
-        label_name: label_name,
+// Creates a label for AQC and AFC.
+action create_aqc_label(name string) {
+    publish CreateLabel {
+        label_name: name,
     }
 }
 
-command CreateAqcLabel {
+command CreateLabel {
     fields {
         // The label name.
         label_name string,
@@ -1107,53 +1108,52 @@ command CreateAqcLabel {
 
     policy {
         let author = get_valid_device(envelope::author_id(envelope))
+
+        // A label's ID is the ID of the command that created it.
         let label_id = envelope::command_id(envelope)
+
+        // NB: Check roles, other ACLs here.
 
         // Verify that the label does not already exist.
         //
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists AqcLabel[name: this.label_name, author_id: author.device_id]
+        check !exists Label[name: this.label_name, author_id: author.device_id]
 
         finish {
-            create AqcLabel[name: this.label_name, author_id: author.device_id]=>{label_id: label_id}
+            create Label[label_id: this.label_id]=>{name: this.label_name, author_id: author.device_id}
 
-            emit AqcLabelCreated {
+            emit LabelCreated {
+                label_id: label_id,
                 label_name: this.label_name,
                 label_author_id: author.device_id,
-                label_id: label_id,
             }
         }
     }
 }
 
-// The effect emitted when the `CreateAqcLabel` command is
+// The effect emitted when the `CreateLabel` command is
 // successfully processed.
-effect AqcLabelCreated {
+effect LabelCreated {
+    // Uniquely identifies the label.
+    label_id id,
     // The label name.
     label_name string,
     // The ID of the device that created the label.
     label_author_id id,
-    // Uniquely identifies the label.
-    label_id id,
 }
 
-action delete_aqc_label_by_name(label_name string, label_author_id id) {
-    publish DeleteAqcLabel {
-        label_name: label_name,
-        label_author_id: label_author_id,
+action delete_aqc_label(label_id id) {
+    publish DeleteLabel {
+        label_id: label_id,
     }
 }
 
-// TODO(eric): add `delete_aqc_label_by_id`?
-
-command DeleteAqcLabel {
+command DeleteLabel {
     fields {
-        // The label name.
-        label_name string,
-        // The device ID of the author of the label.
-        label_author_id id,
+        // The unique ID of the label being deleted.
+        label_id id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1169,23 +1169,23 @@ command DeleteAqcLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        let label = check_unwrap query AqcLabel[name: this.label_name, author_id: this.label_author_id]
+        let label = check_unwrap query Label[label_id: this.label_id]
 
         finish {
-            delete AqcLabel[name: this.label_name, author_id: this.label_author_id]=>{}
+            delete Label[label_id: this.label_id]=>{}
 
-            emit AqcLabelCreated {
-                label_name: this.label_name,
-                label_author_id: this.label_author_id,
-                label_id: label.label_id,
+            emit LabelCreated {
+                label_id: this.label_id,
+                label_name: label.name,
+                label_author_id: label.author_id,
             }
         }
     }
 }
 
-// The effect emitted when the `DeleteAqcLabel` command is
+// The effect emitted when the `DeleteLabel` command is
 // successfully processed.
-effect AqcLabelDeleted {
+effect LabelDeleted {
     // The label name.
     label_name string,
     // The label author's device ID.
@@ -1196,22 +1196,22 @@ effect AqcLabelDeleted {
     author_id id,
 }
 
-// Emits `QueriedAfcLabel` for each label with the same name.
-action query_aqc_label(name string) {
-    map AqcLabel[name: name, author_id: ?] as f {
-        publish QueryAqcLabel {
+// Emits `QueriedLabel` for all labels.
+action query_labels() {
+    map Label[label_id: ?] as f {
+        publish QueryLabel {
+            label_id: f.label_id,
             label_name: f.name,
             label_author_id: f.author_id,
-            label_id: f.label_id,
         }
     }
 }
 
-command QueryAqcLabel {
+command QueryLabel {
     fields {
+        label_id id,
         label_name string,
         label_author_id id,
-        label_id id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1219,40 +1219,209 @@ command QueryAqcLabel {
 
     policy {
         finish {
-            emit QueriedAqcLabel {
+            emit QueriedLabel {
+                label_id: this.label_id,
                 label_name: this.label_name,
                 label_author_id: this.label_author_id,
-                label_id: this.label_id,
             }
         }
     }
 }
 
-effect QueriedAqcLabel {
+effect QueriedLabel {
+    // The label's unique ID.
+    label_id id,
     // The label name.
     label_name string,
     // The ID of the device that created the label.
     label_author_id id,
+}
+
+// Records that a device was granted permission to use a label
+// for certain channel operations.
+fact AssignedLabel[device_id id, label_id id]=>{op enum ChanOp}
+
+// Grants the device permission to use the label.
+//
+// - It is an error if the device does not exist.
+// - It is an error if the label does not exist.
+// - It is an error if the device has already been granted
+//   permission to use this label.
+action assign_label(device_id id, label_id id, op enum ChanOp) {
+    publish AssignLabel {
+        device_id: device_id,
+        label_id: label_id,
+        op: op,
+    }
+}
+
+command AssignLabel {
+    fields {
+        // The target device.
+        device_id id,
+        // The label being assigned to the target device.
+        label_id id,
+        // The channel operations the device is allowed to used
+        // the label for.
+        op enum ChanOp,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+        let target = get_valid_device(this.device_id)
+
+        // NB: Check roles, other ACLs here.
+
+        let label = check_unwrap query Label[label_id: this.label_id]
+
+        // Verify that the device has not already been granted
+        // permission to use the label.
+        //
+        // This will happen in the `finish` block if we try to
+        // create an already true label, but checking first
+        // results in a nicer error (I think?).
+        check !exists AssignedLabel[device_id: target.device_id, label_id: label.label_id]
+
+        finish {
+            create AssignedLabel[device_id: target.device_id, label_id: label.label_id]=>{op: this.op}
+
+            emit LabelAssigned {
+                label_id: label.label_id,
+                label_name: label.name,
+                label_author_id: label.author_id,
+                author_id: author.device_id,
+            }
+        }
+    }
+}
+
+// The effect emitted when the `AssignLabel` command is
+// successfully processed.
+effect LabelAssigned {
+    // The ID of the label that was assigned.
+    label_id id,
+    // The name of the label that was assigned.
+    label_name string,
+    // The ID of the author of the label.
+    label_author_id id,
+    // The ID of the device that assigned the label.
+    author_id id,
+}
+
+// Revokes permission to use a label from a device.
+//
+// - It is an error if the device does not exist.
+// - It is an error if the label does not exist.
+// - It is an error if the device has not been granted permission
+//   to use this label.
+action revoke_label(device_id id, label_id id) {
+    publish RevokeLabel {
+        device_id: device_id,
+        label_id: label_id,
+    }
+}
+
+command RevokeLabel {
+    fields {
+        // The target device.
+        device_id id,
+        // The label being assigned to the target device.
+        label_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+        let target = get_valid_device(this.device_id)
+
+        // NB: Check roles, other ACLs here.
+
+        let label = check_unwrap query Label[label_id: this.label_id]
+
+        // Verify that the device has been granted permission to
+        // use the label.
+        //
+        // This will happen in the `finish` block if we try to
+        // create an already true label, but checking first
+        // results in a nicer error (I think?).
+        check exists AssignedLabel[device_id: target.device_id, label_id: label.label_id]
+
+        finish {
+            delete AssignedLabel[device_id: target.device_id, label_id: label.label_id]
+
+            emit LabelRevoked {
+                label_id: label.label_id,
+                label_name: label.name,
+                label_author_id: label.author_id,
+                author_id: author.device_id,
+            }
+        }
+    }
+}
+
+// The effect emitted when the `RevokeLabel` command is
+// successfully processed.
+effect LabelRevoked {
+    // The ID of the label that was revoked.
+    label_id id,
+    // The name of the label that was revoked.
+    label_name string,
+    // The ID of the author of the label.
+    label_author_id id,
+    // The ID of the device that revoked the label.
+    author_id id,
+}
+
+// Emits `QueriedLabelAssignment` for all labels the device has
+// been granted permission to use.
+action query_label_assignments(device_id) {
+    map AssignedLabel[device_id: id, label_id: ?] as f {
+        publish QueryLabelAssignment {
+            device_id: device_id,
+            label_id: f.label_id,
+            label_name: f.name,
+            label_author_id: f.author_id,
+        }
+    }
+}
+
+command QueryLabelAssignment {
+    fields {
+        device_id id,
+        label_id id,
+        label_name string,
+        label_author_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        finish {
+            emit QueriedLabelAssignment {
+                device_id: this.device_id,
+                label_id: this.label_id,
+                label_name: this.label_name,
+                label_author_id: this.label_author_id,
+            }
+        }
+    }
+}
+
+effect QueriedLabelAssignment {
+    // The device's unique ID.
+    device_id id,
     // The label's unique ID.
     label_id id,
-}
-
-action assign_aqc_label() {
-}
-
-command AssignAqcLabel {
-}
-
-effect AqcLabelAssigned {
-}
-
-action revoke_aqc_label() {
-}
-
-command RevokeAqcLabel {
-}
-
-effect AqcLabelRevoked {
+    // The label name.
+    label_name string,
+    // The ID of the device that created the label.
+    label_author_id id,
 }
 ```
 
