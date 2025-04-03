@@ -1085,7 +1085,7 @@ function create_uni_channel(
 fact Label[label_id id]=>{name string, author_id id}
 
 // Creates a label for AQC and AFC.
-action create_aqc_label(name string) {
+action create_label(name string) {
     publish CreateLabel {
         label_name: name,
     }
@@ -1138,7 +1138,7 @@ effect LabelCreated {
     label_author_id id,
 }
 
-action delete_aqc_label(label_id id) {
+action delete_label(label_id id) {
     publish DeleteLabel {
         label_id: label_id,
     }
@@ -1164,6 +1164,8 @@ command DeleteLabel {
         // create an already true label, but checking first
         // results in a nicer error (I think?).
         let label = check_unwrap query Label[label_id: this.label_id]
+
+        // TODO(eric): delete label assignments?
 
         finish {
             delete Label[label_id: this.label_id]=>{}
