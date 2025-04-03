@@ -1293,10 +1293,10 @@ impl AqcClient {
 All peers will spawn an async task to await new connections.
 
 A connection allows two peers to communicate and will be used for one channel.
-When receiving a QUIC connection the TLS key is used to connect will identify
+When receiving a QUIC connection the TLS key that is used to connect will identify
 the channel.
 
-When a channel is created the peer who creates the channel will connect to
+When a channel is created, the peer who creates the channel will connect to
 the other peer and keep the connection alive.
 
 Each channel will hold a connection `Handle` which can be used to open new
@@ -1400,7 +1400,20 @@ impl AqcBidirectionalChannel {
 ```
 
 ### Streams
-A stream allows sending or receiving data.
+A stream allows sending or receiving data. Streams can be unidirectional, only
+allowing data to be sent one way or bidirectional allowing data to be sent both 
+ways. 
+
+A single QUIC connection can have any number of streams. Streams are light weight
+and can be opened and closed as needed. Streams don't have any inherent meaning
+so a common pattern is to send an enum as the first data on the stream to 
+identify the purpose. 
+
+Some possible uses for streams.
+
+* A long lived unidirectional stream to send telemetry. 
+* Opening one unidirectional stream per file or message.
+* A bidirectional stream to query the peer. Each command sent on the stream can be responded to by sending a response on the stream.
 
 QUIC will split messages into several pieces so a data chunk in a stream
 may not represent a complete message.
