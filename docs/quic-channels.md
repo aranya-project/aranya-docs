@@ -694,7 +694,7 @@ function can_create_aqc_uni_channel(writer_id id, reader_id id, label_id id) boo
     // The writer must have permissions to write (send) data.
     let writer_op = get_allowed_op(writer_id, label_id)
     match writer_op {
-        ChanOp::ReadOnly => { return false },
+        ChanOp::ReadOnly => { return false }
         ChanOp::WriteOnly => {}
         ChanOp::ReadWrite => {}
     }
@@ -703,7 +703,7 @@ function can_create_aqc_uni_channel(writer_id id, reader_id id, label_id id) boo
     let reader_op = get_allowed_op(reader_id, label_id)
     match reader_op {
         ChanOp::ReadOnly => {}
-        ChanOp::WriteOnly => { return false },
+        ChanOp::WriteOnly => { return false }
         ChanOp::ReadWrite => {}
     }
 
@@ -1376,7 +1376,7 @@ effect LabelRevoked {
 
 // Emits `QueriedLabelAssignment` for all labels the device has
 // been granted permission to use.
-action query_label_assignments(device_id) {
+action query_label_assignments(device_id id) {
     map AssignedLabel[device_id: id, label_id: ?] as f {
         publish QueryLabelAssignment {
             device_id: device_id,
