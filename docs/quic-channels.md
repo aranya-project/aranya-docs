@@ -820,6 +820,7 @@ command AqcCreateBidiChannel {
         if current_device_id == author.device_id {
             // We're the channel author.
             let peer_enc_pk = get_enc_pk(peer.device_id)
+
             finish {
                 emit AqcBidiChannelCreated {
                     parent_cmd_id: parent_cmd_id,
@@ -834,6 +835,7 @@ command AqcCreateBidiChannel {
         } else if current_device_id == peer.device_id {
             // We're the channel peer.
             let author_enc_pk = get_enc_pk(author.device_id)
+
             finish {
                 emit AqcBidiChannelReceived {
                     parent_cmd_id: parent_cmd_id,
@@ -983,8 +985,8 @@ command AqcCreateUniChannel {
         let parent_cmd_id = envelope::parent_id(envelope)
         let current_device_id = device::current_device_id()
 
-        // We authored this command.
         if current_device_id == author.device_id {
+            // We authored this command.
             let peer_enc_pk = get_enc_pk(peer_id)
 
             finish {
