@@ -575,9 +575,9 @@ specifications.
 ###### PSK Identities
 
 If [Encrypted Client Hello](ECH) (ECH) is used, PSK identities
-are transmitted as ciphertext. Otherwise, if ECH is not used,
-PSKs are transmitted in clear text. (ECH is an artifact of the
-TLS implementation being used and is out of scope of this
+are transmitted as ciphertext. Otherwise, if ECH is not used, PSK
+identities are transmitted in clear text. (ECH is an artifact of
+the TLS implementation being used and is out of scope of this
 specification.)
 
 AQC PSK identities are the cryptographic hash of the peer's
