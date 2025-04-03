@@ -694,17 +694,17 @@ function can_create_aqc_uni_channel(writer_id id, reader_id id, label_id id) boo
     // The writer must have permissions to write (send) data.
     let writer_op = get_allowed_op(writer_id, label_id)
     match writer_op {
-        ChanOpt::ReadOnly => return false,
-        ChanOpt::WriteOnly => {}
-        ChanOpt::ReadWrite => {}
+        ChanOp::ReadOnly => return false,
+        ChanOp::WriteOnly => {}
+        ChanOp::ReadWrite => {}
     }
 
     // The reader must have permission to read (receive) data.
     let reader_op = get_allowed_op(reader_id, label_id)
     match reader_op {
-        ChanOpt::ReadOnly => {}
-        ChanOpt::WriteOnly => return false,
-        ChanOpt::ReadWrite => {}
+        ChanOp::ReadOnly => {}
+        ChanOp::WriteOnly => return false,
+        ChanOp::ReadWrite => {}
     }
 
     return true
