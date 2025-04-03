@@ -97,9 +97,9 @@ a burden on applications.
 
 In abstract, a label is a human-readable UTF-8 string. For
 example, as discussed above, a label could be `TELEMETRY` or
-`TELEMETRY_SAT2_GS3`. However, using simple strings allows runs
-into issues when branches with duplicate labels are merged
-together. Consider this scenario:
+`TELEMETRY_SAT2_GS3`. However, simply using strings runs into
+issues when branches with duplicate labels are merged together.
+Consider this scenario:
 
 1. Alice creates the label `SECRET` on branch B1.
 2. Alice assigns the label `SECRET` to devices A, B, and C.
@@ -776,7 +776,7 @@ effect AqcBidiChannelCreated {
     // The channel label.
     label int,
     // The channel's unique identifier.
-    channel_id,
+    channel_id id,
 }
 
 // The effect that is emitted when the peer of a bidirectional
@@ -808,7 +808,7 @@ command AqcCreateBidiChannel {
         // The channel peer's encapsulated KEM shared secret.
         peer_encap bytes,
         // The channel's unique identifier.
-        channel_idid,
+        channel_id id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -924,7 +924,7 @@ effect AqcUniChannelCreated {
     // The channel label.
     label int,
     // The channel's unique identifier.
-    channel_id,
+    channel_id id,
 }
 
 // The effect that is emitted when the peer of a unidirectional
@@ -1090,16 +1090,16 @@ function create_uni_channel(
 // `author_id` is the ID of the device that created the label.
 fact AqcLabel[name string, author_id id]=>{label_id id}
 
-action create_aqc_label(name string) {
+action create_aqc_label(label_name string) {
     publish CreateAqcLabel {
-        name: label,
+        label_name: label_name,
     }
 }
 
 command CreateAqcLabel {
     fields {
         // The label name.
-        name string,
+        label_name string,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1114,14 +1114,14 @@ command CreateAqcLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists AqcLabel[name: this.name, author_id: author.devce_id]
+        check !exists AqcLabel[name: this.label_name, author_id: author.device_id]
 
         finish {
-            create AqcLabel[name: this.name, author_id: author.devce_id]=>{label_id: label_id}
+            create AqcLabel[name: this.label_name, author_id: author.device_id]=>{label_id: label_id}
 
-            emit LabelCreated {
-                name: this.name,
-                author_id: author.device_id,
+            emit AqcLabelCreated {
+                label_name: this.label_name,
+                label_author_id: author.device_id,
                 label_id: label_id,
             }
         }
@@ -1132,16 +1132,16 @@ command CreateAqcLabel {
 // successfully processed.
 effect AqcLabelCreated {
     // The label name.
-    name string,
+    label_name string,
     // The ID of the device that created the label.
     label_author_id id,
     // Uniquely identifies the label.
     label_id id,
 }
 
-action delete_aqc_label_by_name(name string, label_author_id id) {
+action delete_aqc_label_by_name(label_name string, label_author_id id) {
     publish DeleteAqcLabel {
-        name: name,
+        label_name: label_name,
         label_author_id: label_author_id,
     }
 }
@@ -1151,7 +1151,7 @@ action delete_aqc_label_by_name(name string, label_author_id id) {
 command DeleteAqcLabel {
     fields {
         // The label name.
-        name string,
+        label_name string,
         // The device ID of the author of the label.
         label_author_id id,
     }
@@ -1169,16 +1169,15 @@ command DeleteAqcLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        let label = check_unwrap query AqcLabel[name: this.name, author_id: label_author.devce_id]
+        let label = check_unwrap query AqcLabel[name: this.label_name, author_id: this.label_author_id]
 
         finish {
-            delete AqcLabel[name: this.name, author_id: label_author.devce_id]=>{}
+            delete AqcLabel[name: this.label_name, author_id: this.label_author_id]=>{}
 
             emit AqcLabelCreated {
-                name: this.name,
+                label_name: this.label_name,
                 label_author_id: this.label_author_id,
                 label_id: label.label_id,
-                author_id: author.device_id,
             }
         }
     }
@@ -1188,7 +1187,7 @@ command DeleteAqcLabel {
 // successfully processed.
 effect AqcLabelDeleted {
     // The label name.
-    name string,
+    label_name string,
     // The label author's device ID.
     label_author_id id,
     // Uniquely identifies the label.
@@ -1201,7 +1200,7 @@ effect AqcLabelDeleted {
 action query_aqc_label(name string) {
     map AqcLabel[name: name, author_id: ?] as f {
         publish QueryAqcLabel {
-            label: f.name,
+            label_name: f.name,
             label_author_id: f.author_id,
             label_id: f.label_id,
         }
@@ -1210,7 +1209,7 @@ action query_aqc_label(name string) {
 
 command QueryAqcLabel {
     fields {
-        name string,
+        label_name string,
         label_author_id id,
         label_id id,
     }
@@ -1221,8 +1220,8 @@ command QueryAqcLabel {
     policy {
         finish {
             emit QueriedAqcLabel {
-                name: this.name,
-                label_author_id: this.author_id,
+                label_name: this.label_name,
+                label_author_id: this.label_author_id,
                 label_id: this.label_id,
             }
         }
@@ -1231,11 +1230,29 @@ command QueryAqcLabel {
 
 effect QueriedAqcLabel {
     // The label name.
-    name string,
+    label_name string,
     // The ID of the device that created the label.
     label_author_id id,
     // The label's unique ID.
     label_id id,
+}
+
+action assign_aqc_label() {
+}
+
+command AssignAqcLabel {
+}
+
+effect AqcLabelAssigned {
+}
+
+action revoke_aqc_label() {
+}
+
+command RevokeAqcLabel {
+}
+
+effect AqcLabelRevoked {
 }
 ```
 
