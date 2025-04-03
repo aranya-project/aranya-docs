@@ -254,7 +254,7 @@ fn create_bidi_channel(author, peer) {
         i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label, 4),
+        label_id,
     )
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
@@ -305,7 +305,7 @@ fn peer_derive_psk(enc, author) {
         i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label, 4),
+        label_id,
     )
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
@@ -361,7 +361,7 @@ fn create_uni_channel(author, peer) {
         i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label, 4),
+        label_id,
     )
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
@@ -413,7 +413,7 @@ fn peer_derive_psk(enc, author) {
         i2osp(psk_length_in_bytes, 2),
         DeviceId(author),
         DeviceId(peer),
-        i2osp(label, 4),
+        label_id,
     )
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
@@ -527,9 +527,8 @@ encryption context:
   both participants to agree on which devices are participating
   in the channel.
 
-- `i2osp(label, 4)` binds the HPKE encryption context to the
-  label. This forces both participants to agree on the channel
-  topic.
+- `label_id` binds the HPKE encryption context to the label. This
+  forces both participants to agree on the channel topic.
 
 These are consistent with the recommendations for non-key pair
 authentication in [[RFC 9180]] section 5.1.3 and [[AKE]].
