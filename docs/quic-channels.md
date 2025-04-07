@@ -828,7 +828,7 @@ command AqcCreateBidiChannel {
         let author = get_valid_device(envelope::author_id(envelope))
         let peer = check_unwrap find_existing_device(this.peer_id)
 
-        check is_valid_psk_length(this.psk_length_in_bytes);
+        check is_valid_psk_length(this.psk_length_in_bytes)
 
         // The label must exist.
         let label = check_unwrap query Label[label_id: this.label_id]
@@ -1016,7 +1016,7 @@ command AqcCreateUniChannel {
         }
         let peer = check_unwrap find_existing_device(peer_id)
 
-        check is_valid_psk_length(this.psk_length_in_bytes);
+        check is_valid_psk_length(this.psk_length_in_bytes)
 
         // The label must exist.
         let label = check_unwrap query Label[label_id: label_id]
