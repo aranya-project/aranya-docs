@@ -1003,6 +1003,10 @@ command AqcCreateUniChannel {
         author_secrets_id id,
         // The channel peer's encapsulated KEM shared secret.
         peer_encap bytes,
+        // The size in bytes of the PSK.
+        //
+        // Per the AQC specification, this must be at least 32.
+        psk_length_in_bytes int,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1190,10 +1194,10 @@ command CreateLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists Label[label_id: this.label_id]
+        check !exists Label[label_id: label_id]
 
         finish {
-            create Label[label_id: this.label_id]=>{name: this.label_name, author_id: author.device_id}
+            create Label[label_id: label_id]=>{name: this.label_name, author_id: author.device_id}
 
             emit LabelCreated {
                 label_id: label_id,
@@ -1455,11 +1459,12 @@ effect LabelRevoked {
 // been granted permission to use.
 action query_label_assignments(device_id id) {
     map AssignedLabel[device_id: device_id, label_id: ?] as f {
+        let label = check_unwrap query Label[label_id: f.label_id]
         publish QueryLabelAssignment {
             device_id: device_id,
             label_id: f.label_id,
-            label_name: f.name,
-            label_author_id: f.author_id,
+            label_name: label.name,
+            label_author_id: label.author_id,
         }
     }
 }
