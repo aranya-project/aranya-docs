@@ -1256,6 +1256,7 @@ command DeleteLabel {
                 label_id: this.label_id,
                 label_name: label.name,
                 label_author_id: label.author_id,
+                author_id: author.device_id,
             }
         }
     }
