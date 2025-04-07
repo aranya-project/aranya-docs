@@ -923,6 +923,7 @@ action create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) {
         receiver_id: receiver_id,
         label_id: label_id,
         peer_encap: ch.peer_encap,
+        author_secrets_id: ch.author_secrets_id,
         psk_length_in_bytes: ch.psk_length_in_bytes,
     }
 }
@@ -947,6 +948,9 @@ effect AqcUniChannelCreated {
     peer_enc_pk bytes,
     // The channel label.
     label_id id,
+    // A unique ID that the author can use to look up the
+    // channel's secrets.
+    author_secrets_id id,
     // The size in bytes of the PSK.
     //
     // Per the AQC specification, this must be at least 32 and
@@ -994,6 +998,9 @@ command AqcCreateUniChannel {
         receiver_id id,
         // The label applied to the channel.
         label_id id,
+        // A unique ID that the author can use to look up the
+        // channel's secrets.
+        author_secrets_id id,
         // The channel peer's encapsulated KEM shared secret.
         peer_encap bytes,
     }
@@ -1044,6 +1051,7 @@ command AqcCreateUniChannel {
                     author_enc_key_id: author.enc_key_id,
                     peer_enc_pk: peer_enc_pk,
                     label_id: label.label_id,
+                    author_secrets_id: this.author_secrets_id,
                     psk_length_in_bytes: this.psk_length_in_bytes,
                 }
             }
@@ -1090,10 +1098,20 @@ command AqcCreateUniChannel {
 ```policy
 // Returned by `create_bidi_channel`.
 struct AqcBidiChannel {
-    // The channel peer's encapsulated KEM shared secret.
-    peer_encap bytes,
-    // The channel's unique ID.
+    // Uniquely identifies the channel.
     channel_id id,
+    // The channel peer's encapsulated KEM shared secret.
+    //
+    // This must be sent to the peer.
+    peer_encap bytes,
+    // A unique ID that the author can use to look up the
+    // channel's secrets in the keystore.
+    author_secrets_id id,
+    // The size in bytes of the PSK.
+    //
+    // Per the AQC specification, this must be at least 32 and
+    // less than 2^16.
+    psk_length_in_bytes int,
 }
 
 // Creates a bidirectional AQC channel.
@@ -1108,10 +1126,20 @@ function create_bidi_channel(
 
 // Returned by `create_uni_channel`.
 struct AqcUniChannel {
-    // The channel peer's encapsulated KEM shared secret.
-    peer_encap bytes,
-    // The channel's unique ID.
+    // Uniquely identifies the channel.
     channel_id id,
+    // The channel peer's encapsulated KEM shared secret.
+    //
+    // This must be sent to the peer.
+    peer_encap bytes,
+    // A unique ID that the author can use to look up the
+    // channel's secrets in the keystore.
+    author_secrets_id id,
+    // The size in bytes of the PSK.
+    //
+    // Per the AQC specification, this must be at least 32 and
+    // less than 2^16.
+    psk_length_in_bytes int,
 }
 
 // Creates a unidirectional AQC channel.
