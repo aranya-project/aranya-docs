@@ -1010,9 +1010,9 @@ command AqcCreateUniChannel {
               author.device_id == this.receiver_id
 
         let peer_id = if author.device_id == this.sender_id {
-            this.receiver_id
+            :this.receiver_id
         } else {
-            this.sender_id
+            :this.sender_id
         }
         let peer = check_unwrap find_existing_device(peer_id)
 
