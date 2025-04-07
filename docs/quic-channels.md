@@ -1162,7 +1162,7 @@ command CreateLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists Label[name: this.label_name, author_id: author.device_id]
+        check !exists Label[label_id: this.label_id]
 
         finish {
             create Label[label_id: this.label_id]=>{name: this.label_name, author_id: author.device_id}
