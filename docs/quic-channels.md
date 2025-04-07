@@ -1426,7 +1426,7 @@ effect LabelRevoked {
 // Emits `QueriedLabelAssignment` for all labels the device has
 // been granted permission to use.
 action query_label_assignments(device_id id) {
-    map AssignedLabel[device_id: id, label_id: ?] as f {
+    map AssignedLabel[device_id: device_id, label_id: ?] as f {
         publish QueryLabelAssignment {
             device_id: device_id,
             label_id: f.label_id,
