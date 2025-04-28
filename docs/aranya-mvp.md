@@ -103,7 +103,7 @@ APIs can be exposed to change those configured values.
 
 A config object will be used to instantiate a graph, i.e. in the action to perform the Init command
 and the API call for adding an existing graph (see CreateTeam and AddTeam APIs below). The config
-object will be versioned and extensible, and should not break API compatibility.
+object will extensible by implementing a builder pattern to set optional fields, and should not break API compatibility as fields are changed.
 
 ## Components
 
@@ -244,10 +244,16 @@ flag to allow embedded devices and advanced users to access them.
 
 - `SetAfcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
 device for use with AFC. If the address already exists for this device, it is replaced with the new
-address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
+address. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AFC which means different devices cannot have the same network identifier.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
+- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AFC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAfcNetIdentifier` is called again. Destroys all existing channels where the device can receive data.
+- `SetAqcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
+device for use with AQC. If the address already exists for this device, it is replaced with the new
+address. For use with CreateChannel and receiving messages. There is a 1:1 mapping between a device ID and the network identifier used for AQC which means different devices cannot have the same network identifier.
+Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
+lookup.
+- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a AQC network address from a device. This prevents the device from creating new channels where it receives data from a peer until `SetAqcNetIdentifier` is called again. Destroys all existing channels where the device can receive data.
 - `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
 - `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
 - `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
@@ -260,12 +266,13 @@ FactDB queries over the current perspective of the graph should be possible thro
 commands in the policy that will return query results in their emitted effects. These APIs
 are likely to be moved to nice-to-have or Post-MVP, but are currently planned for MVP.
 
-- `QueryRoleAssignment(device_id) -> Role`
-- `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAfcNetworkId(device_id) -> network_str`
-- `QueryAfcLabelAssignments(device_id) -> Vec<label>`
-- `QueryAfcLabelExists(device_id) -> Vec<label>`
-
+- `QueryDevicesOnTeam(team_id) -> Vec<device_id>`
+- `QueryDeviceRole(team_id, device_id) -> Role`
+- `QueryDeviceKeybundle(team_id, device_id) -> Keybundle`
+- `QueryDeviceLabelAssignments(team_id, device_id) -> Vec<label>`
+- `QueryAfcNetIdentifier(team_id, device_id) -> network_str`
+- `QueryAqcNetIdentifier(team_id, device_id) -> network_str`
+- `QueryLabelExists(team_id, label) -> bool`
 
 ## Roles & Permissions
 
