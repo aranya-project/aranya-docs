@@ -70,6 +70,7 @@ Devices with sufficient permissions (typically administrators)
 can create labels, and devices with sufficient permissions can
 grant other devices permission to use those labels. Devices can
 be granted permission to use an arbitrary number of labels.
+Devices are prohibited from assigning labels to themselves.
 
 Labels can be as general or as specific as needed. For example,
 an administrator might create the more general `TELEMETRY` label
@@ -140,6 +141,11 @@ unique, even if its name and author ID are the same.
 Since IDs are opaque, a label's name helps identify it to humans.
 The label's author ID helps differentiate multiple labels with
 the same name.
+
+Each label is associated with a particular role called the
+"managing role." A device must have this role in order to assign
+the label to *other* devices. (Devices are never allowed to
+assign roles to themselves.)
 
 ### Creation and Lifetime
 
@@ -599,10 +605,18 @@ use envelope
 use idam
 use perspective
 
+// NB: The following structs and functions are stubbed out.
+
 // A device.
 struct Device {
     // The device's ID.
     device_id id,
+}
+
+// A Role.
+struct Role {
+    // Uniquely identifies the role.
+    role_id id,
 }
 
 // Returns a device.
@@ -622,6 +636,12 @@ function seal_command(payload bytes) struct Envelope
 // key, and if verification succeeds, returns the serialized
 // basic command data .
 function open_envelope(sealed_envelope struct Envelope) bytes
+
+// Returns a role.
+function find_role(role_id id) struct Role
+
+// Reports whether the device has the specified role.
+function has_role(device_id id, role_id id) bool
 ```
 
 #### Enums and Structs
@@ -1162,13 +1182,22 @@ function create_uni_channel(
 ```policy
 // Records a label for AQC and AFC.
 //
-// `name` is a short description of the label. E.g., "TELEMETRY".
+// - `name` is a short description of the label, like
+//   "TELEMETRY".
+// - `author_id` is the ID of the device that created the label.
 fact Label[label_id id]=>{name string, author_id id}
 
 // Creates a label for AQC and AFC.
-action create_label(name string) {
+//
+// - `name` is a short description of the label, like
+//   "TELEMETRY".
+// - `managing_role_id` specifies the ID of the role required to
+//    grant other devices permission to use the label. Devices
+//    are never allowed to assign labels to themselves.
+action create_label(name string, managing_role_id id) {
     publish CreateLabel {
         label_name: name,
+        managing_role_id: managing_role_id,
     }
 }
 
@@ -1176,6 +1205,9 @@ command CreateLabel {
     fields {
         // The label name.
         label_name string,
+        // The ID of the role required to grant *other* devices
+        // permission to use the label.
+        managing_role_id id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1184,10 +1216,13 @@ command CreateLabel {
     policy {
         let author = get_valid_device(envelope::author_id(envelope))
 
+        // NB: Check roles, other ACLs here.
+
         // A label's ID is the ID of the command that created it.
         let label_id = envelope::command_id(envelope)
 
-        // NB: Check roles, other ACLs here.
+        // Make sure the role exists.
+        let role = find_role(this.role_id)
 
         // Verify that the label does not already exist.
         //
@@ -1198,11 +1233,13 @@ command CreateLabel {
 
         finish {
             create Label[label_id: label_id]=>{name: this.label_name, author_id: author.device_id}
+            create CanAssignLabel[label_id: label_id]=>{managing_role_id: role.role_id}
 
             emit LabelCreated {
                 label_id: label_id,
                 label_name: this.label_name,
                 label_author_id: author.device_id,
+                managing_role_id: role.role_id,
             }
         }
     }
@@ -1217,6 +1254,9 @@ effect LabelCreated {
     label_name string,
     // The ID of the device that created the label.
     label_author_id id,
+    // The ID of the role required to grant *other* devices
+    // permission to use the label.
+    managing_role_id id,
 }
 
 action delete_label(label_id id) {
@@ -1316,12 +1356,96 @@ effect QueriedLabel {
     label_author_id id,
 }
 
+// Records that a particular role is required in order to grant
+// *other* devices permission to use the label.
+//
+// Devices with the role are allowed to grant any *other* device
+// permission to use the label. Devices cannot grant themselves
+// permission to use the label, even if they have the requisite
+// role.
+fact CanAssignLabel[label_id id]=>{managing_role_id id}
+
+// Changes the role required to grant *other* devices permission
+// to use the label.
+//
+// Devices with the role are allowed to grant any *other* device
+// permission to use the label. Devices cannot grant themselves
+// permission to use the label, even if they have the requisite
+// role.
+action change_label_managing_role(label_id id, managing_role_id id) {
+    publish ChangeLabelManagingRole {
+        label_id: label_id,
+        managing_role_id: managing_role_id,
+    }
+}
+
+command ChangeLabelManagingRole {
+    fields {
+        // The label to update.
+        label_id id,
+        // The ID of the role required to grant *other* devices
+        // permission to use the label.
+        managing_role_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+
+        // NB: Check roles, other ACLs here.
+
+        let label = check_unwrap query Label[label_id: this.label_id]
+
+        // Only the author of the label is allowed to change the
+        // managing role.
+        check author.device_id == label.author_id
+
+        let ctx = check_unwrap query CanAssignLabel[label_id: label.label_id]
+        let old_managing_role_id = ctx.managing_role_id
+
+        // Make sure the role exists.
+        let role = find_role(this.role_id)
+        let new_managing_role_id = role.role_id
+
+        finish {
+            update CanAssignLabel[label_id: label.label_id]=>{managing_role_id: old_managing_role_id} to {managing_role_id: new_managing_role_id}
+
+            emit LabelUpdated {
+                label_id: label.label_id,
+                label_name: label.name,
+                label_author_id: label.author_id,
+                managing_role_id: new_managing_role_id,
+            }
+        }
+    }
+}
+
+// The effect emitted when the `ChangeLabelManagingRole` command
+// is successfully processed.
+effect LabelUpdated {
+    // Uniquely identifies the label.
+    label_id id,
+    // The label name.
+    label_name string,
+    // The ID of the device that created the label.
+    label_author_id id,
+    // The ID of the role required to grant *other* devices
+    // permission to use the label.
+    managing_role_id id,
+}
+
 // Records that a device was granted permission to use a label
 // for certain channel operations.
 fact AssignedLabel[device_id id, label_id id]=>{op enum ChanOp}
 
 // Grants the device permission to use the label.
 //
+// - It is an error if the author does not have the role required
+//   to assign this label.
+// - It is an error if `device_id` refers to the author (devices
+//   are never allowed to assign roles to themselves).
 // - It is an error if the device does not exist.
 // - It is an error if the label does not exist.
 // - It is an error if the device has already been granted
@@ -1354,7 +1478,15 @@ command AssignLabel {
 
         // NB: Check roles, other ACLs here.
 
+        // Devices are never allowed to assign roles to
+        // themselves.
+        check target.device_id != author.device_id
+
         let label = check_unwrap query Label[label_id: this.label_id]
+
+        // The author must have permission to assign the label.
+        let ctx = check_unwrap query CanAssignLabel[label_id: label.label_id]
+        check has_role(author.device_id, ctx.managing_role_id)
 
         // Verify that the device has not already been granted
         // permission to use the label.
