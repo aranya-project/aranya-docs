@@ -599,10 +599,18 @@ use envelope
 use idam
 use perspective
 
+// NB: The following structs and functions are stubbed out.
+
 // A device.
 struct Device {
     // The device's ID.
     device_id id,
+}
+
+// A Role.
+struct Role {
+    // Uniquely identifies the role.
+    role_id id,
 }
 
 // Returns a device.
@@ -622,6 +630,9 @@ function seal_command(payload bytes) struct Envelope
 // key, and if verification succeeds, returns the serialized
 // basic command data .
 function open_envelope(sealed_envelope struct Envelope) bytes
+
+// Returns a role.
+function find_role(role_id id) struct Role
 ```
 
 #### Enums and Structs
@@ -1162,13 +1173,23 @@ function create_uni_channel(
 ```policy
 // Records a label for AQC and AFC.
 //
-// `name` is a short description of the label. E.g., "TELEMETRY".
+// - `name` is a short description of the label, like
+//   "TELEMETRY".
+// - `author_id` is the ID of the device that created the label.
 fact Label[label_id id]=>{name string, author_id id}
 
+
 // Creates a label for AQC and AFC.
-action create_label(name string) {
+//
+// - `name` is a short description of the label, like
+//   "TELEMETRY".
+// - `role_id` specifies the role required to assign the label to
+//   other devices. Devices are never allowed to assign labels to
+//   themselves.
+action create_label(name string, role_id id) {
     publish CreateLabel {
         label_name: name,
+        role_id: role_id,
     }
 }
 
@@ -1176,6 +1197,9 @@ command CreateLabel {
     fields {
         // The label name.
         label_name string,
+        // The role required to assign the label to other
+        // devices.
+        role_id id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -1184,10 +1208,13 @@ command CreateLabel {
     policy {
         let author = get_valid_device(envelope::author_id(envelope))
 
+        // NB: Check roles, other ACLs here.
+
         // A label's ID is the ID of the command that created it.
         let label_id = envelope::command_id(envelope)
 
-        // NB: Check roles, other ACLs here.
+        // Make sure the role exists.
+        let role = find_role(this.role_id)
 
         // Verify that the label does not already exist.
         //
@@ -1198,11 +1225,13 @@ command CreateLabel {
 
         finish {
             create Label[label_id: label_id]=>{name: this.label_name, author_id: author.device_id}
+            create CanAssignLabel[label_id: label_id]=>{role_id: role.role_id}
 
             emit LabelCreated {
                 label_id: label_id,
                 label_name: this.label_name,
                 label_author_id: author.device_id,
+                role_id: role.role_id,
             }
         }
     }
@@ -1217,6 +1246,8 @@ effect LabelCreated {
     label_name string,
     // The ID of the device that created the label.
     label_author_id id,
+    // The ID of the role required to assign the label.
+    role_id id,
 }
 
 action delete_label(label_id id) {
@@ -1314,6 +1345,73 @@ effect QueriedLabel {
     label_name string,
     // The ID of the device that created the label.
     label_author_id id,
+}
+
+// Records that a particular role is required in order to grant
+// *other* devices permission to use the label.
+//
+// Devices with the role are allowed to grant any *other* device
+// permission to use the label. Devices cannot grant themselves
+// permission to use the label, even if they have the requisite
+// role.
+fact CanAssignLabel[label_id id]=>{role_id id}
+
+// Changes the role required to grant *other* devices permission
+// to use the label.
+//
+// Devices with the role are allowed to grant any *other* device
+// permission to use the label. Devices cannot grant themselves
+// permission to use the label, even if they have the requisite
+// role.
+action change_label_assignment_role(label_id id, role_id id) {
+    publish ChangeLabelAssignmentRole {
+        label_id: label_id,
+        role_id: role_id,
+    }
+}
+
+command ChangeLabelAssignmentRole {
+    fields {
+        // The label to update.
+        label_id id,
+        // The role required to assign the label to other
+        // devices.
+        role_id id,
+    }
+
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        let author = get_valid_device(envelope::author_id(envelope))
+
+        // NB: Check roles, other ACLs here.
+
+        let label = check_unwrap query Label[label_id: this.label_id]
+        let role = check_unwrap query CanAssignLabel[label_id: this.label_id]
+
+        // Make sure the role exists.
+        let role = find_role(this.role_id)
+
+        // Verify that the label does not already exist.
+        //
+        // This will happen in the `finish` block if we try to
+        // create an already true label, but checking first
+        // results in a nicer error (I think?).
+        check !exists Label[label_id: label_id]
+
+        finish {
+            create Label[label_id: label_id]=>{name: this.label_name, author_id: author.device_id}
+            create CanAssignLabel[label_id: label_id]=>{role_id: role.role_id}
+
+            emit LabelCreated {
+                label_id: label_id,
+                label_name: this.label_name,
+                label_author_id: author.device_id,
+                role_id: role.role_id,
+            }
+        }
+    }
 }
 
 // Records that a device was granted permission to use a label
