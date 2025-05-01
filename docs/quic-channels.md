@@ -1410,7 +1410,6 @@ command ChangeLabelManagingRole {
         let new_managing_role_id = role.role_id
 
         finish {
-            create Label[label_id: label.label_id]=>{name: this.label_name, author_id: author.device_id}
             update CanAssignLabel[label_id: label.label_id]=>{managing_role_id: old_managing_role_id} to {managing_role_id: new_managing_role_id}
 
             emit LabelUpdated {
