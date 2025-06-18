@@ -144,12 +144,12 @@ The client APIs are local-only API endpoints that do not create commands on the 
 mostly used to manage the local state. Depending on the language, the endpoints may be a different
 format that is more idiomatic to that language such as snake_case for C.
 
-- `Connect(daemon_sock, afc_shm_path, max_chans, afc_listen_addr) -> client` - creates a client
-connection to the daemon.
+- `ClientInit(client_config) -> client` - creates a client
+connection to the daemon IPC.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
 - `AddTeam(team_id, team_config{ mode: WrappedKey, psk: psk_seed }) -> bool` - add an existing team to the local device store with a specified team configuration. Not an
-Aranya action/command.
+Aranya action/command. Add team can accept either a raw or wrapped PSK seed depending on the mode provided.
 - `RemoveTeam(team_id) -> bool` - remove a team from the local device store. Not an Aranya action/
 command.
 - `SerializeKeyBundle(scheme, keybundle) -> bytes` - serialize a keybundle to a given format/
@@ -164,7 +164,7 @@ scheme.
 ##### Client Config
 
 - Daemon IPC unix domain socket path
-- AFC config (network address to bind to)
+- AFC config (network address to bind to, shm path)
 
 ##### Team Config
 
@@ -180,8 +180,14 @@ There are 3 modes for configuring the PSK for the QUIC syncer:
 - WrappedKey (Encrypted PSK seed passed in as input)
 - RawKey (Plaintext PSK seed passed in as input)
 
-`CreateTeam()` accepts on of the PSK modes as input and returns the PSK seed bytes. If `GenerateKey` mode is specified, the PSK seed is generated internally which is the preferred, most secure option.
+`CreateTeam()` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GenerateKey` mode is specified, the PSK seed is generated internally which is the preferred, most secure option.
 `AddTeam()` accepts the PSK bytes from `WrappedKey` or `RawKey` modes. `GenerateKey` is not a valid mode for this operation.
+
+##### Sync Peer Config
+
+Fields for configuring a sync peer:
+- `interval` time to wait between syncs
+- `sync_now` whether to sync immediately
 
 #### Sync API
 
@@ -193,13 +199,13 @@ remove peers to sync from.
 Unix Domain Sockets and shm will be used for IPC between the daemon and client library. Additional
 IPC mechanisms may be explored in the future.
 
-- `AddSyncPeer(address, team_id, config) -> bool` - add a peer to start syncing with at a specific
+- `AddSyncPeer(address, team_id, sync_config) -> bool` - add a peer to start syncing with at a specific
 rate. Syncing should support DNS resolution in the case a domain name is used. Syncs immediately
 the first time. The config object includes details for authorization (potentially authentication
 too) and options for syncing by pushing or pulling.
 - `RemoveSyncPeer(address, team_id) -> bool` - remove a sync peer associated with the given address,
 team_id.
-- `SyncNow(address, team_id, Option<config>) -> bool` - Trigger an immediate sync for the peer. If
+- `SyncNow(address, team_id, Option<sync_config>) -> bool` - Trigger an immediate sync for the peer. If
 a sync config is provided, use that. If no config arg is provided, fallback to the config used when
 the peer was added via AddSyncPeer. If the peer was not added, use a default config or error.
 https://github.com/aranya-project/aranya-docs/pull/24/files#r1917188406
@@ -223,7 +229,8 @@ Each endpoint creates one or more commands on the graph. The first command in th
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 
 - `GeneratePsk() -> psk_seed` - generates a PSK seed that can be securely exported.
-- `CreateTeam(owner_keybundle, team_config{ mode: GenerateKey, psk: Option<psk_seed> }) -> (team_id, psk_seed)` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping.
+- `CreateTeam(owner_keybundle, team_config{ mode: GenerateKey, psk: Option<psk_seed> }) -> (team_id, psk_seed)` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input and returns the PSK seed bytes. If `GenerateKey` mode is specified, a wrapped PSK seed is generated internally which is the preferred, most secure option.
+
 - `CloseTeam(team_id) -> bool` - close the team and stop all operations on the graph.
 - `AddDeviceToTeam(team_id, keybundle) -> bool` - add a device to the team with the default role.
 - `RemoveDeviceFromTeam(team_id, device_id) -> bool` - remove a device from the team.
