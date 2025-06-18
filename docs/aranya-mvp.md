@@ -228,7 +228,7 @@ The IDAM control plane is for managing identity and authorization by interacting
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 
-- `GeneratePsk() -> psk_seed` - generates a PSK seed that can be securely exported.
+- `GeneratePsk() -> psk_seed` - generates a PSK seed that can be securely exported. This PSK seed can be provided to `CreateTeam()` or `AddTeam()` using the `WrappedKey` mode.
 - `CreateTeam(owner_keybundle, team_config{ mode: GenerateKey, psk: Option<psk_seed> }) -> (team_id, psk_seed)` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input and returns the PSK seed bytes. If `GenerateKey` mode is specified, a wrapped PSK seed is generated internally which is the preferred, most secure option.
 
 - `CloseTeam(team_id) -> bool` - close the team and stop all operations on the graph.
