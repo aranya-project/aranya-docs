@@ -175,10 +175,10 @@ The QUIC syncer config is a field of the team config.
 
 To configure the QUIC syncer for a team, a PSK seed is needed to bootstrap the rustls PSK used to secure the sync protocol for a team.
 
-There are 3 modes for configuring the team PSK for the QUIC syncer:
-- `GeneratePskSeed` Default and most secure option. Aranya generates the PSK seed internally and returns a wrapped PSK seed.
-- `WrappedPskSeed(peer_enc_pk, encrypted_psk)` Encrypted PSK seed passed in as input. Key is authenticated using the senders public encryption key.
-- `RawPskSeed` Raw PSK IKM seed passed in as input.
+There are 3 mutually exclusive modes for configuring the team PSK for the QUIC syncer (represented as an enum). `PSK_MODE`:
+  - `GeneratePskSeed` Default and most secure option. Aranya generates the PSK seed internally and returns a wrapped PSK seed.
+  - `WrappedPskSeed(peer_enc_pk, encrypted_psk)` Encrypted PSK seed passed in as input. Key is authenticated using the senders public encryption key.
+  - `RawPskSeed` Raw PSK IKM seed passed in as input.
 
 `CreateTeam()` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GeneratePskSeed` mode is specified, the PSK seed is generated internally which is the preferred, most secure option. `WrappedPskSeed` is not a valid mode for this operation. Specifying the `RawPskSeed` as input will use a raw IKM PSK seed to derive the PSK.
 `AddTeam()` accepts the PSK bytes from `WrappedPskSeed` or `RawPskSeed` modes. `GeneratePskSeed` is not a valid mode for this operation.
