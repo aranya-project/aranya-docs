@@ -148,7 +148,7 @@ format that is more idiomatic to that language such as snake_case for C.
 connection to the daemon IPC.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
-- `AddTeam(team_id, team_config{ mode: WrappedKey, psk: psk_seed }) -> bool` - add an existing team to the local device store with a specified team configuration. Not an
+- `AddTeam(PSK_MODE:{WrappedPskSeed, RawPskSeed} psk) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
 Aranya action/command. Add team can accept either a raw IKM or wrapped PSK seed depending on the mode provided.
 - `RemoveTeam(team_id) -> bool` - remove a team from the local device store. Not an Aranya action/
 command.
@@ -177,8 +177,8 @@ To configure the QUIC syncer for a team, a PSK seed is needed to bootstrap the r
 
 There are 3 mutually exclusive modes for configuring the team PSK for the QUIC syncer (represented as an enum). `PSK_MODE`:
   - `GeneratePskSeed` Default and most secure option. Aranya generates the PSK seed internally and returns a wrapped PSK seed.
-  - `WrappedPskSeed(peer_enc_pk, encrypted_psk)` Encrypted PSK seed passed in as input. Key is authenticated using the senders public encryption key.
-  - `RawPskSeed` Raw PSK IKM seed passed in as input.
+  - `WrappedPskSeed(team_id, peer_enc_pk, encrypted_psk, encap_key)` Encrypted PSK seed passed in as input. Key is authenticated using the senders public encryption key.
+  - `RawPskSeed(team_id, raw_psk)` Raw PSK IKM seed passed in as input.
 
 `CreateTeam()` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GeneratePskSeed` mode is specified, the PSK seed is generated internally which is the preferred, most secure option. `WrappedPskSeed` is not a valid mode for this operation. Specifying the `RawPskSeed` as input will use a raw IKM PSK seed to derive the PSK.
 `AddTeam()` accepts the PSK bytes from `WrappedPskSeed` or `RawPskSeed` modes. `GeneratePskSeed` is not a valid mode for this operation.
@@ -228,9 +228,11 @@ The IDAM control plane is for managing identity and authorization by interacting
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 
-- `CreateTeam(owner_keybundle, team_config{ mode: GenerateKey, psk: Option<psk_seed> }) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
+- `GeneratePskInit() -> PSK_MODE:GeneratePskSeed` - returns a PSK mode to instruct `CreateTeam()` to generate a new PSK seed.
+- `RawPskInit(team_id, raw_psk_bytes) -> PSK_MODE:RawPskSeed` - returns a raw IKM PSK to use when initializing the QUIC syncer.
+- `CreateTeam(owner_keybundle, PSK_MODE psk) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
 - `Rand() -> random_bytes` - generate random bytes from CSPRNG. Can be used to generate a raw PSK seed IKM for the QUIC syncer.
-- `EncryptPskSeedForPeer(team_id, peer_pk_enc) -> encrypted_psk_seed` - encrypts a PSK seed for another peer device using the peer's public encryption key.
+- `EncryptPskSeedForPeer(team_id, peer_pk_enc) -> (PSK_MODE wrapped_psk)` - encrypts a PSK seed for another peer device using the peer's public encryption key.
 - `CloseTeam(team_id) -> bool` - close the team and stop all operations on the graph.
 - `AddDeviceToTeam(team_id, keybundle) -> bool` - add a device to the team with the default role.
 - `RemoveDeviceFromTeam(team_id, device_id) -> bool` - remove a device from the team.
