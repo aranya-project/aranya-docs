@@ -234,9 +234,6 @@ Easy to implement, key moving is done by integration.
 The IDAM control plane is for managing identity and authorization by interacting with the graph.
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
-
-- `GeneratePskInit() -> PSK_MODE:GeneratePskSeed` - returns a PSK mode to instruct `CreateTeam()` to generate a new PSK seed.
-- `RawPskInit(team_id, raw_psk_bytes) -> PSK_MODE:RawPskSeed` - returns a raw IKM PSK to use when initializing the QUIC syncer.
 - `CreateTeam(owner_keybundle, team_config) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
 - `Rand() -> random_bytes` - generate random bytes from CSPRNG. Can be used to generate a raw PSK seed IKM for the QUIC syncer.
 - `EncryptPskSeedForPeer(team_id, peer_pk_enc) -> team_config` - encrypts a PSK seed for another peer device using the peer's public encryption key. Returns a team config object containing the wrapped PSK seed.
