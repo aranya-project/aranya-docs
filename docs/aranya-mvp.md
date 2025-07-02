@@ -148,7 +148,7 @@ format that is more idiomatic to that language such as snake_case for C.
 connection to the daemon IPC.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
-- `AddTeam(team_id, team_config) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
+- `AddTeam(team_config) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
 Aranya action/command. Add team can accept either a raw IKM or wrapped PSK seed depending on the mode provided in the team config.
 - `RemoveTeam(team_id) -> bool` - remove a team from the local device store. Not an Aranya action/
 command.
@@ -166,13 +166,26 @@ scheme.
 - Daemon IPC unix domain socket path
 - AFC config (network address to bind to, shm path)
 
-##### Team Config
+##### Create Team Config
 
-The team config contains information needed to configure a team in Aranya.
-The QUIC syncer config is a field of the team config.
+The create team config contains information needed to configure a created team in Aranya.
+The QUIC syncer config is a field of the create team config.
 
 ```
-struct TeamConfig {
+struct CreateTeamConfig {
+  quic_sync: Option<QuicSyncConfig>,
+}
+```
+
+# Add Team Config
+
+The add team config contains information needed to configure an added team in Aranya. The QUIC syncer config is a field of the add team config.
+
+A device needs to know the ID of the team when adding it to local device storage.
+
+```
+struct AddTeamConfig {
+  team_id: TeamId,
   quic_sync: Option<QuicSyncConfig>,
 }
 ```
