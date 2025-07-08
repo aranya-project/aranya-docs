@@ -148,7 +148,7 @@ format that is more idiomatic to that language such as snake_case for C.
 connection to the daemon IPC.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
-- `AddTeam(team_config) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
+- `AddTeam(add_team_config) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
 Aranya action/command. Add team can accept either a raw IKM or wrapped PSK seed depending on the mode provided in the team config.
 - `RemoveTeam(team_id) -> bool` - remove a team from the local device store. Not an Aranya action/
 command.
@@ -173,11 +173,11 @@ The QUIC syncer config is a field of the create team config.
 
 ```
 struct CreateTeamConfig {
-  quic_sync: Option<QuicSyncConfig>,
+  quic_sync: Option<CreateTeamQuicSyncConfig>,
 }
 ```
 
-# Add Team Config
+##### Add Team Config
 
 The add team config contains information needed to configure an added team in Aranya. The QUIC syncer config is a field of the add team config.
 
@@ -186,7 +186,7 @@ A device needs to know the ID of the team when adding it to local device storage
 ```
 struct AddTeamConfig {
   team_id: TeamId,
-  quic_sync: Option<QuicSyncConfig>,
+  quic_sync: Option<AddTeamQuicSyncConfig>,
 }
 ```
 
@@ -194,13 +194,13 @@ struct AddTeamConfig {
 
 To configure the QUIC syncer for a team, a PSK seed is needed to bootstrap the rustls PSK used to secure the sync protocol for a team.
 
-There are 3 mutually exclusive modes for configuring the team PSK for the QUIC syncer (represented as an enum). `PSK_MODE`:
+There are 3 mutually exclusive modes for configuring the team PSK for the QUIC syncer (represented as an enum). `SeedMode`:
   - `GeneratePskSeed` Default and most secure option. Aranya generates the PSK seed internally and returns a wrapped PSK seed.
   - `WrappedPskSeed(peer_enc_pk, encrypted_psk, encap_key)` Encrypted PSK seed passed in as input. Key is authenticated using the sender's public encryption key.
   - `RawPskSeed(raw_psk)` Raw PSK IKM seed passed in as input.
 
-`CreateTeam()` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GeneratePskSeed` mode is specified, the PSK seed is generated internally which is the preferred, most secure option. `WrappedPskSeed` is not a valid mode for this operation. Specifying the `RawPskSeed` as input will use a raw IKM PSK seed to derive the PSK.
-`AddTeam()` accepts the PSK bytes from `WrappedPskSeed` or `RawPskSeed` modes. `GeneratePskSeed` is not a valid mode for this operation.
+`CreateTeam(...)` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GeneratePskSeed` mode is specified, the PSK seed is generated internally which is the preferred, most secure option. `WrappedPskSeed` is not a valid mode for this operation. Specifying the `RawPskSeed` as input will use a raw IKM PSK seed to derive the PSK.
+`AddTeam(...)` accepts the PSK bytes from `WrappedPskSeed` or `RawPskSeed` modes. `GeneratePskSeed` is not a valid mode for this operation.
 
 ##### Sync Peer Config
 
@@ -247,7 +247,7 @@ The IDAM control plane is for managing identity and authorization by interacting
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
 - `InitTeamConfig(Option<seed>) -> team_config` - Initialize a `TeamConfig` object with a QUIC syncer PSK seed.
-- `CreateTeam(owner_keybundle, team_config) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
+- `CreateTeam(owner_keybundle, create_team_config) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
 - `Rand() -> random_bytes` - generate random bytes from CSPRNG. Can be used to generate a raw PSK seed IKM for the QUIC syncer.
 - `EncryptPskSeedForPeer(team_id, keybundle) -> wrapped_seed` - encrypts a QUIC syncer PSK seed for another peer device using the peer's public encryption key. Returns wrapped PSK seed type containing the team ID and encrypted PSK seed. The team ID is included in this type so only a single serialized type needs to be transmitted to the peer before it can invoke `AddTeam()`.
 - `ReceivePskSeedFromPeer(wrapped_seed) -> (team_id, encrypted_seed)` - receives an encrypted PSK seed and team ID from another peer. Initialize a `TeamConfig` object with the QUIC syncer PSK seed before calling `AddTeam()` to add the team to the device.
