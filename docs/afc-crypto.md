@@ -50,7 +50,7 @@ fn decrypt(device, ciphertext) -> (label, plaintext);
 
 As mentioned, a _channel_ facilitates one-to-one communication.
 Logically, it is identified by a (device1, device2, label) tuple
-where _device1_ and _device2_ are [Aranya devices][AranyaDevices] and
+where _device1_ and _device2_ are Aranya devices and
 _label_ is an identifier that both devices have been granted
 permission to use.
 
@@ -354,7 +354,6 @@ Hybrid Public Key Encryption (HPKE) per [RFC 9180].
 [AES-256-GCM]: https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf
 [AES-GCM-SIV]: https://www.rfc-editor.org/rfc/rfc8452.html
 [AFC]: https://github.com/aranya-project/aranya-core/tree/main/crates/aranya-fast-channels
-[AranyaDevices]: https://git.spideroak-inc.com/spideroak-inc/aranya-docs/blob/main/src/idam.md#member-status
 [Ascon]: https://csrc.nist.gov/News/2023/lightweight-cryptography-nist-selects-ascon
 [Bellare]: https://eprint.iacr.org/2022/268
 [CSPRNG]: https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
