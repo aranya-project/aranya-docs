@@ -67,7 +67,7 @@ Client                    Server
 Both unidirectional and bidirectional sync use a single QUIC bidirectional stream. The key difference is in the stream lifecycle:
 
 - **Unidirectional**: Client sends request and immediately closes its send side. Server sends response and closes its send side.
-- **Bidirectional**: Neither side closes the send side until the full bidirectional exchange is complete.
+- **Bidirectional**: Client doesn't close the send side until it responds to the server's request. The server doesn't close the send side until it sends a sync request.
 
 ### Configuration
 
@@ -137,6 +137,7 @@ async fn sync_impl<S>(
     id: GraphId,
     sink: &mut S,
     peer: &Addr,
+    bidi: bool,
 ) -> impl Future<Output = SyncResult<()>> + Send
 where
     S: Sink<<crate::EN as Engine>::Effect> + Send,
@@ -150,9 +151,6 @@ where
         let server_addr = ();
         let mut sync_requester = SyncRequester::new(id, &mut Rng, server_addr);
 
-        // Determine if this should be a bidirectional sync
-        let bidirectional = /* check SyncPeerConfig */;
-
         // Send initial sync request
         syncer.send_sync_request(&mut send, &mut sync_requester, peer, bidirectional).await?;
 
@@ -160,8 +158,11 @@ where
         syncer.receive_sync_response(&mut recv, &mut sync_requester, &id, sink, peer).await?;
 
         // If bidirectional, handle server's sync request
-        if bidirectional {
-            syncer.handle_server_sync_request(&mut recv, &mut send, &id, sink, peer).await?;
+        if bidi {
+            // Read server's sync request
+            // Generate sync response
+            // Send response back to server
+            // Close send stream
         }
 
         Ok(())
@@ -182,23 +183,6 @@ impl Syncer<State> {
     ) -> SyncResult<()> {
         // Include bidirectional flag in the SyncType::Poll message
         // Do NOT close send stream if bidirectional
-    }
-
-    async fn handle_server_sync_request<S>(
-        &self,
-        recv: &mut ReceiveStream,
-        send: &mut SendStream,
-        id: &GraphId,
-        sink: &mut S,
-        peer: &Addr,
-    ) -> SyncResult<()>
-    where
-        S: Sink<<crate::EN as Engine>::Effect>,
-    {
-        // Read server's sync request
-        // Generate sync response
-        // Send response back to server
-        // Close send stream
     }
 }
 ```
@@ -236,6 +220,7 @@ pub async fn sync(
     if bidirectional {
         let our_request_data = Self::generate_sync_request(client.clone(), active_team).await?;
         send.send(Bytes::from(our_request_data)).await?;
+        send.close().await?;
 
         // Read client's response to our request
         let mut response_buf = Vec::new();
@@ -243,7 +228,6 @@ pub async fn sync(
         Self::process_sync_response(client, &response_buf, active_team).await?;
     }
 
-    send.close().await?;
     Ok(())
 }
 ```
