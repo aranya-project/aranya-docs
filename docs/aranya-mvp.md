@@ -282,16 +282,16 @@ device for use with AQC. If the address already exists for this device, it is re
 address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
+- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate an AQC network address from a device.
 - `CreateAqcBidiChannel(team_id, peer_net_ident, label) -> channel` - create a bidirectional AQC channel with the given peer.
 - `CreateAqcUniChannel(team_id, peer_net_ident, label) -> channel` - create a unidirectional AQC channel with the given peer.
 - `ReceiveAqcChannel() -> channel` - receive the next available AQC channel.
-- `ReceiveAqcStream(channel) -> stream` - receive the next available AQC stream.
-- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream.
-- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream.
-- `SendAqcStreamData(stream, data) -> bool` - send AQC stream data.
-- `ReceiveAqcStreamData(stream) -> Option<data>` - block until AQC data is received.
-- `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive AQC stream data.
+- `ReceiveAqcStream(channel) -> stream` - receive the next available AQC stream for an AQC channel.
+- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream on an existing AQC channel.
+- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream on an existing AQC channel.
+- `SendAqcStreamData(stream, data) -> bool` - send data via an AQC stream.
+- `ReceiveAqcStreamData(stream) -> Option<data>` - block until data is received via an AQC stream.
+- `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive data from an AQC stream.
 - `DeleteAqcChannel(team_id, channel_id)` - delete an AQC channel. Peer will delete the AQC channel as soon as it notices the QUIC connection has closed.
 
 ### Graph Querying APIs
