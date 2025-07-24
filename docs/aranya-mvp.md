@@ -72,7 +72,7 @@ application. This extends to the shared memory; there is no requirement it be pr
 program restarts.
 
 The client library exists inside the device's process and is used to interact with the daemon. The
-client library also includes a light wrapper around QUIC Channels (and similarly for AFC), allowing
+client library also includes a light wrapper around QUIC Channels, allowing
 the device to encrypt data and send messages to peers. QUIC channels will provide networking and
 mostly live in the client library. Channel setup will require communication with the daemon.
 Current plans for language bindings are to initially focus on the C API. The Rust client library is
@@ -97,7 +97,7 @@ daemon, and can help reduce errors in config mismatch by minimizing the number o
 values. The daemon will need to validate the configuration files and be able to handle cases of partial initialization.
 
 The daemon will expose a simple API that clients can use to request connection information for data
-planes like AFC. The client will be able to request the AFC config from the daemon and use that
+planes like AQC. The client will be able to request the AQC config from the daemon and use that
 directly. Other configuration values can also be added to this mechanism. After MVP, additional
 APIs can be exposed to change those configured values.
 
@@ -119,8 +119,7 @@ and labels as set out in the policy which is written in the MVP using [version 2
 For the MVP, Aranya Quic Channels (AQC) will be built to provide a simple API for sending and
 receiving messages using a modified Quic transport. The Aranya Quic Channels contains its own
 control plane for control messages, as well as the main data plane for moving data between devices.
-This is similar to Aranya Fast Channels (AFC) from the beta version but with a different underlying
-transport (AFC uses TCP). See [Aranya Quic Channels API](#aranya-quic-channels-api).
+See [Aranya Quic Channels API](#aranya-quic-channels-api).
 
 Component structure:
 
@@ -129,14 +128,7 @@ Component structure:
     - Quic Channels
       - Quic Channels control plane
       - Quic Channels data plane
-    - AFC (build flag required to enable API)
-      - AFC control plane
-      - AFC data plane
     - ... additional planes in future versions
-
-Rust features will be used for some features like the raw AFC interface. By default, AFC will not
-be included in the user facing API unless a specific build flag is present. The goal of this choice
-is to better signal which APIs are best suited for common use.
 
 ### Client APIs
 
@@ -164,7 +156,7 @@ scheme.
 ##### Client Config
 
 - Daemon IPC unix domain socket path
-- AFC config (network address to bind to, shm path)
+- AQC config (network address to bind to)
 
 ##### Create Team Config
 
@@ -264,47 +256,43 @@ associated to a device.
 
 ### Aranya Channels API
 
-The beta spec describes Aranya Fast Channels (AFC) which is replaced by Aranya Quic Channels (AQC)
-for the MVP. AFC is instead viewed as an experimental feature of the product which might still be
-preferred when running on embedded devices or when using a unidirectional transport. Refer to the
-beta spec and other existing documentation ([AFC](/docs/afc.md) and [AFC-Crypto](/docs/afc-crypto.md)) for more details on AFC.
-
 AQC uses a modified Quic transport implementation that supports the ability to use custom
 cryptography and has latency-based congestion control (see (s2n-quic)[https://github.com/aws/s2n-quic]).
 More information on AQC, including the list of AQC-specific APIs, can be found in the AQC spec:
 - Draft version: https://github.com/aranya-project/aranya-docs/blob/2-quic-channels/docs/quic-channels.md
 - Eventually where the final spec will live: https://github.com/aranya-project/aranya-docs/blob/main/docs/quic-channels.md
 
-Just like AFC, the Quic Channels plane is split in two different sub-planes: the Quic channels
+The Quic Channels plane is split in two different sub-planes: the Quic channels
 control plane and the Quic channels data plane. The AQC control plane is responsible for any Aranya command or ephemeral commands, while the AQC data plane contains only data-related APIs.
 
 Embedded devices that implement a subset of Aranya library should still be able to sync with
-clients that have the full product integrated. AFC should also be compatible between subset
-implementations and the full implementation. This compatibility is planned for Post-MVP.
+clients that have the full product integrated. This compatibility is planned for Post-MVP.
 
-The following APIs are used both for AQC and AFC:
+Both peer devices must be granted permission to use a label prior to creating an AQC channel with each other:
 
 - `CreateLabel(team_id, label)` - create a label
 - `DeleteLabel(team_id, label)` - delete a label
 - `AssignLabel(team_id, device_id, label)` - assign a label to a device
 - `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
 
-#### AFC API
+#### AQC API
 
-The AFC APIs are being moved to a lower level in the API. They will still be available via a build
-flag to allow embedded devices and advanced users to access them.
-
-- `SetAfcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
-device for use with AFC. If the address already exists for this device, it is replaced with the new
+- `SetAqcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
+device for use with AQC. If the address already exists for this device, it is replaced with the new
 address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
 Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
 lookup.
-- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
-- `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
-- `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
-- `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
-- `SendAfcData(channel_id, data)` - send data on the given channel.
-- `ReceiveAfcData() -> (data, metadata)` - receive data from AFC.
+- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
+- `CreateAqcBidiChannel(team_id, peer_net_ident, label) -> channel` - create a bidirectional AQC channel with the given peer.
+- `CreateAqcUniChannel(team_id, peer_net_ident, label) -> channel` - create a unidirectional AQC channel with the given peer.
+- `ReceiveAqcChannel() -> channel` - receive the next available AQC channel.
+- `ReceiveAqcStream(channel) -> stream` - receive the next available AQC stream.
+- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream.
+- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream.
+- `SendAqcStreamData(stream, data) -> bool` - send AQC stream data.
+- `ReceiveAqcStreamData(stream) -> Option<data>` - block until AQC data is received.
+- `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive AQC stream data.
+- `DeleteAqcChannel(team_id, channel_id)` - delete an AQC channel. Peer will delete the AQC channel as soon as it notices the QUIC connection has closed.
 
 ### Graph Querying APIs
 
@@ -314,9 +302,9 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 
 - `QueryRoleAssignment(device_id) -> Role`
 - `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAfcNetworkId(device_id) -> network_str`
-- `QueryAfcLabelAssignments(device_id) -> Vec<label>`
-- `QueryAfcLabelExists(device_id) -> Vec<label>`
+- `QueryAqcNetworkId(device_id) -> network_str`
+- `QueryAqcLabelAssignments(device_id) -> Vec<label>`
+- `QueryAqcLabelExists(device_id) -> Vec<label>`
 
 
 ## Roles & Permissions
@@ -389,19 +377,16 @@ subject to change. This list is unordered within the sections.
 -  Update existing code and docs to use "device" instead of "user".
   -  Ensure "graph" is used in core, while "team" is used in product.
 -  Add "ephemeral" marker in command metadata.
--  Take measures to deem AFC as experimental (e.g., updating docs)?
 -  Update AddSyncPeer to sync immediately
 -  Add config object with just version field to `CreateTeam` and `AddTeam` APIs.
 -  Implement `SyncNow`
 -  Add config object to `AddSyncPeer` and include the rate parameter in it.
   -  Might want to add max # of bytes to sync, timeout for number of secs it stays open, etc.
--  Update existing AFC APIs to include "afc" in their name to differentiate from Quic channels
 -  Custom policy roles spec and implementation
 -  Allow a single keybundle to participate in multiple teams via some sort of root-identity-key (or other mechanism)
 -  Fact DB queries via session commands
 -  Standardize C API names to follow naming scheme.
 -  Update key agreement commands to have a field for the sender's graph head ID. https://github.com/aranya-project/aranya-docs/pull/24#discussion_r1937642908
--  Move AFC to behind build flag
 
 ### Low
 -  Set up CI to measure resource usage
@@ -461,8 +446,7 @@ some other pattern is required.
 
 ## Appendix C: Glossary
 
-- `AFC` - the library used to do high performance encryption using keys managed by `Aranya`.
-- `Aranya Quic Channels (maybe AQC)` - An integration of Aranya with QUIC to provide a secure
+- `Aranya Quic Channels (AQC)` - An integration of Aranya with QUIC to provide a secure
 and integrated transport. See QUIC channels spec. TODO(declan): link
 - `Aranya` - the main library that drives the control plane and policy execution.
 - `daemon` - a long-lived process, typically running in the background, that
