@@ -1107,7 +1107,7 @@ Either peer can initiate deletion of an AQC channel. When a peer detects that an
 
 Events that can cause an AQC channel to be deleted:
 - Application explicitly deleting a channel via the Aranya API.
-- QUIC channel/stream close, timeout, or other non-recoverable error.
+- QUIC connection close, timeout, or other non-recoverable error.
 - Revocation of permissions: label deletion, label revocation from either peer, removal of either peer device from the team.
 
 When an AQC channel is deleted, the following should be deleted:
