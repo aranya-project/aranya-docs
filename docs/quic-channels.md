@@ -1097,6 +1097,29 @@ command AqcCreateUniChannel {
   granted either the `ChanOp::RecvOnly` or `ChanOp::SendRecv`
   permission for the label assigned to the channel.
 
+#### AQC Channel Deletion
+
+Since AQC channels are ephemeral, there is no need to validate channel deletion via a graph command.
+Any commands intended to close an AQC channel are not guaranteed to be received by the peer in a distributed system.
+Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as loss of network connectivity with the peer, QUIC channel close/timeout, etc.
+
+Either peer can initiate deletion of an AQC channel. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
+
+Events that can cause an AQC channel to be deleted:
+- Application explicitly deleting a channel via the Aranya API.
+- QUIC connection close, timeout, or other non-recoverable error.
+- Revocation of permissions: label deletion, label revocation from either peer, removal of either peer device from the team.
+
+When an AQC channel is deleted, the following should be deleted:
+- Any private key material associated with the channel (e.g. PSKs or certificates).
+- Network resources associated with the channel (e.g. QUIC connections and streams).
+
+Since the daemon does not currently have a way to notify the Aranya client, the client should periodically query whether the active AQC channels are valid.
+For an AQC channel to be valid according to the Aranya graph:
+- Both peers must exist on the team
+- Both peers must have the channel's label assigned to them
+- The label must exist
+
 #### AQC FFI
 
 ```policy
@@ -1160,12 +1183,12 @@ function create_uni_channel(
 ### Labels
 
 ```policy
-// Records a label for AQC and AFC.
+// Records a label for AQC.
 //
 // `name` is a short description of the label. E.g., "TELEMETRY".
 fact Label[label_id id]=>{name string, author_id id}
 
-// Creates a label for AQC and AFC.
+// Creates a label for AQC.
 action create_label(name string) {
     publish CreateLabel {
         label_name: name,
