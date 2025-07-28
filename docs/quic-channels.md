@@ -1111,14 +1111,17 @@ Events that can cause an AQC channel to be deleted:
 - Revocation of permissions: label deletion, label revocation from either peer, removal of either peer device from the team.
 
 When an AQC channel is deleted, the following should be deleted:
-- Any private key material associated with the channel (e.g. PSKs or certificates).
+- Any private key material associated with the channel (e.g. PSKs or certificates). Drop implementations for PSKs/certs should implement `Zeroize` in their `Drop` implementation so that private key material is automatically zeroized when it is dropped.
 - Network resources associated with the channel (e.g. QUIC connections and streams).
 
 Since the daemon does not currently have a way to notify the Aranya client, the client should periodically query whether the active AQC channels are valid.
 For an AQC channel to be valid according to the Aranya graph:
-- Both peers must exist on the team
-- Both peers must have the channel's label assigned to them
+- Both peer devices must exist on the team
+- Both peer devices must have the channel's label assigned to them
 - The label must exist
+
+The Aranya client should periodically query whether the active AQC channels are valid in a single query like this:
+`QueryValidAqcChannels(team_id, Vec<(device_a, device_b, label)>) -> Result<Vec<bool>>` - returns a list of booleans representing which AQC channels are valid according to the current state of the Aranya graph. If `false` is returned for any of the AQC channels, that channel should be closed immediately.
 
 #### AQC FFI
 
