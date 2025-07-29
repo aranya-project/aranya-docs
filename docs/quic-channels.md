@@ -1101,13 +1101,14 @@ command AqcCreateUniChannel {
 
 Since AQC channels are ephemeral, there is no need to validate channel deletion via a graph command.
 Any commands intended to close an AQC channel are not guaranteed to be received by the peer in a distributed system.
-Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as loss of network connectivity with the peer, QUIC channel close/timeout, etc.
+Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as when a QUIC connection closes.
+Since an AQC channel may have multiple QUIC connections, the peer should send an error code indicating whether the entire AQC channel is being closed or just that connection.
 
 Either peer can initiate deletion of an AQC channel. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
 
 Events that can cause an AQC channel to be deleted:
 - Application explicitly deleting a channel via the Aranya API.
-- QUIC connection close, timeout, or other non-recoverable error.
+- QUIC connection close with error code indicating the peer is closing the AQC channel.
 - Revocation of permissions: label deletion, label revocation from either peer, removal of either peer device from the team.
 
 When an AQC channel is deleted, the following should be deleted:
