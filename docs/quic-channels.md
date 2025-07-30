@@ -1117,6 +1117,7 @@ When an AQC channel is deleted, the following should be deleted:
 
 Since the daemon does not currently have a way to notify the Aranya client, the client should periodically query whether the active AQC channels are valid.
 For an AQC channel to be valid according to the Aranya graph:
+- The team must not have been terminated
 - Both peer devices must exist on the team
 - Both peer devices must have the channel's label assigned to them
 - The label must exist
