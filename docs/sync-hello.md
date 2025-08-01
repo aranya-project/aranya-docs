@@ -22,6 +22,8 @@ Sync hello provides this notification approach, letting peers know when updates 
 
 Sync hello implements a subscription-based notification approach where peers can subscribe to receive lightweight "hello" messages containing the current graph head whenever the sender's graph is updated. Receiving peers can compare this head with their own state to determine if they need to sync.
 
+Additionally, peers can be configured to send hello notifications to specified peers without requiring those peers to subscribe to hello notifications first. This configuration-based approach allows peer A to automatically notify peer B based on local settings.
+
 ### Message Types
 
 ```rust
@@ -52,11 +54,25 @@ pub enum SyncHelloType {
 
 ### Subscription Management
 
-Peers must explicitly subscribe to receive hello notifications from other peers:
+There are two ways peers can be subscribed to receive hello notifications:
+
+#### Subscribe to Hello Notifications
+Peers can subscribe to hello notifications over the network from other peers:
 
 1. **Subscribe**: Send a `Subscribe` message specifying the team ID and desired delay between notifications
 2. **Subscription Storage**: The receiving peer stores subscription information including the subscriber's address, team ID, and delay preference
 3. **Unsubscribe**: Send an `Unsubscribe` message to stop receiving notifications
+
+#### Hello Subscriptions
+Peers can be configured to send hello notifications to specified peers:
+
+1. **Configuration**: Each peer's client has a `hello_interval_seconds` setting that defines the default delay for hello subscriptions
+2. **Hello Subscription API**: Peers can use a local API to add hello subscriptions for specific peers.
+
+#### Subscription Precedence
+- All subscriptions are stored in the same way, regardless of how they were created
+- Any new subscription (whether from hello subscription API or Subscribe message) replaces any existing subscription for that peer and team
+- Unsubscribing removes the subscription for that peer and team, regardless of how it was originally created
 
 ### Sending Hello Messages
 
@@ -128,8 +144,8 @@ The syncer must maintain subscription state for hello notifications:
 struct HelloSubscription {
     /// The subscriber's network address
     subscriber_address: SocketAddr,
-    /// The team ID they're subscribed to
-    team_id: TeamId,
+    /// The graph ID they're subscribed to
+    team_id: GraphId,
     /// Delay in seconds between notifications to this subscriber
     delay_seconds: u64,
     /// Last notification time for delay management
@@ -137,14 +153,59 @@ struct HelloSubscription {
 }
 
 // Storage: Map from (team_id, subscriber_address) to subscription details
-type HelloSubscriptions = HashMap<(TeamId, SocketAddr), HelloSubscription>;
+type HelloSubscriptions = HashMap<(GraphId, SocketAddr), HelloSubscription>;
 ```
+
+### Hello Subscription API
+
+The daemon will expose a local API for managing hello subscriptions (separate from the network-based sync hello messages):
+
+```rust
+// Local API calls (in aranya repo, not aranya-core)
+pub struct HelloSubscriptionRequest {
+    /// The peer's network address to notify
+    peer_address: SocketAddr,
+    /// The team ID to send notifications for
+    team_id: GraphId,
+}
+
+// API methods
+impl SyncHelloManager {
+    /// Add a hello subscription using the client's hello_interval_seconds delay
+    pub fn add_hello_subscription(&mut self, request: HelloSubscriptionRequest) -> Result<()>;
+    
+    /// Remove a hello subscription
+    pub fn remove_hello_subscription(&mut self, request: HelloSubscriptionRequest) -> Result<()>;
+    
+    /// List all current hello subscriptions
+    pub fn list_hello_subscriptions(&self) -> Vec<HelloSubscriptionRequest>;
+}
+```
+
+### Configuration
+
+The client configuration will be extended to support sync hello settings via the `ClientBuilder`:
+
+```rust
+// Client-side configuration
+let client = Client::builder()
+    .daemon_uds_path("/var/run/aranya/uds.sock".as_ref())
+    .aqc_server_addr(&(Ipv4Addr::UNSPECIFIED, 1234).into())
+    .hello_interval_seconds(30) // Global interval for hello subscriptions
+    .connect()
+    .await?;
+```
+
+If `hello_interval_seconds` is not set, it will default to 1 second.
 
 ### Delay Management
 
 To manage notification timing:
 
 - **Delay Scheduling**: Track `last_notified` time for each subscriber and respect their `delay_seconds` setting
+- **Hello Subscriptions**: Use the client's `hello_interval_seconds` setting as the delay when creating subscriptions via the local API
+- **Subscribe to Hello Notifications**: Use the `delay_seconds` value from the Subscribe message
+- **Replacement**: Any new subscription replaces the existing one with the new delay value
 - **Batching**: If multiple graph updates occur during a subscriber's delay period, send only the latest head
 
 ## Limitations
