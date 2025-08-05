@@ -32,7 +32,7 @@ pub enum SyncHelloType {
     Subscribe {
         /// The team ID to subscribe to updates for
         team_id: TeamId,
-        /// Delay in seconds between notifications to this subscriber
+        /// Minimum delay in milliseconds between notifications to this subscriber
         /// 0 = notify immediately, 1 = 1 second delay between notifications, etc.
         delay_seconds: u64,
     },
