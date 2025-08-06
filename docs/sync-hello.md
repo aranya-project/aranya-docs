@@ -33,8 +33,8 @@ pub enum SyncHelloType {
         /// The team ID to subscribe to updates for
         team_id: TeamId,
         /// Minimum delay in milliseconds between notifications to this subscriber
-        /// 0 = notify immediately, 1 = 1 second delay between notifications, etc.
-        delay_seconds: u64,
+        /// 0 = notify immediately, 1 = 1 millisecond delay between notifications, etc.
+        delay_milliseconds: u64,
     },
     // Unsubscribe from hello notifications
     Unsubscribe {
@@ -66,7 +66,7 @@ Peers can subscribe to hello notifications over the network from other peers:
 #### Hello Subscriptions
 Peers can be configured to send hello notifications to specified peers:
 
-1. **Configuration**: Each peer's client has a `hello_interval_seconds` setting that defines the default delay for hello subscriptions
+1. **Configuration**: Each peer's client has a `hello_interval_milliseconds` setting that defines the default delay for hello subscriptions
 2. **Hello Subscription API**: Peers can use a local API to add hello subscriptions for specific peers.
 
 #### Subscription Precedence
@@ -81,8 +81,8 @@ Peers can be configured to send hello notifications to specified peers:
    - Sync operations that incorporate new commands from peers
 
 2. **Delay Management**: Messages are sent to each subscriber respecting their configured delay:
-   - `delay_seconds: 0` - notify immediately
-   - `delay_seconds: 1` - wait 1 second between notifying each subscriber
+   - `delay_milliseconds: 0` - notify immediately
+   - `delay_milliseconds: 1` - wait 1millisecond between notifying each subscriber
    - Higher values provide longer delays between notifications
 
 3. **Delivery**: Hello messages are sent as fire-and-forget notifications - no acknowledgment or retry mechanism is required
@@ -97,14 +97,14 @@ Peers can be configured to send hello notifications to specified peers:
 
 ```
 Setup Phase:
-Peer B → Subscribe{team_id: T1, delay_seconds: 0} → Peer A
+Peer B → Subscribe{team_id: T1, delay_milliseconds: 0} → Peer A
 Peer A stores subscription for B with delay 0
 
 Runtime Phase:
 Peer A updates graph → New head address H1
                    ↓
     Send Hello{team_id: T1, head_id: H1} to subscribers
-    (respecting delay_seconds for each subscriber)
+    (respecting delay_milliseconds for each subscriber)
                    ↓
               Peer B receives hello
                    ↓
@@ -146,8 +146,8 @@ struct HelloSubscription {
     subscriber_address: SocketAddr,
     /// The graph ID they're subscribed to
     team_id: GraphId,
-    /// Delay in seconds between notifications to this subscriber
-    delay_seconds: u64,
+    /// Delay in milliseconds between notifications to this subscriber
+    delay_milliseconds: u64,
     /// Last notification time for delay management
     last_notified: Option<Instant>,
 }
@@ -171,7 +171,7 @@ pub struct HelloSubscriptionRequest {
 
 // API methods
 impl SyncHelloManager {
-    /// Add a hello subscription using the client's hello_interval_seconds delay
+    /// Add a hello subscription using the client's hello_interval_milliseconds delay
     pub fn add_hello_subscription(&mut self, request: HelloSubscriptionRequest) -> Result<()>;
     
     /// Remove a hello subscription
@@ -191,20 +191,20 @@ The client configuration will be extended to support sync hello settings via the
 let client = Client::builder()
     .daemon_uds_path("/var/run/aranya/uds.sock".as_ref())
     .aqc_server_addr(&(Ipv4Addr::UNSPECIFIED, 1234).into())
-    .hello_interval_seconds(30) // Global interval for hello subscriptions
+    .hello_interval_milliseconds(30) // Global interval for hello subscriptions
     .connect()
     .await?;
 ```
 
-If `hello_interval_seconds` is not set, it will default to 1 second.
+If `hello_interval_milliseconds` is not set, it will default to 1 millisecond.
 
 ### Delay Management
 
 To manage notification timing:
 
-- **Delay Scheduling**: Track `last_notified` time for each subscriber and respect their `delay_seconds` setting
-- **Hello Subscriptions**: Use the client's `hello_interval_seconds` setting as the delay when creating subscriptions via the local API
-- **Subscribe to Hello Notifications**: Use the `delay_seconds` value from the Subscribe message
+- **Delay Scheduling**: Track `last_notified` time for each subscriber and respect their `delay_milliseconds` setting
+- **Hello Subscriptions**: Use the client's `hello_interval_milliseconds` setting as the delay when creating subscriptions via the local API
+- **Subscribe to Hello Notifications**: Use the `delay_milliseconds` value from the Subscribe message
 - **Replacement**: Any new subscription replaces the existing one with the new delay value
 - **Batching**: If multiple graph updates occur during a subscriber's delay period, send only the latest head
 
