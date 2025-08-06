@@ -11,13 +11,10 @@ initial version will also not implement features like confidential channels; all
 are put in plaintext on the graph.
 
 
-effect dedupe: store max cut, dont pass along duplicated effects. persist across restarts
-
-
 # Requirements
 
 - Each device's messages are well ordered with respect to their own messages
-- Devices that do not publish well ordered messages are considered incoherent ( mark as incoherent as instead )
+- Devices that do not publish well ordered messages are considered incoherent ( mark as incoherent including the two messages )
 - Effects are issued one time, even if commands are reordered or daemon is restarted
 - Write controls based on labels
 
@@ -49,9 +46,6 @@ recovery. A device becomes incoherent when:
 
 - Do we reuse the labels from AQC?
 - Maximum message size (graph message size max)
-- How/where do we mark devices as incoherent? 
-  - In messages?
-  - New fact?
 
 ```policy
 
@@ -80,11 +74,9 @@ command BroadcastMessage {
     check exists AssignedLabel[label_id: label.label_id, device_id: author.device_id]
 
     // get the previous message
-    // TODO: this scheme doesnt work, we need the action to provide the prev message id
     let prev_message_id = check_unwrap query PrevMessage[author.id]
   
     finish {
-      // is this right? we need to know that the most recent message from this device is 
       if !perspective::is_ancestor(prev_message_id) {
         // device is incoherent
       } else {
