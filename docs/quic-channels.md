@@ -1099,20 +1099,22 @@ command AqcCreateUniChannel {
 
 #### AQC Channel Deletion
 
+Note: this section will require updates when we transition from PSKs to certs for securing AQC QUIC connections.
+
 Since AQC channels are ephemeral, there is no need to validate channel deletion via a graph command.
 Any commands intended to close an AQC channel are not guaranteed to be received by the peer in a distributed system.
-Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as when a QUIC connection closes.
-Since an AQC channel may have multiple QUIC connections, the peer should send an error code indicating whether the entire AQC channel is being closed or just that connection.
+Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as when a QUIC connection closes or when channels are no longer valid according to the policy.
 
-Either peer can initiate deletion of an AQC channel. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
+Either peer can initiate deletion of an AQC channel locally. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
 
 Events that can cause an AQC channel to be deleted:
 - Application explicitly deleting a channel via the Aranya API.
-- QUIC connection close with error code indicating the peer is closing the AQC channel.
 - Revocation of permissions: e.g. label deletion, label revocation from either peer, removal of either peer device from the team.
 
+Rather than keeping PSKs in a key store until an AQC channel is closed, they are dropped from the key store as soon as they are loaded into `rustls`.
+Drop implementations for PSKs implement `Zeroize` to ensure private key material is automatically zeroized when it is dropped.
+
 When an AQC channel is deleted, the following should be deleted:
-- Any private key material associated with the channel (e.g. PSKs or certificates). Drop implementations for PSKs/certs should implement `Zeroize` in their `Drop` implementation so that private key material is automatically zeroized when it is dropped.
 - Network resources associated with the channel (e.g. QUIC connections and streams).
 
 For an AQC channel to be valid according to the default Aranya policy:
@@ -1120,10 +1122,6 @@ For an AQC channel to be valid according to the default Aranya policy:
 - Both peer devices must have the channel's label assigned to them
 - The label must exist
 - The team must not have been terminated
-
-A set of PSKs will be shared between the Aranya client and daemon via shared memory (shm).
-The daemon will add new PSKs to the shm and automatically delete any PSKs that are no longer valid according to the policy.
-The client will read PSKs from shm so they can be loaded into our `rustls` fork when establishing QUIC connections for AQC channels.
 
 #### AQC FFI
 
