@@ -285,14 +285,16 @@ lookup.
 - `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate an AQC network address from a device.
 - `CreateAqcBidiChannel(team_id, peer_net_ident, label) -> channel` - create a bidirectional AQC channel with the given peer.
 - `CreateAqcUniChannel(team_id, peer_net_ident, label) -> channel` - create a unidirectional AQC channel with the given peer.
-- `ReceiveAqcChannel() -> channel` - receive the next available AQC channel.
+- `ReceiveAqcChannel() -> channel` - receive the next available unidirectional or bidirectional AQC channel.
+- `TryReceiveAqcChannel() -> channel` - non-blocking version of `ReceiveAqcChannel()`.
 - `ReceiveAqcStream(channel) -> stream` - receive the next available AQC stream for an AQC channel.
-- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream on an existing AQC channel.
-- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream on an existing AQC channel.
+- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream on an existing bidirectional AQC channel.
+- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream on an existing bidirectional or unidirectional AQC channel.
 - `SendAqcStreamData(stream, data) -> bool` - send data via an AQC stream.
 - `ReceiveAqcStreamData(stream) -> Option<data>` - block until data is received via an AQC stream.
 - `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive data from an AQC stream.
-- `DeleteAqcChannel(team_id, channel_id)` - delete an AQC channel. Peer will delete the AQC channel as soon as it notices the QUIC connection has closed.
+- `DeleteAqcBidiChannel(team_id, channel_id)` - delete a bidirectional AQC channel.
+- `DeleteAqcUniChannel(team_id, channel_id)` - delete a unidirectional AQC channel.
 
 ### Graph Querying APIs
 

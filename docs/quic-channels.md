@@ -1116,6 +1116,8 @@ Drop implementations for PSKs implement `Zeroize` to ensure private key material
 
 When an AQC channel is deleted, the following should be deleted:
 - Network resources associated with the channel (e.g. QUIC connections and streams).
+- Any channel related info that's in memory.
+- Any secret key material related to the channel that hasn't already been deleted.
 
 For an AQC channel to be valid according to the default Aranya policy:
 - Both peer devices must exist on the team
