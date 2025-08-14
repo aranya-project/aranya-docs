@@ -293,8 +293,8 @@ lookup.
 - `SendAqcStreamData(stream, data) -> bool` - send data via an AQC stream.
 - `ReceiveAqcStreamData(stream) -> Option<data>` - block until data is received via an AQC stream.
 - `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive data from an AQC stream.
-- `DeleteAqcBidiChannel(team_id, channel_id)` - delete a bidirectional AQC channel.
-- `DeleteAqcUniChannel(team_id, channel_id)` - delete a unidirectional AQC channel.
+- `DeleteAqcBidiChannel(channel)` - delete a bidirectional AQC channel.
+- `DeleteAqcUniChannel(channel)` - delete a unidirectional AQC channel.
 
 ### Graph Querying APIs
 
