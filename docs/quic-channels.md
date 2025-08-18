@@ -1103,7 +1103,6 @@ Note: this section will require updates when we transition from PSKs to certs fo
 
 Since AQC channels are ephemeral, there is no need to validate channel deletion via a graph command.
 Any commands intended to close an AQC channel are not guaranteed to be received by the peer in a distributed system.
-Therefore, it is more reliable to judge whether an AQC channel has been closed based on indicators such as when a QUIC connection closes or when channels are no longer valid according to the policy.
 
 Either peer can initiate deletion of an AQC channel locally. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
 
@@ -1111,19 +1110,14 @@ Events that can cause an AQC channel to be deleted:
 - Application explicitly deleting a channel via the Aranya API.
 - Revocation of permissions: e.g. label deletion, label revocation from either peer, removal of either peer device from the team.
 
-Rather than keeping PSKs in a key store until an AQC channel is closed, they are dropped from the key store as soon as they are loaded into `rustls`.
-Drop implementations for PSKs implement `Zeroize` to ensure private key material is automatically zeroized when it is dropped.
+Rather than keeping PSKs in a key store until an AQC channel is closed, they are dropped from the key store and zeroized as soon as they are loaded into `rustls`.
 
 When an AQC channel is deleted, the following should be deleted:
 - Network resources associated with the channel (e.g. QUIC connections and streams).
 - Any channel related info that's in memory.
 - Any secret key material related to the channel that hasn't already been deleted.
 
-For an AQC channel to be valid according to the default Aranya policy:
-- Both peer devices must exist on the team
-- Both peer devices must have the channel's label assigned to them
-- The label must exist
-- The team must not have been terminated
+When an AQC channel is no longer valid according to the policy, it should be deleted. This could include revocation of a label from a device or a device from a team.
 
 #### AQC FFI
 
