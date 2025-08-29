@@ -41,16 +41,8 @@ afc client (encryption/decryption)
 
 ## Aranya Fast Channel IDs
 
-Channels are identified by a `channel_id` consisting of:
-- `node_id`: The peer device identifier  
-- `label`: Policy-defined channel label for access control
-
-```
-struct ChannelId {
-    node_id: NodeId,
-    label: Label,
-}
-```
+Channels are identified by a `channel_id` which is a 32-bit integer. 
+The Aranya daemon generates channel IDs by incrementing a monotonic counter.
 
 This provides direct lookup without hash truncation and integrates with
 policy-based permissions through labels.
@@ -69,12 +61,15 @@ Channel type is determined by the policy action used to create it.
 
 ## AFC Client Interface
 
-- `seal(channel_id, ciphertext_buffer, plaintext) -> sequence_number` -
+- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> sequence_number` -
   Encrypts plaintext for the specified channel. Returns sequence number for
   replay protection.
 
-- `open(node_id, plaintext_buffer, ciphertext) -> (label, sequence_number)` -
-  Decrypts ciphertext from the peer. Returns the channel label and sequence.
+- `open(label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
+  Decrypts ciphertext from the peer. Returns the channel label id and sequence.
+  The returned label_id will match the label_id that was given if decryption was successful.
+
+  N.B. the `channel_id` is included in the header of the ciphertext
 
 Channel creation happens through policy actions:
 
