@@ -159,6 +159,8 @@ To execute actions, a custom policy file must be written and validated prior to 
 
 -   **Fact**: A fact is a key value pair stored in the Fact Database. The shape of a fact is defined via policy with fact schema statements.
 
+**NOTE:** actions and effects are the only public, stable parts of a policy. Everything else is an implementaion detail that can be changed without updating the aplication. However, any structs or enums referenced in actions or effects should be considered public - changes to them would require updating the application.
+
 To make changes to a graph, a device calls an action to generate one or more commands. Another way to think about commands is to envision a piece of data (or fact) that you can manipulate by calling an action. The action is merely the "act" you wish to perform on the data and the command holds the actual execution of this action. Both actions and commands can be implemented on raw data if that data is passed to the action. For example, an action may be adding/removing devices, creating/deleting channels, or sending encrypted data. Once an action is called, the generated command is then evaluated by the policy engine to determine its validity given the current state and loaded policy.
 
 If a command is valid, it may be stored on the graph and some facts may be added, updated, or removed in the fact database. An effect, which provides information at the application level about the operation that was performed, can also be produced when a command is published. Upon syncing, all other peers may see the new validated command on the DAG. If they are authorized to view its contents, such as an encrypted message, then they will be able to obtain that too.
