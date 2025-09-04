@@ -65,11 +65,12 @@ Channel type is determined by the policy action used to create it.
   Encrypts plaintext for the specified channel. Returns sequence number for
   replay protection.
 
-- `open(label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
+- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
   Decrypts ciphertext from the peer. Returns the channel label id and sequence.
   The returned label_id will match the label_id that was given if decryption was successful.
 
-  N.B. the `channel_id` is included in the header of the ciphertext
+  N.B. the `label_id` given as input is compared against the `label_id` in the header
+  of the cipher text.
 
 Channel creation happens through policy actions:
 
