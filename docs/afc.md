@@ -41,7 +41,7 @@ afc client (encryption/decryption)
 
 ## Aranya Fast Channel IDs
 
-Channels are identified by a `channel_id` which is a 32-bit integer. 
+Channels are locally identified by a `channel_id` which is a 32-bit integer. 
 The Aranya daemon generates channel IDs by incrementing a monotonic counter.
 
 This provides direct lookup without hash truncation and integrates with
@@ -66,7 +66,7 @@ Channel type is determined by the policy action used to create it.
   replay protection.
 
 - `open(channel_id, label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
-  Decrypts ciphertext from the peer. Returns the channel label id and sequence.
+  Decrypts ciphertext from the peer. Returns the channel label id and sequence number.
   The returned label_id will match the label_id that was given if decryption was successful.
 
   N.B. the `label_id` given as input is compared against the `label_id` in the header
