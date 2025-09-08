@@ -61,16 +61,18 @@ Channel type is determined by the policy action used to create it.
 
 ## AFC Client Interface
 
+- `add(channel_id, label_id, keys)` -
+  Creates a new entry for a channel.
+- `remove(channel_id)`
+  Removes an existing channel
 - `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> sequence_number` -
   Encrypts plaintext for the specified channel. Returns sequence number for
   replay protection.
-
 - `open(channel_id, label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
-  Decrypts ciphertext from the peer. Returns the channel label id and sequence number.
-  The returned label_id will match the label_id that was given if decryption was successful.
+  Decrypts ciphertext from the peer. Returns the sequence number.
+  N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
 
-  N.B. the `label_id` given as input is compared against the `label_id` in the header
-  of the cipher text.
+### Policy
 
 Channel creation happens through policy actions:
 

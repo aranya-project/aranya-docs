@@ -242,17 +242,60 @@ The following APIs are used both for AQC and AFC:
 The AFC APIs are being moved to a lower level in the API. They will still be available via a build
 flag to allow embedded devices and advanced users to access them.
 
-- `SetAfcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
-device for use with AFC. If the address already exists for this device, it is replaced with the new
-address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
-Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
-lookup.
-- `UnsetAfcNetIdentifier(team_id, device_id, net_identifier)` - disassociate a network address from a device.
-- `CreateAfcBidiChannel(team_id, peer_net_ident, label) -> channel_id` - create a bidirectional channel with the given peer.
-- `DeleteAfcChannel(team_id, channel_id)` - delete a channel.
-- `PollAfcData(timeout)` - blocks until new AFC data is available, or timeout elapsed
-- `SendAfcData(channel_id, data)` - send data on the given channel.
-- `ReceiveAfcData() -> (data, metadata)` - receive data from AFC.
+##### Channel Types
+
+```rust
+/// An AFC channel.
+#[derive(Debug)]
+pub enum AfcChannel<'a> {
+    /// A bidirectional channel.
+    Bidi(AfcBidiChannel<'a>),
+    /// A unidirectional channel.
+    Uni(AfcUniChannel<'a>),
+}
+
+/// An unidirectional AFC channel.
+#[derive(Debug)]
+pub enum AfcUniChannel<'a> {
+    /// A send channel.
+    Send(..),
+    /// A receive channel.
+    Receive(..),
+}
+
+/// A bidirectional AFC channel.
+#[derive(Debug)]
+pub struct AfcBidiChannel<'a> {
+    client: &'a mut Client,
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+}
+```
+
+##### Client APIs
+
+- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
+- `CreateUniChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer.
+- `ReceiveChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
+- `DeleteAfcChannel(team_id, AfcChannel)` - delete a channel.
+
+##### Channel APIs
+
+Implemented by `AfcBidiChannel` and `AfcOpenChannel`
+
+```rust
+trait Open {
+    fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<(), AfcError>;
+}
+```
+
+Implemented by `AfcBidiChannel` and `AfcOSealChannel`
+
+```rust
+pub trait Seal {
+    fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
+}
+```
 
 ### Graph Querying APIs
 
