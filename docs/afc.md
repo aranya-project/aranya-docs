@@ -65,10 +65,10 @@ Channel type is determined by the policy action used to create it.
   Creates a new entry for a channel.
 - `remove(channel_id)`
   Removes an existing channel
-- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> sequence_number` -
-  Encrypts plaintext for the specified channel. Returns sequence number for
-  replay protection.
-- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
+- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
+  Encrypts plaintext for the specified channel. Returns header for ...
+  (TODO(Steve): Why do we return the header?)
+- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
   Decrypts ciphertext from the peer. Returns the sequence number.
   N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
 
@@ -88,9 +88,9 @@ Applications handle transport - AFC only does encryption/decryption.
 ## Effect Processing
 
 When channels are created, Aranya emits effects:
-- `AqcBidiChannelCreated` - Channel author receives this with keys
-- `AqcBidiChannelReceived` - Peer receives this with corresponding keys
-- `AqcUniChannelCreated/Received` - For unidirectional channels
+- `AfcBidiChannelCreated` - Channel author receives this with keys
+- `AfcBidiChannelReceived` - Peer receives this with corresponding keys
+- `AfcUniChannelCreated/Received` - For unidirectional channels
 
 The AFC handler processes these effects to install keys in AFC state.
 
