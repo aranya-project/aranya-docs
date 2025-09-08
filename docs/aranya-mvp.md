@@ -246,7 +246,6 @@ flag to allow embedded devices and advanced users to access them.
 
 ```rust
 /// An AFC channel.
-#[derive(Debug)]
 pub enum AfcChannel<'a> {
     /// A bidirectional channel.
     Bidi(AfcBidiChannel<'a>),
@@ -255,7 +254,6 @@ pub enum AfcChannel<'a> {
 }
 
 /// An unidirectional AFC channel.
-#[derive(Debug)]
 pub enum AfcUniChannel<'a> {
     /// A send channel.
     Send(..),
@@ -264,8 +262,21 @@ pub enum AfcUniChannel<'a> {
 }
 
 /// A bidirectional AFC channel.
-#[derive(Debug)]
 pub struct AfcBidiChannel<'a> {
+    client: &'a mut Client,
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+}
+
+/// A unidirectional AFC channel that can only send.
+pub struct AfcSendChannel<'a> {
+    client: &'a mut Client,
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+}
+
+/// A unidirectional AFC channel that can only receive.
+pub struct AfcReceiveChannel<'a> {
     client: &'a mut Client,
     channel_id: AfcChannelId,
     label_id: LabelId,
@@ -281,7 +292,7 @@ pub struct AfcBidiChannel<'a> {
 
 ##### Channel APIs
 
-Implemented by `AfcBidiChannel` and `AfcOpenChannel`
+Implemented by `AfcBidiChannel` and `AfcReceiveChannel`
 
 ```rust
 trait Open {
@@ -289,7 +300,7 @@ trait Open {
 }
 ```
 
-Implemented by `AfcBidiChannel` and `AfcOSealChannel`
+Implemented by `AfcBidiChannel` and `AfcSendChannel`
 
 ```rust
 pub trait Seal {
