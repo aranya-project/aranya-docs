@@ -57,8 +57,8 @@ permission to use.
 The label binds a channel to a set of Aranya policy rules,
 ensuring that both channel devices meet some specified criteria.
 
-> **Note**: For performance reasons, devices and labels are mapped
-> to 32-bit integers.
+> **Note**: Devices and Labels are mapped
+> to 32 byte IDs.
 
 ### Bidirectional Channels
 
@@ -101,7 +101,7 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         parent_cmd_id,
         DeviceId(us),
         DeviceId(peer)
-        i2osp(label),
+        label,
     )
     (enc, ctx) = HPKE_SetupSend(
         mode=mode_auth,
@@ -133,7 +133,7 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
         // Note how these are swapped.
         DeviceId(peer)
         DeviceId(us),
-        i2osp(label),
+        label,
     )
     ctx = HPKE_SetupRecv(
         mode=mode_auth,
@@ -192,7 +192,7 @@ fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
         parent_cmd_id,
         seal_id,
         open_id,
-        i2osp(label),
+        label,
     )
     (enc, ctx) = HPKE_SetupSend(
         mode=mode_auth,
@@ -224,7 +224,7 @@ fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
         parent_cmd_id,
         seal_id,
         open_id,
-        i2osp(label),
+        label,
     )
     ctx = HPKE_SetupRecv(
         mode=mode_auth,
@@ -249,14 +249,14 @@ AFC encrypts each message with a uniformly random nonce generated
 by a CSPRNG.
 
 ```rust
-fn Seal(device, label, SealKey, plaintext) {
+// channel_id is a 32-bit integer used to look up channels
+fn Seal(channel_id, label, SealKey, plaintext) {
     header = concat(
         i2osp(version, 4), // version is a constant
-        i2osp(device, 4),
-        i2osp(label, 4),
+        label,
     )
     nonce = random(AEAD_nonce_len())
-    SealKey = FindSealKey(device, label)
+    SealKey = FindSealKey(channel_id)
     ciphertext = AEAD_Seal(
         key=SealKey,
         nonce=nonce,
@@ -268,13 +268,14 @@ fn Seal(device, label, SealKey, plaintext) {
     return concat(ciphertext, nonce, header)
 }
 
-fn Open(device, label, ciphertext) {
+// channel_id is a 32-bit integer used to look up channels
+fn Open(channel_id, label, ciphertext) {
     // NB: while the header includes multiple fields, we only use
     // the `label` since we already know everything else.
     (ciphertext, nonce, header) = split(ciphertext);
     (_, _, label) = split(header);
 
-    OpenKey = FindOpenKey(device, label)
+    OpenKey = FindOpenKey(channel_id)
 
     plaintext = AEAD_Open(
         key=OpenKey,
