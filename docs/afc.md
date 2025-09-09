@@ -16,7 +16,7 @@ application plaintext <->
 user library <->
 fast channel seal <->
 ciphertext <->
-tcp <->
+user preferred transport <->
 ciphertext <->
 user library <->
 fast channel open <->
@@ -24,16 +24,16 @@ application plaintext
 ```
 
 Data starts as plaintext in the application layer. The user library will encrypt/decrypt the data with fast channel open/seal operations.
-Ciphertext fast channel data is sent to other peers by the user library via TCP transport.
+Ciphertext fast channel data is sent to other peers by the user library via the user's transport mechanism of choice.
 AFC is transport-agnostic - applications can use TCP, QUIC, UDP, or any other transport for the encrypted data.
 
-Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya emits effects (`AqcBidiChannelCreated` or `AqcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
+Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya emits effects (`AfcBidiChannelCreated` or `AfcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
 
 This is the path a channel creation takes through the system:
 ```
 policy action ->
 aranya (creates channel secrets) ->
-AqcBidiChannelCreated effect ->
+AfcBidiChannelCreated effect ->
 afc handler (installs keys) ->
 afc state ->
 afc client (encryption/decryption)
@@ -61,9 +61,11 @@ Channel type is determined by the policy action used to create it.
 
 ## AFC Client Interface
 
+**Note: This is an overview of the relevant Public APIs for the aranya-fast-channels crate.
+
 - `add(channel_id, label_id, keys)` -
   Creates a new entry for a channel.
-- `remove(channel_id)`
+- `remove(channel_id)` -
   Removes an existing channel
 - `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
   Encrypts plaintext for the specified channel. Returns header for ...
@@ -76,10 +78,15 @@ Channel type is determined by the policy action used to create it.
 
 Channel creation happens through policy actions:
 
-```
-action create_bidirectional_channel(peer_id, label) {
+```policy
+action create_afc_bidi_channel(peer_id id, label_id id) {
     let channel = afc::create_bidi_channel(peer_id, label)
-    publish AqcBidiChannelCreated { ... }
+    publish AfcBidiChannelCreated { ... }
+}
+
+action create_afc_uni_channel(sender_id id, receiver_id id, label_id id) {
+    let channel = afc::create_bidi_channel(peer_id, label)
+    publish AfcUniChannelCreated { ... }
 }
 ```
 
@@ -94,12 +101,24 @@ When channels are created, Aranya emits effects:
 
 The AFC handler processes these effects to install keys in AFC state.
 
+## Initial Setup
+
+See [Aranya Client APIs](/docs/aranya-mvp.md#client-apis-1) for the high-level client APIs.
+See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel objects.
+
+1. App calls `Create*Channel(..)` to create a channel object for the author and a `ctrl` message
+2. App sends `ctrl` message via any transport (TCP, QUIC, etc.)
+3. Peer receives `ctrl` message via transport
+4. Peer calls `ReceiveChannel(.., ctrl)` to create their own channel object
+
 ## Transport Usage
 
-1. App calls `seal()` to encrypt data
+1. App calls `Channel.seal(..)` to encrypt data
 2. App sends ciphertext via any transport (TCP, QUIC, etc.)
 3. Peer receives ciphertext via transport  
-4. Peer calls `open()` to decrypt and get label
+4. Peer calls `Channel.open(..)` to decrypt and get the sequence number
 
 This keeps AFC focused on encryption while letting apps choose their
 preferred transport.
+
+Note: The user must keep track of (device -> channel object) pairs

@@ -239,22 +239,23 @@ The following APIs are used both for AQC and AFC:
 
 #### AFC API
 
-The AFC APIs are being moved to a lower level in the API. They will still be available via a build
-flag to allow embedded devices and advanced users to access them.
+The AFC APIs are available by enabling the "afc" feature.
+At the time of this writing, AFC is not considered stable so the "preview" feature
+must be enabled as well.
 
 ##### Channel Types
 
 ```rust
 /// An AFC channel.
-pub enum AfcChannel<'a> {
+pub enum AfcChannel {
     /// A bidirectional channel.
-    Bidi(AfcBidiChannel<'a>),
+    Bidi(AfcBidiChannel),
     /// A unidirectional channel.
-    Uni(AfcUniChannel<'a>),
+    Uni(AfcUniChannel),
 }
 
 /// An unidirectional AFC channel.
-pub enum AfcUniChannel<'a> {
+pub enum AfcUniChannel {
     /// A send channel.
     Send(..),
     /// A receive channel.
@@ -262,24 +263,27 @@ pub enum AfcUniChannel<'a> {
 }
 
 /// A bidirectional AFC channel.
-pub struct AfcBidiChannel<'a> {
-    client: &'a mut Client,
+pub struct AfcBidiChannel {
     channel_id: AfcChannelId,
     label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
 }
 
 /// A unidirectional AFC channel that can only send.
-pub struct AfcSendChannel<'a> {
-    client: &'a mut Client,
+pub struct AfcSendChannel {
     channel_id: AfcChannelId,
     label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
 }
 
 /// A unidirectional AFC channel that can only receive.
-pub struct AfcReceiveChannel<'a> {
-    client: &'a mut Client,
+pub struct AfcReceiveChannel {
     channel_id: AfcChannelId,
     label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
 }
 ```
 
@@ -288,7 +292,6 @@ pub struct AfcReceiveChannel<'a> {
 - `CreateBidiChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
 - `CreateUniChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer.
 - `ReceiveChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
-- `DeleteAfcChannel(team_id, AfcChannel)` - delete a channel.
 
 ##### Channel APIs
 
@@ -296,7 +299,11 @@ Implemented by `AfcBidiChannel` and `AfcReceiveChannel`
 
 ```rust
 trait Open {
-    fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<(), AfcError>;
+    /// Open a ciphertext datagram and return the plaintext buffer.
+    ///
+    /// The plaintext buffer must have `AfcChannels::overhead()` fewer bytes allocated to it than the ciphertext buffer:
+    /// plaintext.len() = plaintext.len() - AfcChannels::overhead()
+    fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<SequenceNumber, AfcError>;
 }
 ```
 
@@ -304,7 +311,21 @@ Implemented by `AfcBidiChannel` and `AfcSendChannel`
 
 ```rust
 pub trait Seal {
+    /// Seal a plaintext datagram into a ciphertext buffer.
+    ///
+    /// The ciphertext buffer must have `AfcChannels::overhead()` more bytes allocated to it than the plaintext buffer:
+    /// ciphertext.len() = plaintext.len() + AfcChannels::overhead()
     fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
+}
+```
+
+Implemented by `AfcBidiChannel`, `AfcSendChannel` and `AfcReceiveChannel`
+
+```rust
+pub trait Channel {
+    fn delete(&self) -> Result<(), Error>;
+    fn channel_id(&self) -> AfcChannelId;
+    fn label_id(&self) -> LabelId;
 }
 ```
 
