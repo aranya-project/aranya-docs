@@ -289,8 +289,8 @@ pub struct AfcReceiveChannel {
 
 ##### Client APIs
 
-- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
-- `CreateUniChannel(team_id, device_id, label_id) -> (AfcChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer.
+- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
+- `CreateUniChannel(team_id, device_id, label_id) -> (AfcUniChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer.
 - `ReceiveChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
 
 ##### Channel APIs
