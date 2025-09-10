@@ -31,6 +31,10 @@ tree with a single leaf node.
 The init command has 0 parents. Merge commands have 2 parents. All other
 commands have 1 parent.
 
+Segment: A sequence of commands stored together with metadata for efficient
+traversal. Segments contain skip pointers and prior segment references forming
+a skip list structure for fast graph navigation.
+
 ```
 // The ID of a command
 ID
@@ -76,9 +80,14 @@ ensure that eventually new commands will be sent.
 
 ### Sync algorithm
 
-1. Peer1 sends a series of command hashes in weave order.
-2. Peer2 finds all of the commands that it has in common with Peer1.
-3. Peer2 sends all commands that are not ancestors of the common commands.
+1. Peer1 sends a sample of command hashes representing its current graph state.
+2. Peer2 finds segments containing commands not known to Peer1.
+3. Peer2 sends commands in ancestry order, using skip lists for efficient 
+   traversal.
+
+The implementation uses a segment-based approach where commands are organized
+into segments with skip pointers for fast navigation. Sync messages include
+session management for reliable delivery over multiple round trips.
 
 #### Sync Examples
 
