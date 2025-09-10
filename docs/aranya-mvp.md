@@ -337,7 +337,6 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 
 - `QueryRoleAssignment(device_id) -> Role`
 - `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAfcNetworkId(device_id) -> network_str`
 - `QueryAfcLabelAssignments(device_id) -> Vec<label>`
 - `QueryAfcLabelExists(device_id) -> Vec<label>`
 
