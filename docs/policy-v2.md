@@ -43,26 +43,11 @@ global scope is the last scope in this search and is always present.
 current scope. Shadowing an existing identifier this way is a compile
 error.
 
-## Block Expressions
+## Match Expressions
 
-A block expression contains zero or more statements followed by a
-required colon separator and terminal expression. The expression is the
-value of the block.
-
-```
-action foo(x int) {
-    let y = {
-        let v = ffi::external_value()
-        : x + v
-    }
-}
-```
-
-### `match` and `if` in expressions
-
-`match` is now usable in expression context, and block expressions are
-used for the interior blocks in this usage. For example, assigning one
-of many possible values used to look like:
+`match` is now usable in expression context, and arms can be arbitrary
+expressions. For example, assigning one of many possible values used to
+look like:
 
 ```
 // PL v1 match statement conditional variable set
@@ -84,36 +69,51 @@ action foo(x int) {
 But is now expressed more clearly as:
 
 ```
-// PL v2 match statement with block expressions
+// PL v2 match statement with expressions
 action foo(x int) {
     let v = match x {
-        3 => {: 1 }
-        4 => {: 2 }
-        _ => {: 0 }
+        3 => 1
+        4 => 2
+        _ => 0
     }
 }
 ```
 
-Likewise, `if` expressions now use block expressions and can compute
-more complex values.
+As was the case with `if` expressions, each subordinate expression in an
+`match` must evaluate to the same type or it is a compile error.
+
+## Block Expressions
+
+A block expression contains zero or more statements followed by a
+required colon separator and terminal expression. The value of the block
+is the value of that terminal expression.
+
+```
+action foo(x int) {
+    let y = {
+        let v = ffi::external_value()
+        : x + v
+    }
+}
+```
+
+## `if` expression improvements
+
+`if` expressions have now removed the braces around expressions. More
+complex operations can be performed through block expressions.
 
 ```
 action foo(x int) {
     let v = if x != 0 {
         let y = ffi::frob(x)
         : y + 1
-    } else {
-        : 0
-    }
+    } else 0
 }
 ```
 
-As was the case with `if` expressions, each subordinate block expression
-in an `if` or `match` must evaluate to the same type or it is a compile
-error.
-
-A non-expression `match` or `if` does not use block expressions, and ending a block with an
-expression in that context is an error.
+A non-expression `match` or `if` still uses statement blocks with the
+curly braces, not expressions, and ending a block with an expression in
+that context is an error.
 
 ```
 action foo(x int) {
@@ -208,9 +208,9 @@ action frob(f Foo) {
 
 ### Struct Composition
 
-A struct `A` whose fields are a strict subset of the fields of struct
-`B` can be inserted into struct `B` with the struct composition operator
-`...`.
+A struct `A` whose fields are a subset of the fields of struct `B` can
+be inserted into a struct `B` literal with the struct composition
+operator `...`.
 
 ```
 struct Foo {
@@ -226,14 +226,39 @@ struct Bar {
 
 action frob(x Foo) {
     let b = Bar {
-        ...x,
         c: false,
+        ...x,
     }
 }
 ```
 
-This can be used more than once, but the fields in the source structs
-cannot overlap.
+As with struct conversion, fields of the same name must have the same
+type. Any structs included this way must appear after any directly
+specified fields. Fields directly specified are excluded from the
+inserted structs. Or to state that differently, directly specified
+fields always override the fields of included structs.
+
+```
+let x = Foo { a: 3, b: "hello" }
+let y = Foo { a: 4, ...x }   // y = Foo { a: 4, b: "hello" }
+```
+
+More than one struct can be inserted this way, but the fields sourced
+from any included structs must not overlap. Fields directly specified do
+not count for this requirement.
+
+```
+let z = Foo{ a: 5, ...x, ...y }   // Fails due to `b` existing in both `x` and `y`
+```
+
+It is an error to add a composed struct when all fields are directly
+specified. Even though no conflict occurs as no fields should be sourced
+from the included structs, this is disallowed because it probably
+indicates programmer error.
+
+```
+let z = Foo { a: 6, b: "goodbye", ...x }
+```
 
 ### Struct Subselection
 

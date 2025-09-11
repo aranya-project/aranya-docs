@@ -1097,6 +1097,28 @@ command AqcCreateUniChannel {
   granted either the `ChanOp::RecvOnly` or `ChanOp::SendRecv`
   permission for the label assigned to the channel.
 
+#### AQC Channel Deletion
+
+Note: this section will require updates when we transition from PSKs to certs for securing AQC QUIC connections.
+
+Since AQC channels are ephemeral, there is no need to validate channel deletion via a graph command.
+Any commands intended to close an AQC channel are not guaranteed to be received by the peer in a distributed system.
+
+Either peer can initiate deletion of an AQC channel locally. When a peer detects that an AQC channel has been deleted, it should delete its own copy of the corresponding channel.
+
+Events that can cause an AQC channel to be deleted:
+- Application explicitly deleting a channel via the Aranya API.
+- Revocation of permissions: e.g. label deletion, label revocation from either peer, removal of either peer device from the team.
+
+Rather than keeping PSKs in a key store until an AQC channel is closed, they are dropped from the key store and zeroized as soon as they are loaded into `rustls`.
+
+When an AQC channel is deleted, the following should be deleted:
+- Network resources associated with the channel (e.g. QUIC connections and streams).
+- Any channel related info that's in memory.
+- Any secret key material related to the channel that hasn't already been deleted.
+
+When an AQC channel is no longer valid according to the policy, it should be deleted. This could include revocation of a label from a device or a device from a team.
+
 #### AQC FFI
 
 ```policy
@@ -1160,12 +1182,12 @@ function create_uni_channel(
 ### Labels
 
 ```policy
-// Records a label for AQC and AFC.
+// Records a label for AQC.
 //
 // `name` is a short description of the label. E.g., "TELEMETRY".
 fact Label[label_id id]=>{name string, author_id id}
 
-// Creates a label for AQC and AFC.
+// Creates a label for AQC.
 action create_label(name string) {
     publish CreateLabel {
         label_name: name,

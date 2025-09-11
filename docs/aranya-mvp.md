@@ -72,7 +72,7 @@ application. This extends to the shared memory; there is no requirement it be pr
 program restarts.
 
 The client library exists inside the device's process and is used to interact with the daemon. The
-client library also includes a light wrapper around QUIC Channels (and similarly for AFC), allowing
+client library also includes a light wrapper around QUIC Channels, allowing
 the device to encrypt data and send messages to peers. QUIC channels will provide networking and
 mostly live in the client library. Channel setup will require communication with the daemon.
 Current plans for language bindings are to initially focus on the C API. The Rust client library is
@@ -97,7 +97,7 @@ daemon, and can help reduce errors in config mismatch by minimizing the number o
 values. The daemon will need to validate the configuration files and be able to handle cases of partial initialization.
 
 The daemon will expose a simple API that clients can use to request connection information for data
-planes like AFC. The client will be able to request the AFC config from the daemon and use that
+planes like AQC. The client will be able to request the AQC config from the daemon and use that
 directly. Other configuration values can also be added to this mechanism. After MVP, additional
 APIs can be exposed to change those configured values.
 
@@ -116,11 +116,11 @@ The Access Control Plane is the top level control plane, enabling IDAM operation
 on-graph operations. The Access Control Plane is used to manage keys, address assignment, roles,
 and labels as set out in the policy which is written in the MVP using [version 2.0 of the policy language](/docs/policy-v2.md).
 
+(TODO(Steve): Update)
 For the MVP, Aranya Quic Channels (AQC) will be built to provide a simple API for sending and
 receiving messages using a modified Quic transport. The Aranya Quic Channels contains its own
 control plane for control messages, as well as the main data plane for moving data between devices.
-This is similar to Aranya Fast Channels (AFC) from the beta version but with a different underlying
-transport (AFC uses TCP). See [Aranya Quic Channels API](#aranya-quic-channels-api).
+See [Aranya Quic Channels API](#aranya-quic-channels-api).
 
 Component structure:
 
@@ -144,12 +144,12 @@ The client APIs are local-only API endpoints that do not create commands on the 
 mostly used to manage the local state. Depending on the language, the endpoints may be a different
 format that is more idiomatic to that language such as snake_case for C.
 
-- `Connect(daemon_sock, afc_shm_path, max_chans, afc_listen_addr) -> client` - creates a client
-connection to the daemon.
+- `ClientInit(client_config) -> client` - creates a client
+connection to the daemon IPC.
 - `GetKeyBundle() -> keybundle` - returns the current device's public key bundle.
 - `GetDeviceId() -> device_id` - returns the device's device ID.
-- `AddTeam(team_id, config) -> bool` - add an existing team to the local device store. Not an
-Aranya action/command.
+- `AddTeam(add_team_config) -> bool` - add an existing team to the local device store with a specified team configuration.  Not an
+Aranya action/command. Add team can accept either a raw IKM or wrapped PSK seed depending on the mode provided in the team config.
 - `RemoveTeam(team_id) -> bool` - remove a team from the local device store. Not an Aranya action/
 command.
 - `SerializeKeyBundle(scheme, keybundle) -> bytes` - serialize a keybundle to a given format/
@@ -158,6 +158,56 @@ scheme. Ideally, this can be used to serialize to either human readable or machi
 scheme.
 - `SerializeId(id) -> bytes` - serialize an ID to the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
 - `DeserializeId(bytes) -> id` - deserialize an ID from the standard base58 format. https://github.com/aranya-project/aranya-docs/pull/24/files#r1915516900
+
+#### Config
+
+##### Client Config
+
+- Daemon IPC unix domain socket path
+- AQC config (network address to bind to)
+
+##### Create Team Config
+
+The create team config contains information needed to configure a created team in Aranya.
+The QUIC syncer config is a field of the create team config.
+
+```
+struct CreateTeamConfig {
+  quic_sync: Option<CreateTeamQuicSyncConfig>,
+}
+```
+
+##### Add Team Config
+
+The add team config contains information needed to configure an added team in Aranya. The QUIC syncer config is a field of the add team config.
+
+A device needs to know the ID of the team when adding it to local device storage.
+
+```
+struct AddTeamConfig {
+  team_id: TeamId,
+  quic_sync: Option<AddTeamQuicSyncConfig>,
+}
+```
+
+##### QUIC Syncer Config
+
+To configure the QUIC syncer for a team, a PSK seed is needed to bootstrap the rustls PSK used to secure the sync protocol for a team.
+
+There are 3 mutually exclusive modes for configuring the team PSK for the QUIC syncer (represented as an enum). `SeedMode`:
+  - `GeneratePskSeed` Default and most secure option. Aranya generates the PSK seed internally and returns a wrapped PSK seed.
+  - `WrappedPskSeed(peer_enc_pk, encrypted_psk, encap_key)` Encrypted PSK seed passed in as input. Key is authenticated using the sender's public encryption key.
+  - `IKM(ikm)` Provides raw input key material to derive a PSK seed.
+
+
+`CreateTeam(...)` accepts one of the PSK modes as input and returns the PSK seed bytes. If `GeneratePskSeed` mode is specified, the input key material used to derive the PSK seed is generated internally which is the preferred, most secure option. `WrappedPskSeed` is not a valid mode for this operation. Specifying the `IKM` mode as input will use raw IKM provided to derive the PSK seed.
+`AddTeam(...)` accepts the PSK bytes from `WrappedPskSeed` or `IKM` modes. `GeneratePskSeed` is not a valid mode for this operation.
+
+##### Sync Peer Config
+
+Fields for configuring a sync peer:
+- `interval` time to wait between syncs
+- `sync_now` whether to sync immediately
 
 #### Sync API
 
@@ -169,13 +219,13 @@ remove peers to sync from.
 Unix Domain Sockets and shm will be used for IPC between the daemon and client library. Additional
 IPC mechanisms may be explored in the future.
 
-- `AddSyncPeer(address, team_id, config) -> bool` - add a peer to start syncing with at a specific
+- `AddSyncPeer(address, team_id, sync_config) -> bool` - add a peer to start syncing with at a specific
 rate. Syncing should support DNS resolution in the case a domain name is used. Syncs immediately
 the first time. The config object includes details for authorization (potentially authentication
 too) and options for syncing by pushing or pulling.
 - `RemoveSyncPeer(address, team_id) -> bool` - remove a sync peer associated with the given address,
 team_id.
-- `SyncNow(address, team_id, Option<config>) -> bool` - Trigger an immediate sync for the peer. If
+- `SyncNow(address, team_id, Option<sync_config>) -> bool` - Trigger an immediate sync for the peer. If
 a sync config is provided, use that. If no config arg is provided, fallback to the config used when
 the peer was added via AddSyncPeer. If the peer was not added, use a default config or error.
 https://github.com/aranya-project/aranya-docs/pull/24/files#r1917188406
@@ -197,8 +247,10 @@ Easy to implement, key moving is done by integration.
 The IDAM control plane is for managing identity and authorization by interacting with the graph.
 Each endpoint creates one or more commands on the graph. The first command in the graph, aka the
 Init command, contains the system's policy that defines the IDAM control plane for bootstrapping.
-
-- `CreateTeam(owner_keybundle, config) -> team_id` - initialize the graph, creating the team with the author as the owner. Includes policy for bootstrapping.
+- `InitTeamConfig(Option<seed>) -> team_config` - Initialize a `TeamConfig` object with a QUIC syncer PSK seed.
+- `CreateTeam(owner_keybundle, create_team_config) -> team_id` - initialize the graph, creating the team with the author as the owner. Configures team based on the team config. Includes policy for bootstrapping. Accepts one of the PSK modes as input. If `GenerateKey` mode is specified, a PSK seed is generated internally which is the preferred, most secure option.
+- `Rand() -> random_bytes` - generate random bytes from CSPRNG. Can be used to generate a raw PSK IKM for the QUIC syncer.
+- `EncryptPskSeedForPeer(team_id, keybundle) -> wrapped_seed` - encrypts a QUIC syncer PSK seed for another peer device using the peer's public encryption key. Returns wrapped PSK seed type containing the team ID and encrypted PSK seed. The team ID is included in this type so only a single serialized type needs to be transmitted to the peer before it can invoke `AddTeam()`.
 - `CloseTeam(team_id) -> bool` - close the team and stop all operations on the graph.
 - `AddDeviceToTeam(team_id, keybundle) -> bool` - add a device to the team with the default role.
 - `RemoveDeviceFromTeam(team_id, device_id) -> bool` - remove a device from the team.
@@ -212,9 +264,7 @@ associated to a device.
 
 ### Aranya Channels API
 
-The beta spec describes Aranya Fast Channels (AFC) which is replaced by Aranya Quic Channels (AQC)
-for the MVP. AFC is instead viewed as an experimental feature of the product which might still be
-preferred when running on embedded devices or when using a unidirectional transport. Refer to the
+AFC is preferred when running on embedded devices or when using a unidirectional transport. Refer to the
 beta spec and other existing documentation ([AFC](/docs/afc.md) and [AFC-Crypto](/docs/afc-crypto.md)) for more details on AFC.
 
 AQC uses a modified Quic transport implementation that supports the ability to use custom
@@ -223,14 +273,13 @@ More information on AQC, including the list of AQC-specific APIs, can be found i
 - Draft version: https://github.com/aranya-project/aranya-docs/blob/2-quic-channels/docs/quic-channels.md
 - Eventually where the final spec will live: https://github.com/aranya-project/aranya-docs/blob/main/docs/quic-channels.md
 
-Just like AFC, the Quic Channels plane is split in two different sub-planes: the Quic channels
+The Quic Channels plane is split in two different sub-planes: the Quic channels
 control plane and the Quic channels data plane. The AQC control plane is responsible for any Aranya command or ephemeral commands, while the AQC data plane contains only data-related APIs.
 
 Embedded devices that implement a subset of Aranya library should still be able to sync with
-clients that have the full product integrated. AFC should also be compatible between subset
-implementations and the full implementation. This compatibility is planned for Post-MVP.
+clients that have the full product integrated. This compatibility is planned for Post-MVP.
 
-The following APIs are used both for AQC and AFC:
+Both peer devices must be granted permission to use a label prior to creating an AFC or AQC channel with each other:
 
 - `CreateLabel(team_id, label)` - create a label
 - `DeleteLabel(team_id, label)` - delete a label
@@ -405,19 +454,16 @@ subject to change. This list is unordered within the sections.
 -  Update existing code and docs to use "device" instead of "user".
   -  Ensure "graph" is used in core, while "team" is used in product.
 -  Add "ephemeral" marker in command metadata.
--  Take measures to deem AFC as experimental (e.g., updating docs)?
 -  Update AddSyncPeer to sync immediately
 -  Add config object with just version field to `CreateTeam` and `AddTeam` APIs.
 -  Implement `SyncNow`
 -  Add config object to `AddSyncPeer` and include the rate parameter in it.
   -  Might want to add max # of bytes to sync, timeout for number of secs it stays open, etc.
--  Update existing AFC APIs to include "afc" in their name to differentiate from Quic channels
 -  Custom policy roles spec and implementation
 -  Allow a single keybundle to participate in multiple teams via some sort of root-identity-key (or other mechanism)
 -  Fact DB queries via session commands
 -  Standardize C API names to follow naming scheme.
 -  Update key agreement commands to have a field for the sender's graph head ID. https://github.com/aranya-project/aranya-docs/pull/24#discussion_r1937642908
--  Move AFC to behind build flag
 
 ### Low
 -  Set up CI to measure resource usage
@@ -477,8 +523,8 @@ some other pattern is required.
 
 ## Appendix C: Glossary
 
-- `AFC` - the library used to do high performance encryption using keys managed by `Aranya`.
-- `Aranya Quic Channels (maybe AQC)` - An integration of Aranya with QUIC to provide a secure
+- `Aranya Fast Channels (AFC)` - See [AFC spec](/docs/afc.md).
+- `Aranya Quic Channels (AQC)` - An integration of Aranya with QUIC to provide a secure
 and integrated transport. See QUIC channels spec. TODO(declan): link
 - `Aranya` - the main library that drives the control plane and policy execution.
 - `daemon` - a long-lived process, typically running in the background, that
