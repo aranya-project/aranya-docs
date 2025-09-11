@@ -29,7 +29,7 @@ AFC is transport-agnostic - applications can use TCP, QUIC, UDP, or any other tr
 
 Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya emits effects (`AfcBidiChannelCreated` or `AfcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
 
-This is the path a channel creation takes through the system:
+This is the path channel creation takes through the system:
 ```
 policy action ->
 aranya (creates channel secrets) ->
@@ -55,7 +55,7 @@ AFC supports bidirectional and unidirectional channels:
 **Bidirectional**: Both devices can encrypt and decrypt. Each side has
 different seal/open keys that correspond to each other.
 
-**Unidirectional**: One device encrypts (seal_only_key), one decrypts
+**Unidirectional**: The sender encrypts (seal_only_key), while the receiver decrypts
 (open_only_key).
 
 Channel type is determined by the policy action used to create it.

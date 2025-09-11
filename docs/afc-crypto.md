@@ -57,8 +57,7 @@ permission to use.
 The label binds a channel to a set of Aranya policy rules,
 ensuring that both channel devices meet some specified criteria.
 
-> **Note**: Devices and Labels are mapped
-> to 32 byte IDs.
+> **Note**: Devices and Labels are mapped to 32 byte IDs.
 
 ### Bidirectional Channels
 
