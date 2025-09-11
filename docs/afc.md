@@ -108,7 +108,8 @@ See [Aranya Client APIs](/docs/aranya-mvp.md#client-apis-1) for the high-level c
 See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel objects.
 
 1. App calls `Create*Channel*(..)` to create a channel object for the author and a `ctrl` message
-2. App sends `ctrl` message via any transport (TCP, QUIC, etc.)
+2. App sends `ctrl` message via any transport (TCP, QUIC, etc.) 
+    (**Note**: The `ctrl` message is not encrypted so the user must send it to the peer securely)
 3. Peer receives `ctrl` message via transport
 4. Peer calls `ReceiveCtrl(.., ctrl)` to create their own channel object
 
