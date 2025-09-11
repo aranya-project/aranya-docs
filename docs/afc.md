@@ -113,10 +113,10 @@ See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel 
 
 ## Transport Usage
 
-1. App calls `Channel.seal(..)` to encrypt data
+1. App calls `Channel.seal(..)` to encrypt data (Note: a channel object was returned by calling `Create*Channel`)
 2. App sends ciphertext via any transport (TCP, QUIC, etc.)
 3. Peer receives ciphertext via transport  
-4. Peer calls `Channel.open(..)` to decrypt and get the sequence number
+4. Peer calls `Channel.open(..)` to decrypt and get the sequence number (Note: a channel object was returned by calling `Receive*Channel`)
 
 This keeps AFC focused on encryption while letting apps choose their
 preferred transport.

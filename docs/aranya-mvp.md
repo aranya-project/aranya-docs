@@ -295,38 +295,32 @@ pub struct AfcReceiveChannel {
 
 ##### Channel APIs
 
-Implemented by `AfcBidiChannel` and `AfcReceiveChannel`
+Method on `AfcBidiChannel` and `AfcReceiveChannel`
 
 ```rust
-trait Open {
-    /// Open a ciphertext datagram and return the plaintext buffer.
-    ///
-    /// The plaintext buffer must have `AfcChannels::overhead()` fewer bytes allocated to it than the ciphertext buffer:
-    /// plaintext.len() = plaintext.len() - AfcChannels::overhead()
-    fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<SequenceNumber, AfcError>;
-}
+  /// Open a ciphertext datagram and return the plaintext buffer.
+  ///
+  /// The plaintext buffer must have `AfcChannels::overhead()` fewer bytes allocated to it than the ciphertext buffer:
+  /// plaintext.len() = plaintext.len() - AfcChannels::overhead()
+  fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<SequenceNumber, AfcError>;
 ```
 
-Implemented by `AfcBidiChannel` and `AfcSendChannel`
+Method on `AfcBidiChannel` and `AfcSendChannel`
 
 ```rust
-pub trait Seal {
-    /// Seal a plaintext datagram into a ciphertext buffer.
-    ///
-    /// The ciphertext buffer must have `AfcChannels::overhead()` more bytes allocated to it than the plaintext buffer:
-    /// ciphertext.len() = plaintext.len() + AfcChannels::overhead()
-    fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
-}
+  /// Seal a plaintext datagram into a ciphertext buffer.
+  ///
+  /// The ciphertext buffer must have `AfcChannels::overhead()` more bytes allocated to it than the plaintext buffer:
+  /// ciphertext.len() = plaintext.len() + AfcChannels::overhead()
+  fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
 ```
 
-Implemented by `AfcBidiChannel`, `AfcSendChannel` and `AfcReceiveChannel`
+Methods on `AfcBidiChannel`, `AfcSendChannel` and `AfcReceiveChannel`
 
 ```rust
-pub trait Channel {
-    fn delete(&self) -> Result<(), Error>;
-    fn channel_id(&self) -> AfcChannelId;
-    fn label_id(&self) -> LabelId;
-}
+fn delete(&self) -> Result<(), Error>;
+fn channel_id(&self) -> AfcChannelId;
+fn label_id(&self) -> LabelId;
 ```
 
 ### Graph Querying APIs
