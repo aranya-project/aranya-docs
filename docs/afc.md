@@ -44,8 +44,9 @@ afc client (encryption/decryption)
 Channels are locally identified by a `channel_id` which is a 32-bit integer. 
 The Aranya daemon generates channel IDs by incrementing a monotonic counter.
 
-This provides direct lookup without hash truncation and integrates with
-policy-based permissions through labels.
+This provides direct lookup without hash truncation.
+
+There is a one-to-many relationship between `label_id` and `channel_id`. In other words, a channel_id is associated with a single label_id but a label_id can be associated with many channels.
 
 ## Channel Types
 
@@ -106,17 +107,19 @@ The AFC handler processes these effects to install keys in AFC state.
 See [Aranya Client APIs](/docs/aranya-mvp.md#client-apis-1) for the high-level client APIs.
 See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel objects.
 
-1. App calls `Create*Channel(..)` to create a channel object for the author and a `ctrl` message
+1. App calls `Create*Channel*(..)` to create a channel object for the author and a `ctrl` message
 2. App sends `ctrl` message via any transport (TCP, QUIC, etc.)
 3. Peer receives `ctrl` message via transport
-4. Peer calls `ReceiveChannel(.., ctrl)` to create their own channel object
+4. Peer calls `ReceiveCtrl(.., ctrl)` to create their own channel object
 
 ## Transport Usage
 
-1. App calls `Channel.seal(..)` to encrypt data (Note: a channel object was returned by calling `Create*Channel`)
+(Note: Assumes that channel objects were creating by calling `Create*Channel*` or `ReceiveChannel`)
+
+1. App calls `Channel.seal(..)` to encrypt data
 2. App sends ciphertext via any transport (TCP, QUIC, etc.)
 3. Peer receives ciphertext via transport  
-4. Peer calls `Channel.open(..)` to decrypt and get the sequence number (Note: a channel object was returned by calling `Receive*Channel`)
+4. Peer calls `Channel.open(..)` to decrypt and get the sequence number
 
 This keeps AFC focused on encryption while letting apps choose their
 preferred transport.

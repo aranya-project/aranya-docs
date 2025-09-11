@@ -339,7 +339,8 @@ pub struct AfcReceiveChannel {
 ##### Client APIs
 
 - `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
-- `CreateUniChannel(team_id, device_id, label_id) -> (AfcUniChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer.
+- `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the sender.
+- `CreateUniChannelReceive(team_id, device_id, label_id) -> (AfcReceiveChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the receiver.
 - `ReceiveChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
 
 ##### Channel APIs
@@ -347,7 +348,8 @@ pub struct AfcReceiveChannel {
 Method on `AfcBidiChannel` and `AfcReceiveChannel`
 
 ```rust
-  /// Open a ciphertext datagram and return the plaintext buffer.
+  /// Decrypts and authenticates `ciphertext`, writing the result to `plaintext`.
+  /// Returns the sequence number.
   ///
   /// The plaintext buffer must have `AfcChannels::overhead()` fewer bytes allocated to it than the ciphertext buffer:
   /// plaintext.len() = plaintext.len() - AfcChannels::overhead()
@@ -357,7 +359,7 @@ Method on `AfcBidiChannel` and `AfcReceiveChannel`
 Method on `AfcBidiChannel` and `AfcSendChannel`
 
 ```rust
-  /// Seal a plaintext datagram into a ciphertext buffer.
+  /// Encrypts `plaintext`, writing the result to `ciphertext`.
   ///
   /// The ciphertext buffer must have `AfcChannels::overhead()` more bytes allocated to it than the plaintext buffer:
   /// ciphertext.len() = plaintext.len() + AfcChannels::overhead()
