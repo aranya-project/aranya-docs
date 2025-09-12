@@ -351,10 +351,12 @@ pub struct AfcOpenChannel {
 
 ##### Client APIs
 
-- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
-- `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the sender.
-- `CreateUniChannelOpen(team_id, device_id, label_id) -> (AfcOpenChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the opener.
-- `OpenChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
+- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer device and label_id.
+- `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer device and label_id where the author is the sender.
+- `CreateUniChannelOpen(team_id, device_id, label_id) -> (AfcOpenChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer and label_id where the author is the opener.
+- `ReceiveCtrl(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by processing a 'ctrl' message.
+
+**Note**: The channel author must send `AfcCtrlMessage` to the peer via any transport. Once the peer receives `AfcCtrlMessage`, it should call `ReceiveCtrl()` to receive the other side of the channel.
 
 ##### Channel APIs
 
