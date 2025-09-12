@@ -319,18 +319,9 @@ must be enabled as well.
 ```rust
 /// An AFC channel.
 pub enum AfcChannel {
-    /// A bidirectional channel.
     Bidi(AfcBidiChannel),
-    /// A unidirectional channel.
-    Uni(AfcUniChannel),
-}
-
-/// An unidirectional AFC channel.
-pub enum AfcUniChannel {
-    /// A send channel.
-    Send(..),
-    /// A receive channel.
-    Receive(..),
+    AfcSendChannel,
+    AfcOpenChannel,
 }
 
 /// A bidirectional AFC channel.
@@ -349,8 +340,8 @@ pub struct AfcSendChannel {
     ..
 }
 
-/// A unidirectional AFC channel that can only receive.
-pub struct AfcReceiveChannel {
+/// A unidirectional AFC channel that can only open.
+pub struct AfcOpenChannel {
     channel_id: AfcChannelId,
     label_id: LabelId,
     // Other fields omitted for brevity
@@ -362,14 +353,16 @@ pub struct AfcReceiveChannel {
 
 - `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer.
 - `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the sender.
-- `CreateUniChannelReceive(team_id, device_id, label_id) -> (AfcReceiveChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the receiver.
-- `ReceiveChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
+- `CreateUniChannelOpen(team_id, device_id, label_id) -> (AfcOpenChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer where the author is the opener.
+- `OpenChannel(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by receiving a 'ctrl' message.
 
 ##### Channel APIs
 
-Method on `AfcBidiChannel` and `AfcReceiveChannel`
+Method on `AfcBidiChannel` and `AfcOpenChannel`
 
 ```rust
+  type SequenceNumber = u64;
+
   /// Decrypts and authenticates `ciphertext`, writing the result to `plaintext`.
   /// Returns the sequence number.
   ///
@@ -388,7 +381,7 @@ Method on `AfcBidiChannel` and `AfcSendChannel`
   fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
 ```
 
-Methods on `AfcBidiChannel`, `AfcSendChannel` and `AfcReceiveChannel`
+Methods on `AfcBidiChannel`, `AfcSendChannel` and `AfcOpenChannel`
 
 ```rust
 fn delete(&self) -> Result<(), Error>;
@@ -404,8 +397,8 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 
 - `QueryRoleAssignment(device_id) -> Role`
 - `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAfcLabelAssignments(device_id) -> Vec<label>`
-- `QueryAfcLabelExists(device_id) -> Vec<label>`
+- `QueryLabelAssignments(device_id) -> Vec<label>`
+- `QueryLabelExists(device_id) -> Vec<label>`
 
 
 ## Roles & Permissions
