@@ -285,29 +285,6 @@ Both peer devices must be granted permission to use a label prior to creating an
 - `AssignLabel(team_id, device_id, label)` - assign a label to a device
 - `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
 
-#### AFC Config
-
-**Note**: this is the "afc" section of the Aranya daemon config
-
-```toml
-[afc]
-# determines whether afc is enabled
-enable = true
-# path to the shared memory. See https://man7.org/linux/man-pages/man7/shm_overview.7.html
-shm_path = "/afc"
-# Unlink `shm_path` before creating the shared memory?
-# Ignored if `create` is false.
-unlink_on_startup = true
-# Unlink `shm_path` before on exit?
-# If false, the shared memory will persist across daemon
-# restarts.
-unlink_at_exit = false
-# determines whether the shared memory is created
-create = true
-# Maximum number of channels AFC should support.
-max_chans = 100
-```
-
 #### AFC API
 
 The AFC APIs are available by enabling the "afc" feature.

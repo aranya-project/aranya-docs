@@ -45,6 +45,41 @@ peer daemon writes shm channel keys ->
 peer user library reads shm channel keys
 ```
 
+## Architecture
+
+AFC relies on POSIX shared memory API in order to share channel data
+between the Aranya client and Aranya daemon. The Aranya client only reads
+channel data while the Aranya daemon can read and modify the shared channel data.
+
+The daemon may modify channel data when the client invokes one of the [channel APIs](/docs/aranya-mvp.md#channel-apis)
+or when the delete method on a [channel object](/docs/aranya-mvp.md#channel-types) is called. 
+
+### AFC Config
+
+**Note**: this is the "afc" section of the Aranya daemon config
+
+```toml
+[afc]
+# determines whether afc is enabled
+enable = true
+# path to the shared memory. See https://man7.org/linux/man-pages/man7/shm_overview.7.html
+shm_path = "/afc"
+# Unlink `shm_path` before creating the shared memory?
+# Ignored if `create` is false.
+unlink_on_startup = true
+# Unlink `shm_path` before on exit?
+# If false, the shared memory will persist across daemon
+# restarts.
+unlink_at_exit = false
+# determines whether the shared memory is created
+create = true
+# Maximum number of channels AFC should support.
+max_chans = 100
+```
+
+This data is transmitted from the Aranya daemon to the Aranya client via UDS IPC
+so that the client can create it's own view of the shared memory.
+
 ## Aranya Fast Channel IDs
 
 Channels are locally identified by a `channel_id` which is a 32-bit integer. 
