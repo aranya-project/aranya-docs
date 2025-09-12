@@ -27,16 +27,22 @@ Data starts as plaintext in the application layer. The user library will encrypt
 Ciphertext fast channel data is sent to other peers by the user library via the user's transport mechanism of choice.
 AFC is transport-agnostic - applications can use TCP, QUIC, UDP, or any other transport for the encrypted data.
 
-Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya emits effects (`AfcBidiChannelCreated` or `AfcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
+Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya creates an ephemeral command that emits effects (`AfcBidiChannelCreated` or `AfcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
 
-This is the path channel creation takes through the system:
+This is the path an ephemeral command takes through the system:
 ```
-policy action ->
-aranya (creates channel secrets) ->
-AfcBidiChannelCreated effect ->
-afc handler (installs keys) ->
-afc state ->
-afc client (encryption/decryption)
+aranya ->
+daemon (daemon writes channel keys to shm, user library reads them) ->
+Unix domain socket api ->
+user library ->
+fast channel ctrl message ->
+user provided transport ->
+peer user library ->
+peer Unix domain socket api ->
+peer daemon ->
+peer aranya ->
+peer daemon writes shm channel keys ->
+peer user library reads shm channel keys
 ```
 
 ## Aranya Fast Channel IDs
