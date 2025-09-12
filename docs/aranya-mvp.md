@@ -116,7 +116,6 @@ The Access Control Plane is the top level control plane, enabling IDAM operation
 on-graph operations. The Access Control Plane is used to manage keys, address assignment, roles,
 and labels as set out in the policy which is written in the MVP using [version 2.0 of the policy language](/docs/policy-v2.md).
 
-(TODO(Steve): Update)
 For the MVP, Aranya Quic Channels (AQC) will be built to provide a simple API for sending and
 receiving messages using a modified Quic transport. The Aranya Quic Channels contains its own
 control plane for control messages, as well as the main data plane for moving data between devices.

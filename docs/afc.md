@@ -69,8 +69,8 @@ Channel type is determined by the policy action used to create it.
 - `remove(channel_id)` -
   Removes an existing channel
 - `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
-  Encrypts plaintext for the specified channel. Returns header for ...
-  (TODO(Steve): Why do we return the header?)
+  Encrypts plaintext for the specified channel.
+  The returned header can be used in a number of different ways[^header_usage]
 - `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
   Decrypts ciphertext from the peer. Returns the sequence number.
   N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
@@ -126,3 +126,6 @@ This keeps AFC focused on encryption while letting apps choose their
 preferred transport.
 
 Note: The user must keep track of (device -> channel object) pairs
+
+[^header_usage]: The header provides channel metadata that can be transmitted out-of-band from the ciphertext, such as through TLS ALPN for transport protocol negotiation.
+
