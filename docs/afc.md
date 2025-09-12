@@ -107,9 +107,8 @@ The AFC handler processes these effects to install keys in AFC state.
 See [Aranya Client APIs](/docs/aranya-mvp.md#client-apis-1) for the high-level client APIs.
 See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel objects.
 
-1. App calls `Create*Channel*(..)` to create a channel object for the author and a `ctrl` message
-2. App sends `ctrl` message via any transport (TCP, QUIC, etc.) 
-    (**Note**: The `ctrl` message is not encrypted so the user must send it to the peer securely)
+1. App calls `Create*Channel*(..)` to create a channel object for the author and a `ctrl` message[^ctrl]
+2. App sends `ctrl` message via any transport (TCP, QUIC, etc.)
 3. Peer receives `ctrl` message via transport
 4. Peer calls `ReceiveCtrl(.., ctrl)` to create their own channel object
 
@@ -128,4 +127,6 @@ preferred transport.
 Note: The user must keep track of (device -> channel object) pairs
 
 [^header_usage]: The header provides channel metadata that can be transmitted out-of-band from the ciphertext, such as through TLS ALPN for transport protocol negotiation.
+
+[^ctrl]: The control message contains the serialized channel creation command, including the HPKE encapsulation that allows the peer device to derive the shared channel keys. Only the intended recipient can use this encapsulation with their private key to send/receive messages on the secure channel. See [HPKE key derivation](/docs/afc-crypto.md#key-derivation).
 
