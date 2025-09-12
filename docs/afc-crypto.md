@@ -87,7 +87,7 @@ The key derivation scheme is as follows:
 
 ```rust
 // `parent_cmd_id` is the parent command ID.
-fn NewChannelKeys(us, peer, parent_cmd_id, label) {
+fn NewChannelKeys(us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
@@ -119,7 +119,7 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
 }
 
 // `parent_cmd_id` is the parent command ID.
-fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
+fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
@@ -180,7 +180,7 @@ The key derivation scheme is as follows:
 // `seal_id` is the device that is allowed to encrypt.
 // `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
-fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
+fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label_id) {
     if seal_id == open_id {
         raise SameIdError
     }
@@ -212,7 +212,7 @@ fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
 // `seal_id` is the device that is allowed to encrypt.
 // `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
-fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
+fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
@@ -260,7 +260,7 @@ type ChannelId = u32
 fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
     header = concat(
         i2osp(version, 4), // version is a constant
-        label_id,   // device omitted from header
+        label_id,   // channel_id omitted from header
     )
     nonce = xor(SealBaseNonce, i2osp(sequence, AEAD_nonce_len()))
     SealKey = FindSealKey(channel_id)
