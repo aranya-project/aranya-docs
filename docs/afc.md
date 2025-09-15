@@ -76,7 +76,8 @@ The shared memory path is transmitted from the Aranya daemon to the Aranya clien
 
 ## Future Work
 
-- **Cleanup on exit**: The Aranya daemon will unlink the shared memory object when the daemon exits or crashes. See [aranya#483](https://github.com/aranya-project/aranya/issues/483).
+- **Cleanup on exit**: The Aranya daemon will unlink the shared memory object when the daemon exits or crashes. The shared memory object will not be unlinked
+when the daemon is restarted. See [aranya#483](https://github.com/aranya-project/aranya/issues/483).
 - **Daemon identification**: The Aranya daemon will write a unique "cookie" to the shared memory to identify itself. This will allow detection of conflicts when multiple Aranya daemons attempt to use the same shared memory object.
 
 ## Aranya Fast Channel IDs
@@ -110,7 +111,7 @@ Channel type is determined by the policy action used to create it.
   Removes an existing channel
 - `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
   Encrypts plaintext for the specified channel.
-  The returned header can be used in a number of different ways[^header_usage]
+  Returns the header which includes channel metadata, like the AFC protocol version.
 - `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
   Decrypts ciphertext from the peer. Returns the sequence number.
   N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
@@ -163,8 +164,6 @@ This keeps AFC focused on encryption while letting apps choose their
 preferred transport.
 
 Note: The user must keep track of (device -> channel object) pairs
-
-[^header_usage]: For example, the header provides channel metadata, like the AFC protocol version, that can be used in TLS ALPN for transport protocol negotiation.
 
 [^ctrl]: The control message contains the serialized channel creation command, including the HPKE encapsulation that allows the peer device to derive the shared channel keys. Only the intended recipient can use this encapsulation with their private key to send/receive messages on the secure channel. See [HPKE key derivation](/docs/afc-crypto.md#key-derivation).
 
