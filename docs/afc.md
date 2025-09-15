@@ -56,29 +56,28 @@ or when the delete method on a [channel object](/docs/aranya-mvp.md#channel-type
 
 ### AFC Config
 
-**Note**: this is the "afc" section of the Aranya daemon config
+**Note**: This is the "afc" section of the Aranya daemon config
 
 ```toml
 [afc]
-# determines whether afc is enabled
+# Determines whether AFC is enabled
 enable = true
-# path to the shared memory. See https://man7.org/linux/man-pages/man7/shm_overview.7.html
+# Path to the shared memory object. See https://man7.org/linux/man-pages/man7/shm_overview.7.html
 shm_path = "/afc"
-# Unlink `shm_path` before creating the shared memory?
-# Ignored if `create` is false.
-unlink_on_startup = true
-# Unlink `shm_path` before on exit?
-# If false, the shared memory will persist across daemon
-# restarts.
-unlink_at_exit = false
-# determines whether the shared memory is created
-create = true
-# Maximum number of channels AFC should support.
+# Maximum number of channels AFC should support
 max_chans = 100
 ```
 
-This data is transmitted from the Aranya daemon to the Aranya client via UDS IPC
-so that the client can create it's own view of the shared memory.
+## Shared Memory Lifecycle
+
+When the Aranya daemon starts up, it will reuse the shared memory object at ```shm_path``` if it exists and is valid. Otherwise, a new shared memory object will be created and initialized to a default state.
+
+The shared memory path is transmitted from the Aranya daemon to the Aranya client via UDS IPC, allowing the client to create its own view of the shared memory.
+
+## Future Work
+
+- **Cleanup on exit**: The Aranya daemon will unlink the shared memory object when the daemon exits or crashes. See [aranya#483](https://github.com/aranya-project/aranya/issues/483).
+- **Daemon identification**: The Aranya daemon will write a unique "cookie" to the shared memory to identify itself. This will allow detection of conflicts when multiple Aranya daemons attempt to use the same shared memory object.
 
 ## Aranya Fast Channel IDs
 
