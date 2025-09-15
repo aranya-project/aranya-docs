@@ -155,19 +155,17 @@ See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel 
 
 ## Transport Usage
 
-(Note: Assumes that channel objects were creating by calling `Create*Channel*` or `ReceiveChannel`)
-
-1. App calls `Channel.seal(..)` to encrypt data
+1. App calls `Channel.seal(..)` to encrypt data (**Note**: Assumes that an `AfcBidiChannel` or `AfcSendChannel` channel was created by calling `Create*Channel*(..)`)
 2. App sends ciphertext via any transport (TCP, QUIC, etc.)
 3. Peer receives ciphertext via transport  
-4. Peer calls `Channel.open(..)` to decrypt and get the sequence number
+4. Peer calls `Channel.open(..)` to decrypt and get the sequence number (**Note**: Assumes that an `AfcBidiChannel` or `AfcOpenChannel` channel was created by calling `ReceiveCtrl(..)`)
 
 This keeps AFC focused on encryption while letting apps choose their
 preferred transport.
 
 Note: The user must keep track of (device -> channel object) pairs
 
-[^header_usage]: The header provides channel metadata that can be transmitted out-of-band from the ciphertext, such as through TLS ALPN for transport protocol negotiation.
+[^header_usage]: For example, the header provides channel metadata, like the AFC protocol version, that can be used in TLS ALPN for transport protocol negotiation.
 
 [^ctrl]: The control message contains the serialized channel creation command, including the HPKE encapsulation that allows the peer device to derive the shared channel keys. Only the intended recipient can use this encapsulation with their private key to send/receive messages on the secure channel. See [HPKE key derivation](/docs/afc-crypto.md#key-derivation).
 
