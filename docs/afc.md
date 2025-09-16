@@ -4,11 +4,11 @@ title: Aranya Fast Channels
 permalink: "/afc/"
 ---
 
-# Aranya Fast Channels Data Routing For Aranya Beta V2
+# Aranya Fast Channels (AFC)
 
 ## Overview
 
-Aranya Fast Channels are a way for application data to be sent over the network to other peers using cryptography to ensure security.
+Aranya Fast Channels provide high-throughput encryption for application data, with keys managed by Aranya's policy system.
 
 This is the path data takes through the system:
 ```
@@ -16,7 +16,7 @@ application plaintext <->
 user library <->
 fast channel seal <->
 ciphertext <->
-tcp <->
+user preferred transport <->
 ciphertext <->
 user library <->
 fast channel open <->
@@ -24,12 +24,10 @@ application plaintext
 ```
 
 Data starts as plaintext in the application layer. The user library will encrypt/decrypt the data with fast channel open/seal operations.
-Ciphertext fast channel data is sent to other peers by the user library via TCP transport.
-The TCP transport will be used instead of QUIC to communicate between peers because it does not need certificates which complicate setup for the device.
+Ciphertext fast channel data is sent to other peers by the user library via the user's transport mechanism of choice.
+AFC is transport-agnostic - applications can use TCP, QUIC, UDP, or any other transport for the encrypted data.
 
-The daemon's Unix domain socket API is used to invoke fast channel creation actions in the Aranya daemon and get ephemeral session commands back from Aranya.
-The ephemeral session commands will be sent in ctrl messages (with the message type set to ctrl in the header) to other peers on the network via the TCP transport.
-When a peer receives an ephemeral session command, the command will be forwarded to the daemon to be received by Aranya and processed as an ephemeral command added to an ephemeral branch on the graph. Ephemeral commands are not persisted on the graph since they are only stored in RAM. Once the ephemeral session command has been processed, the daemon will update the channel keys in the shm where the user library can read from later.
+Channel creation is initiated through Aranya policy actions. When a policy action creates a channel, Aranya creates an ephemeral command that emits effects (`AfcBidiChannelCreated` or `AfcBidiChannelReceived`) that are processed by an AFC handler. The handler extracts channel keys from these effects and stores them in AFC state where the client can access them.
 
 This is the path an ephemeral command takes through the system:
 ```
@@ -38,7 +36,7 @@ daemon (daemon writes channel keys to shm, user library reads them) ->
 Unix domain socket api ->
 user library ->
 fast channel ctrl message ->
-tcp ->
+user provided transport ->
 peer user library ->
 peer Unix domain socket api ->
 peer daemon ->
@@ -47,102 +45,125 @@ peer daemon writes shm channel keys ->
 peer user library reads shm channel keys
 ```
 
+## Architecture
+
+AFC relies on POSIX shared memory API in order to share channel data
+between the Aranya client and Aranya daemon. The Aranya client only reads
+channel data while the Aranya daemon can read and modify the shared channel data.
+
+The daemon may modify channel data when the client invokes one of the [channel APIs](/docs/aranya-mvp.md#channel-apis)
+or when the delete method on a [channel object](/docs/aranya-mvp.md#channel-types) is called. 
+
+### AFC Config
+
+**Note**: This is the "afc" section of the Aranya daemon config
+
+```toml
+[afc]
+# Determines whether AFC is enabled
+enable = true
+# Path to the shared memory object. See https://man7.org/linux/man-pages/man7/shm_overview.7.html
+shm_path = "/afc"
+# Maximum number of channels AFC should support
+max_chans = 100
+```
+
+## Shared Memory Lifecycle
+
+When the Aranya daemon starts up, it will reuse the shared memory object at ```shm_path``` if it exists and is valid. Otherwise, a new shared memory object will be created and initialized to a default state.
+
+The shared memory path is transmitted from the Aranya daemon to the Aranya client via UDS IPC, allowing the client to create its own view of the shared memory.
+
+## Future Work
+
+- **Cleanup on exit**: The Aranya daemon will unlink the shared memory object when the daemon exits or crashes. The shared memory object will not be unlinked
+when the daemon is restarted. See [aranya#483](https://github.com/aranya-project/aranya/issues/483).
+- **Daemon identification**: The Aranya daemon will write a unique "cookie" to the shared memory to identify itself. This will allow detection of conflicts when multiple Aranya daemons attempt to use the same shared memory object.
+
 ## Aranya Fast Channel IDs
 
-We need a globally unique identifier to use when looking up fast channels channels.
-Use `BidiChannelId` or `UniChannelId` which are already defined using a kdf by `crypto::afc`. These channel IDs are the hash of the peer's encapsulated HPKE secret which are ephemeral public keys.
-Since these ids are too large to send in a header, truncate them down from 512 bits to 128 bits to create the `afc_id`.
-The ids will still be globally unique after truncation due to the number of bits remaining.
+Channels are locally identified by a `channel_id` which is a 32-bit integer. 
+The Aranya daemon generates channel IDs by incrementing a monotonic counter.
 
-Upon receiving a `ctrl` message, a peer will compute the `afc_id` based on the `BidiChannelId` or `UniChannelId` of the processed ephemeral command.
+This provides direct lookup without hash truncation.
 
-When fast channel data is sent, the `afc_id` mapping can be used to lookup the corresponding `channel_id = (node_id, label)` for use with the open/seal operations.
+There is a one-to-many relationship between `label_id` and `channel_id`. In other words, a channel_id is associated with a single label_id but a label_id can be associated with many channels.
 
-The `afc_id` and `label` are used to create the following mapping:
-`afc_id` -> `(node_id, label)`
-The `node_id` is an incrementing counter to ensure each fast channel channel has a unique `channel_id = (node_id, label)` to lookup the fast channel channel with.
+## Channel Types
 
-The mapping in code could use a `BTreeMap` like this:
-`BTreeMap<afc_id, (node_id, label)>`
+AFC supports bidirectional and unidirectional channels:
 
-TODO: consider using a `FnvIndexMap` instead of the `BTreeMap` for the `afc_id -> (node_id, label)` mapping:
-https://docs.rs/heapless/latest/heapless/type.FnvIndexMap.html
+**Bidirectional**: Both devices can encrypt and decrypt. Each side has
+different seal/open keys that correspond to each other.
 
-## Ctrl And Data Messages
+**Unidirectional**: The sender encrypts (seal_only_key), while the receiver decrypts
+(open_only_key).
 
-`ctrl` messages are used to setup an AFC channel with a peer initially.
-`data` message are used to send encrypted AFC channel ciphertext. The ciphertext is encrypted using the AFC `seal` operation.
+Channel type is determined by the policy action used to create it.
 
-`postcard` format is used to serialize/deserialize an enum containing both types of messages so it's easier to send them over the wire, deserialize them, and tell what type of message has been received. Fields can be accessed directly from the deserialized object rather than pulling data out of byte offsets.
+## AFC Client Interface
 
-Here's an example of what the transport messages sent to the AFC peer would look like as a Rust enum:
-```
-/// AFC ctrl/data messages.
-/// These messages are sent/received between AFC peers via the TCP transport.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TxpMsg {
-    Ctrl {
-        /// AFC protocol version.
-        version: Version,
-        /// Ephemeral command for AFC channel creation.
-        cmd: AfcCtrl,
-    },
-    Data {
-        /// AFC protocol version.
-        version: Version,
-        /// Truncated channel ID.
-        afc_id: AfcId,
-        /// Data encrypted with AFC `seal`.
-        ciphertext: Vec<u8>,
-    },
+**Note: This is an overview of the relevant Public APIs for the aranya-fast-channels crate.
+
+- `add(channel_id, label_id, keys)` -
+  Creates a new entry for a channel.
+- `remove(channel_id)` -
+  Removes an existing channel
+- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
+  Encrypts plaintext for the specified channel.
+  Returns the header which includes channel metadata, like the AFC protocol version.
+- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
+  Decrypts ciphertext from the peer. Returns the sequence number.
+  N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
+
+### Policy
+
+Channel creation happens through policy actions:
+
+```policy
+action create_afc_bidi_channel(peer_id id, label_id id) {
+    let channel = afc::create_bidi_channel(peer_id, label)
+    publish AfcBidiChannelCreated { ... }
+}
+
+action create_afc_uni_channel(sender_id id, receiver_id id, label_id id) {
+    let channel = afc::create_bidi_channel(peer_id, label)
+    publish AfcUniChannelCreated { ... }
 }
 ```
 
-## Aranya Fast Channel C-API / Rust API Interface
+Applications handle transport - AFC only does encryption/decryption.
 
-- `CreateChannel(team_id, net_identifier, label) -> channel_id` - Open a channel to the dest with the given label. The device API transparently handles sending the ephemeral command to the
-peer.
+## Effect Processing
 
-TODO: Channel keys are automatically rotated after a specific byte count.
+When channels are created, Aranya emits effects:
+- `AfcBidiChannelCreated` - Channel author receives this with keys
+- `AfcBidiChannelReceived` - Peer receives this with corresponding keys
+- `AfcUniChannelCreated/Received` - For unidirectional channels
 
-Sending ctrl messages:
-A ctrl message will be sent whenever a new fast channel is created by Aranya. The ctrl message will be sent from the device that created the channel to its peer on the other side of the channel.
-The user library will invoke the daemon's Unix domain socket API to create a new fast channel and get the corresponding ephemeral command with `let ephemeral_command = CreateChannel(...)`.
-This ephemeral command will be sent to the peer on the other side of the channel in a `ctrl` message so the peer can create a matching ephemeral session for the fast channel with `ReceiveSessionCommand(ephemeral_command)`.
+The AFC handler processes these effects to install keys in AFC state.
 
-- `DeleteChannel(team_id, channel_id) -> Result<()>` - Close a channel with the given ID. The device API transparently handles sending the ephemeral command to the peer. DeleteChannel results in dropping a TCP socket and map entry for the channel.
+## Initial Setup
 
-- `PollData(timeout) -> Result<()>` - blocks with timeout, returns `Ok` if there is fast channel data to read using `RecvData()`.
-Behind the scenes, this `accept()`s incoming TCP client connections and polls TCP streams for incoming data.
-If a ctrl message is received, that will be used to send a payload to Aranya via the Unix domain socket API with the daemon.
-This is used to set up channel keys based on the ephemeral session commands from the other peer.
-Polling is useful for instances where different channels could have different buffer sizes.
+See [Aranya Client APIs](/docs/aranya-mvp.md#client-apis-1) for the high-level client APIs.
+See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel objects.
 
-If a data message is received, that will be decrypted with the fast channel `open` operation and plaintext will be buffered for `RecvData` later.
+1. App calls `Create*Channel*(..)` to create a channel object for the author and a `ctrl` message[^ctrl]
+2. App sends `ctrl` message via any transport (TCP, QUIC, etc.)
+3. Peer receives `ctrl` message via transport
+4. Peer calls `ReceiveCtrl(.., ctrl)` to create their own channel object
 
-- `RecvData(bytes_buffer: &mut [u8]) -> Result<(data: &[u8], remote_net_identifier, label, afc_id)>` - read the fast channel data, returning the plaintext, sender, label, and afc_id (or an error). Returns a single fast channel message at a time. Returns the plaintext data that was previously decrypted and buffered during the call to PollData.
+## Transport Usage
 
-- `SendData(bytes, afc_id, timeout) -> Result<()>` - encrypts data with the fast channel `seal` operation and sends the data
-to the given channel with a timeout. This call is blocking until the timeout
-is complete. Data is sent via the `TCP` transport. A BTreeMap with net_identifier to channel_id mappings created during fast channel creation is used to lookup the TCP server of the peer to send data to. A DNS lookup is performed right before sending data to the IP address.
+1. App calls `Channel.seal(..)` to encrypt data (**Note**: Assumes that an `AfcBidiChannel` or `AfcSendChannel` channel was created by calling `Create*Channel*(..)`)
+2. App sends ciphertext via any transport (TCP, QUIC, etc.)
+3. Peer receives ciphertext via transport  
+4. Peer calls `Channel.open(..)` to decrypt and get the sequence number (**Note**: Assumes that an `AfcBidiChannel` or `AfcOpenChannel` channel was created by calling `ReceiveCtrl(..)`)
 
-## Aranya Fast Channel Unix domain socket API Methods
+This keeps AFC focused on encryption while letting apps choose their
+preferred transport.
 
-Methods needed by the daemon's Unix domain socket API to support sending and receiving fast channel messages.
+Note: The user must keep track of (device -> channel object) pairs
 
-- `CreateChannel(team_id, net_identifier, label) -> (channel_id, ephemeral_command)` creates a channel in Aranya, returning the `channel_id` and `ephemeral_command`. Adds the fast channel to the shm. The `ephemeral_command` will be sent to the fast channel peer so it can also create the channel.
-- `DeleteChannel(team_id, channel_id) -> Result<ephemeral_command>` deletes a channel in Aranya. Removes the fast channel from the shm, returning the `ephemeral_command` to send to the peer on the other side of the channel so it can also remove the channel.
-- `ReceiveSessionCommand(ephemeral_command) -> Result<()>` processes a session command through the policy. This will be invoked after receiving a ctrl message from an fast channel peer so that the channel exists as an entry in shm on both peers. And again when a channel is deleted.
+[^ctrl]: The control message contains the serialized channel creation command, including the HPKE encapsulation that allows the peer device to derive the shared channel keys. Only the intended recipient can use this encapsulation with their private key to send/receive messages on the secure channel. See [HPKE key derivation](/docs/afc-crypto.md#key-derivation).
 
-## Aranya Fast Channel Interface
-The fast channel data will be encrypted/decrypted via the seal/open operations:
-- `seal(channel_id, ciphertext: &mut [u8], plaintext: &[u8])`
-- `open(node_id, plaintext: &mut [u8], ciphertext: &[u8])`
-
-A `channel_id` consists of a node_id and an fast channel label:
-```
-pub struct ChannelId {
-    node_id: NodeId,
-    label: Label,
-}
-```

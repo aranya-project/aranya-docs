@@ -57,9 +57,6 @@ permission to use.
 The label binds a channel to a set of Aranya policy rules,
 ensuring that both channel devices meet some specified criteria.
 
-> **Note**: For performance reasons, devices and labels are mapped
-> to 32-bit integers.
-
 ### Bidirectional Channels
 
 Bidirectional channels allow both devices to encrypt and decrypt
@@ -88,21 +85,20 @@ The key derivation scheme is as follows:
 
 ```rust
 // `parent_cmd_id` is the parent command ID.
-fn NewChannelKeys(us, peer, parent_cmd_id, label) {
+fn NewChannelKeys(us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     info = concat(
-        "AfcChannelKeys",
-        suite_id,
-        engine_id,
+        "AfcBidiKeys-v1",
         parent_cmd_id,
+        DeviceId(peer),
         DeviceId(us),
-        DeviceId(peer)
-        i2osp(label),
+        label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     (enc, ctx) = HPKE_SetupSend(
         mode=mode_auth,
         skS=sk(EncryptionKey(us)),   // our private key
@@ -110,31 +106,32 @@ fn NewChannelKeys(us, peer, parent_cmd_id, label) {
         info=info,
     )
 
-    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
+    SealKey = HPKE_ExportSecret(ctx, "bidi response key")
+    OpenKey = HPKE_ExportSecret(ctx, "bidi response key")
+    SealBaseNonce = HPKE_ExportSecret(ctx, "bidi response base_nonce")
+    OpenBaseNonce = HPKE_ExportSecret(ctx, "bidi response base_nonce")
 
     // `enc` is sent to the other device.
-    // `seal_key` and `open_key` are provided to AFC.
-    return (enc, (SealKey, OpenKey))
+    // Keys and base nonces are provided to AFC.
+    return (enc, (SealKey, OpenKey, SealBaseNonce, OpenBaseNonce))
 }
 
 // `parent_cmd_id` is the parent command ID.
-fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
+fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     info = concat(
-        "AfcChannelKeys",
-        suite_id,
-        engine_id,
+        "AfcBidiKeys-v1",
         parent_cmd_id,
         // Note how these are swapped.
-        DeviceId(peer)
         DeviceId(us),
-        i2osp(label),
+        DeviceId(peer),
+        label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     ctx = HPKE_SetupRecv(
         mode=mode_auth,
         enc=enc,
@@ -144,10 +141,12 @@ fn DecryptChannelKeys(enc, us, peer, parent_cmd_id, label) {
     )
 
     // Remember, these are the reverse of `NewChannelKeys`.
-    SealKey = HPKE_ExportSecret(ctx, DeviceId(peer))
-    OpenKey = HPKE_ExportSecret(ctx, DeviceId(us))
+    SealKey = HPKE_ExportSecret(ctx, "bidi response key")
+    OpenKey = HPKE_ExportSecret(ctx, "bidi response key")
+    SealBaseNonce = HPKE_ExportSecret(ctx, "bidi response base_nonce")
+    OpenBaseNonce = HPKE_ExportSecret(ctx, "bidi response base_nonce")
 
-    return (seal_key, open_key)
+    return (SealKey, OpenKey, SealBaseNonce, OpenBaseNonce)
 }
 ```
 
@@ -179,21 +178,20 @@ The key derivation scheme is as follows:
 // `seal_id` is the device that is allowed to encrypt.
 // `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
-fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
+fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label_id) {
     if seal_id == open_id {
         raise SameIdError
     }
 
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     info = concat(
-        "AfcUnidirectionalKey",
-        suite_id,
-        engine_id,
+        "AfcUniKey-v1",
         parent_cmd_id,
         seal_id,
         open_id,
-        i2osp(label),
+        label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     (enc, ctx) = HPKE_SetupSend(
         mode=mode_auth,
         skS=sk(EncryptionKey(us)),   // our private key
@@ -202,30 +200,30 @@ fn NewSealOnlyKey(seal_id, open_id, parent_cmd_id, label) {
     )
 
     SealOnlyKey = HPKE_ExportSecret(ctx, "unidirectional key")
+    SealBaseNonce = HPKE_ExportSecret(ctx, "unidirectional base_nonce")
 
     // `enc` is sent to the other device.
-    // `SealOnlyKey` is provided to AFC.
-    return (enc, SealOnlyKey)
+    // `SealOnlyKey` and base nonce are provided to AFC.
+    return (enc, SealOnlyKey, SealBaseNonce)
 }
 
 // `seal_id` is the device that is allowed to encrypt.
 // `open_id` is the device that is allowed to decrypt.
 // `parent_cmd_id` is the parent command ID.
-fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
+fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label_id) {
     if DeviceId(us) == DeviceId(peer) {
         raise SameIdError
     }
 
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     info = concat(
-        "AfcUnidirectionalKey",
-        suite_id,
-        engine_id,
+        "AfcUniKey-v1",
         parent_cmd_id,
         seal_id,
         open_id,
-        i2osp(label),
+        label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     ctx = HPKE_SetupRecv(
         mode=mode_auth,
         enc=enc,
@@ -234,7 +232,10 @@ fn DecryptOpenOnlyKey(enc, us, peer, parent_cmd_id, label) {
         info=info,
     )
 
-    return HPKE_ExportSecret(ctx, "unidirectional key")
+    OpenOnlyKey = HPKE_ExportSecret(ctx, "unidirectional key")
+    OpenBaseNonce = HPKE_ExportSecret(ctx, "unidirectional base_nonce")
+    
+    return (OpenOnlyKey, OpenBaseNonce)
 }
 ```
 
@@ -245,44 +246,55 @@ identical for both channel types.
 
 #### Message Encryption
 
-AFC encrypts each message with a uniformly random nonce generated
-by a CSPRNG.
+AFC encrypts each message with a deterministic nonce derived from a
+base nonce and sequence number.
 
 ```rust
-fn Seal(device, label, SealKey, plaintext) {
+type ChannelId = u32
+```
+
+
+```rust
+fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
     header = concat(
         i2osp(version, 4), // version is a constant
-        i2osp(device, 4),
-        i2osp(label, 4),
+        label_id,
     )
-    nonce = random(AEAD_nonce_len())
-    SealKey = FindSealKey(device, label)
+    nonce = xor(SealBaseNonce, i2osp(sequence, AEAD_nonce_len()))
+    SealKey = FindSealKey(channel_id)
     ciphertext = AEAD_Seal(
         key=SealKey,
         nonce=nonce,
         plaintext=plaintext,
         ad=header,
     )
-    // For performance reasons, the nonce and header are
-    // appended, instead of prepended.
-    return concat(ciphertext, nonce, header)
+    return (ciphertext, sequence)
 }
 
-fn Open(device, label, ciphertext) {
-    // NB: while the header includes multiple fields, we only use
-    // the `label` since we already know everything else.
-    (ciphertext, nonce, header) = split(ciphertext);
-    (_, _, label) = split(header);
+fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext) {
+    (cipher_text, header) = split(ciphertext);
+    sequence = parse(header)
+    nonce = xor(OpenBaseNonce, i2osp(sequence, AEAD_nonce_len()))
 
-    OpenKey = FindOpenKey(device, label)
+    // Find the 'open' key and the label_id associated with this channel
+    (OpenKey, label_id_from_channel) = FindOpenKey(channel_id)
+
+    if label_id != label_id_from_channel {  
+        return Err(InvalidLabel)
+    }
+
+    ad = concat (
+        i2osp(version, 4), // version is a constant
+        label_id,
+    )
 
     plaintext = AEAD_Open(
         key=OpenKey,
         nonce=nonce,
         ciphertext=ciphertext,
-        ad=header,
+        ad=ad,
     )
-    return plaintext
+    return (plaintext, sequence)
 }
 ```
 

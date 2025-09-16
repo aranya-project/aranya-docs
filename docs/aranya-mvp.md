@@ -128,7 +128,14 @@ Component structure:
     - Quic Channels
       - Quic Channels control plane
       - Quic Channels data plane
+    - AFC (build flag required to enable API)
+      - AFC control plane
+      - AFC data plane
     - ... additional planes in future versions
+
+Rust features will be used for some features like the raw AFC interface. By default, AFC will not
+be included in the user facing API unless a specific build flag is present. The goal of this choice
+is to better signal which APIs are best suited for common use.
 
 ### Client APIs
 
@@ -256,6 +263,9 @@ associated to a device.
 
 ### Aranya Channels API
 
+AFC is preferred when running on embedded devices or when using a unidirectional transport. Refer to the
+beta spec and other existing documentation ([AFC](/docs/afc.md) and [AFC-Crypto](/docs/afc-crypto.md)) for more details on AFC.
+
 AQC uses a modified Quic transport implementation that supports the ability to use custom
 cryptography and has latency-based congestion control (see (s2n-quic)[https://github.com/aws/s2n-quic]).
 More information on AQC, including the list of AQC-specific APIs, can be found in the AQC spec:
@@ -268,33 +278,95 @@ control plane and the Quic channels data plane. The AQC control plane is respons
 Embedded devices that implement a subset of Aranya library should still be able to sync with
 clients that have the full product integrated. This compatibility is planned for Post-MVP.
 
-Both peer devices must be granted permission to use a label prior to creating an AQC channel with each other:
+Both peer devices must be granted permission to use a label prior to creating an AFC or AQC channel with each other:
 
 - `CreateLabel(team_id, label)` - create a label
 - `DeleteLabel(team_id, label)` - delete a label
 - `AssignLabel(team_id, device_id, label)` - assign a label to a device
 - `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
 
-#### AQC API
+#### AFC API
 
-- `SetAqcNetIdentifier(team_id, device_id, net_identifier)` - associate a network address to a
-device for use with AQC. If the address already exists for this device, it is replaced with the new
-address. Capable of resolving addresses via DNS. For use with CreateChannel and receiving messages.
-Can take either DNS name, IPv4, or IPv6. Current implementation uses a bidi map, so we can reverse
-lookup.
-- `UnsetAqcNetIdentifier(team_id, device_id, net_identifier)` - disassociate an AQC network address from a device.
-- `CreateAqcBidiChannel(team_id, peer_net_ident, label) -> channel` - create a bidirectional AQC channel with the given peer.
-- `CreateAqcUniChannel(team_id, peer_net_ident, label) -> channel` - create a unidirectional AQC channel with the given peer.
-- `ReceiveAqcChannel() -> channel` - receive the next available unidirectional or bidirectional AQC channel.
-- `TryReceiveAqcChannel() -> channel` - non-blocking version of `ReceiveAqcChannel()`.
-- `ReceiveAqcStream(channel) -> stream` - receive the next available AQC stream for an AQC channel.
-- `CreateAqcBidiStream(channel) -> stream` - create a new bidirectional stream on an existing bidirectional AQC channel.
-- `CreateAqcUniStream(channel) -> stream` - create a new unidirectional stream on an existing bidirectional or unidirectional AQC channel.
-- `SendAqcStreamData(stream, data) -> bool` - send data via an AQC stream.
-- `ReceiveAqcStreamData(stream) -> Option<data>` - block until data is received via an AQC stream.
-- `TryReceiveAqcStreamData(stream) -> Option<data>` - attempt to receive data from an AQC stream.
-- `DeleteAqcBidiChannel(channel)` - delete a bidirectional AQC channel.
-- `DeleteAqcUniChannel(channel)` - delete a unidirectional AQC channel.
+The AFC APIs are available by enabling the "afc" feature.
+At the time of this writing, AFC is not considered stable so the "preview" feature
+must be enabled as well.
+
+##### Channel Types
+
+```rust
+/// An AFC channel.
+pub enum AfcChannel {
+    Bidi(AfcBidiChannel),
+    AfcSendChannel,
+    AfcOpenChannel,
+}
+
+/// A bidirectional AFC channel.
+pub struct AfcBidiChannel {
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
+}
+
+/// A unidirectional AFC channel that can only send.
+pub struct AfcSendChannel {
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
+}
+
+/// A unidirectional AFC channel that can only open.
+pub struct AfcOpenChannel {
+    channel_id: AfcChannelId,
+    label_id: LabelId,
+    // Other fields omitted for brevity
+    ..
+}
+```
+
+##### Client APIs
+
+- `CreateBidiChannel(team_id, device_id, label_id) -> (AfcBidiChannel, AfcCtrlMessage)` - create a bidirectional channel with the given peer device and label_id.
+- `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer device and label_id where the author is the sender.
+- `CreateUniChannelOpen(team_id, device_id, label_id) -> (AfcOpenChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer and label_id where the author is the opener.
+- `ReceiveCtrl(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by processing a 'ctrl' message.
+
+**Note**: The channel author must send `AfcCtrlMessage` to the peer via any transport. Once the peer receives `AfcCtrlMessage`, it should call `ReceiveCtrl()` to receive the other side of the channel.
+
+##### Channel APIs
+
+Method on `AfcBidiChannel` and `AfcOpenChannel`
+
+```rust
+  type SequenceNumber = u64;
+
+  /// Decrypts and authenticates `ciphertext`, writing the result to `plaintext`.
+  /// Returns the sequence number.
+  ///
+  /// The plaintext buffer must have `AfcChannels::overhead()` fewer bytes allocated to it than the ciphertext buffer:
+  /// plaintext.len() = plaintext.len() - AfcChannels::overhead()
+  fn open(&mut self, ciphertext: &[u8], plaintext: &mut [u8]) -> Result<SequenceNumber, AfcError>;
+```
+
+Method on `AfcBidiChannel` and `AfcSendChannel`
+
+```rust
+  /// Encrypts `plaintext`, writing the result to `ciphertext`.
+  ///
+  /// The ciphertext buffer must have `AfcChannels::overhead()` more bytes allocated to it than the plaintext buffer:
+  /// ciphertext.len() = plaintext.len() + AfcChannels::overhead()
+  fn seal(&mut self, plaintext: &[u8], ciphertext: &mut [u8]) -> Result<(), AfcError>;
+```
+
+Methods on `AfcBidiChannel`, `AfcSendChannel` and `AfcOpenChannel`
+
+```rust
+fn delete(&self) -> Result<(), Error>;
+fn channel_id(&self) -> AfcChannelId;
+fn label_id(&self) -> LabelId;
+```
 
 ### Graph Querying APIs
 
@@ -304,9 +376,8 @@ are likely to be moved to nice-to-have or Post-MVP, but are currently planned fo
 
 - `QueryRoleAssignment(device_id) -> Role`
 - `QueryDeviceKeybundle(device_id) -> Keybundle`
-- `QueryAqcNetworkId(device_id) -> network_str`
-- `QueryAqcLabelAssignments(device_id) -> Vec<label>`
-- `QueryAqcLabelExists(device_id) -> Vec<label>`
+- `QueryLabelAssignments(device_id) -> Vec<label>`
+- `QueryLabelExists(device_id) -> Vec<label>`
 
 
 ## Roles & Permissions
@@ -448,6 +519,7 @@ some other pattern is required.
 
 ## Appendix C: Glossary
 
+- `Aranya Fast Channels (AFC)` - See [AFC spec](/docs/afc.md).
 - `Aranya Quic Channels (AQC)` - An integration of Aranya with QUIC to provide a secure
 and integrated transport. See QUIC channels spec. TODO(declan): link
 - `Aranya` - the main library that drives the control plane and policy execution.
