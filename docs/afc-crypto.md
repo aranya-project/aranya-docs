@@ -258,7 +258,7 @@ type ChannelId = u32
 fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
     header = concat(
         i2osp(version, 4), // version is a constant
-        label_id,   // channel_id omitted from header
+        label_id,
     )
     nonce = xor(SealBaseNonce, i2osp(sequence, AEAD_nonce_len()))
     SealKey = FindSealKey(channel_id)
@@ -268,12 +268,16 @@ fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
         plaintext=plaintext,
         ad=header,
     )
-    // Sequence number provides replay protection
     return (ciphertext, sequence)
 }
 
-fn Open(OpenKey, OpenBaseNonce, ciphertext, sequence, header) {
+fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext, sequence) {
+    header = concat(
+        i2osp(version, 4), // version is a constant
+        label_id,
+    )
     nonce = xor(OpenBaseNonce, i2osp(sequence, AEAD_nonce_len()))
+    OpenKey = FindOpenKey(channel_id)
 
     plaintext = AEAD_Open(
         key=OpenKey,
@@ -281,7 +285,7 @@ fn Open(OpenKey, OpenBaseNonce, ciphertext, sequence, header) {
         ciphertext=ciphertext,
         ad=header,
     )
-    return (plaintext, label_from_header(header))
+    return plaintext
 }
 ```
 
