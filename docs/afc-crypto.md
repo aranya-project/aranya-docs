@@ -271,21 +271,30 @@ fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
     return (ciphertext, sequence)
 }
 
-fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext, sequence) {
-    header = concat(
+fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext) {
+    (cipher_text, header) = split(ciphertext);
+    sequence = parse(header)
+    nonce = xor(OpenBaseNonce, i2osp(sequence, AEAD_nonce_len()))
+
+    // Find the 'open' key and the label_id associated with this channel
+    (OpenKey, label_id_from_channel) = FindOpenKey(channel_id)
+
+    if label_id != label_id_from_channel {  
+        return Err(InvalidLabel)
+    }
+
+    ad = concat (
         i2osp(version, 4), // version is a constant
         label_id,
     )
-    nonce = xor(OpenBaseNonce, i2osp(sequence, AEAD_nonce_len()))
-    OpenKey = FindOpenKey(channel_id)
 
     plaintext = AEAD_Open(
         key=OpenKey,
         nonce=nonce,
         ciphertext=ciphertext,
-        ad=header,
+        ad=ad,
     )
-    return plaintext
+    return (plaintext, sequence)
 }
 ```
 
