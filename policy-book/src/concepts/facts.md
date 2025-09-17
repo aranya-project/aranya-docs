@@ -1,16 +1,17 @@
 # Facts
 
 Facts are a kind of database embedded in the Aranya runtime. They keep
-track of a fairly regular key/value store, but they are modified as a
+track of a fairly standard key/value store, but they are modified as a
 consequence of running policy commands. And because the graph can
 branch, the value of a fact depends on what commands currently exist in
 your graph.
 
-Let's start with an example. Suppose you have a fact that keeps track of
-a counter value per user.
+Let's expand on our [account balance
+example](commands-graph.md#commands) from earlier. Suppose you have a
+fact that keeps track of an account balance value per user.
 
 ```policy
-fact Counter[user id]=>{value int}
+fact Account[user id]=>{balance int}
 ```
 
 The fields on the left of `=>` between square brackets are the **key**,
@@ -28,10 +29,10 @@ command Enroll {
     }
 
     policy {
-        check !exists Counter[user: this.user]
+        check !exists Account[user: this.user]
 
         finish {
-            create Counter[user: this.user]=>{value: 0}
+            create Account[user: this.user]=>{balance: 0}
         }
     }
 }
@@ -45,28 +46,34 @@ database. Since we're creating a new fact, we want to ensure that it
 doesn't exist yet. Then in the `finish` block we use
 [`create`](../reference/statements/create.md) to create the fact with
 the `user` value coming from the `user` field in the command, and an
-initial value of zero.
+initial balance of zero.
 
-Next we need a command that can change the value.
+To change this balance, we'll use the command we created earlier.
 
 ```policy
-command Increment {
+command AddBalance {
     fields {
         user id,
+        amount int,
     }
 
     policy {
-        let current_count = check_unwrap query Counter[user: this.user]=>{value: ?}
-        let new_value = current_count.value + 1
+        check amount > 0
+        let account = check_unwrap query Account[id: this.user]=>{balance: ?}
+        let current_balance = account.balance
+        let new_balance = current_balance + this.amount
 
         finish {
-            update Counter[user: this.user] to {value: new_value}
+            update Account[id: this.user] to {balance: new_balance}
         }
     }
+
+    ...
 }
 ```
 
-We first fetch the value using
+We first check that the amount being added is greater than zero. Then we
+fetch the current balance using
 [`query`](../reference/expressions/functions/queries.md#query). Note the
 use of the bind marker `?` in the value side of the fact
 description[^query-value-side]. This tells `query` that you don't care
@@ -74,7 +81,7 @@ what that value is. And indeed, that's the value we're looking for when
 we fetch this fact.
 
 [^query-value-side]: If all of the value fields are bound, you can
-    actually omit the value side entirely: `query Counter[user:
+    shortcut this and omit the value side entirely: `query Counter[user:
     this.user]`.
 
 We use
@@ -83,114 +90,142 @@ to unwrap the optional given to us by the query. If the optional is
 `None`, `check_unwrap` exits with a [check
 failure](../reference/errors.md#check-failures). `check` and
 `check_unwrap` should always be used to check the preconditions of a
-command. Next we increment the value, and finally in the `finish` block
+command. Next we update the balance, and finally in the `finish` block
 we use [`update`](../reference/statements/update.md) to change the value
 in the fact database.
 
 And finally, let's write a command that does something with this.
 
 ```policy
-effect AuthorizationResult {
-    authorized bool,
+effect WithdrawalResult {
+    completed bool,
+    remaining_balance int,
 }
 
-command Authorize {
+command Withdrawal {
     fields {
         user id,
+        amount int,
     }
 
     policy {
-        let current_count = check_unwrap query Counter[user: this.user]
-        let authorized = current_count >= 2
+        let account = check_unwrap query Account[user: this.user]
+        let completed = account.balance >= this.amount
 
-        finish {
-            emit AuthorizationResult {
-                authorized: authorized
+        if completed {
+            let new_balance = account.balance - amount_withdrawn
+            finish {
+                update Account[user: this.user] to {balance: new_balance}
+                emit WithdrawalResult {
+                    completed: true,
+                    remaining_balance: new_balance,
+                }
+            }
+        } else {
+            finish {
+                emit WithdrawalResult {
+                    completed: false,
+                    remaining_balance: account.balance
+                }
             }
         }
     }
 }
 ```
 
-This command uses the count stored in the fact database and checks
-whether it is at least 2. Then it emits an effect to the application
-reporting this status. So you can see this kind of works like a vote
-system. If you have at least two `Increment` commands, you're
-authorized.
+This command uses the balance stored in the fact database and checks
+whether it is at least as much as the amount requested. If it is, it
+updates the balance and reports a `WithdrawalResult` effect to the
+application with `completed: true` and the new balance.
+
+If there isn't enough money in the account, no account update happens
+and a `WithdrawalResult` is emitted that explains this result.
 
 ## Exploring Alternate Realities
 
 Now that we have our commands, let's see what happens if we issue a
-series of them. I'll use a shorthand to describe the series of commands.
+series of them. I'll omit the `user` field in these graphs for the sake
+of brevity.
 
+```mermaid
+graph RL;
+A(Enroll);
+B("AddBalance { amount: 10 }");
+C("AddBalance { amount: 100 }");
+D("Withdrawal { amount: 50 }");
+
+D --> C --> B --> A;
 ```
-A: Enroll{ user: Bob }
-B: Increment{ user: Bob }
-C: Increment{ user: Bob }
-D: Authorize{ user: Bob }
 
-A -> B -> C -> D
-```
-
-This is a linear sequence of commands. We start with enrolling Bob, then
-we increment twice, then we Authorize, which according to our rules
-should produce `AuthorizationResult { authorized: true }`.
+This is a linear sequence of commands. We start with enrolling, then we
+add a balance twice, then we withdraw 50, which according to our rules
+should succeed and emit `WithdrawalResult { completed: true,
+remaining_balance: 60 }`.
 
 What's important to understand about the fact database is it is not just
 the sum of all database operations. It exists and is queryable at every
 point in this sequence so that it can be reconstructed when other
-sequences of commands are merged. Let's suppose that instead the graph looks like this:
+sequences of commands are merged. Let's suppose that instead the graph
+looks like this:
 
+```mermaid
+graph RL;
+A(Enroll);
+B("AddBalance { amount: 10 }");
+C("AddBalance { amount: 100 }");
+D("Withdrawal { amount: 50 }");
+M{{M}};
+
+D --> M --> B & C --> A;
 ```
- /-> B -\
-A        -> M -> D
- \-> C -/
-```
 
-And B and C were created in parallel branches. Here `M` is a "merge
-command", which is just a join point for diverging parts of the graph so
-that we can continue to add commands linearly. But we still need to turn
-this into a linear sequence of commands so we can calculate the final
-facts in `D`. The Aranya runtime does this with the [weave
-function](/graph-auth/#weave), which makes repeatable choices to turn a
-graph into a linear sequence of commands.
-
-But how does the weave function make this choice? Which comes first, `B`
-or `C`? Well, since they are the same command, the weave function just
-makes an arbitrary and random decision[^weave-decision]. Let's say for
-the sake of demonstration that this decision is "alphabetical order" so
-`B` comes first. Then this looks exactly like the original linear
-sequence. And since they're the same command we know it doesn't matter
-anyway.
-
-[^weave-decision]: It actually orders them based on their command ID,
-    which is a hash derived from their serialized contents.
+Where `AddBalance { amount: 10 }` and `AddBalance { amount: 100 }` were
+created in parallel branches. Here `M` is a "merge command", which is
+just a join point for diverging parts of the graph so that we can
+continue to add commands linearly. But we still need to turn this into a
+linear sequence of commands so we can calculate the final facts in `D`.
+The Aranya runtime does this with the [weave
+function](commands-graph.md#the-weave), which makes repeatable choices
+to turn a graph into a linear sequence of commands. Here it doesn't
+matter which `AddBalance` comes first. We'll always have a sufficient
+balance to satisfy the `Withdrawal` after the merge.
 
 But sometimes order does matter. Suppose we had this instead.
 
-```
- /-> B -> D -\
-A             -> M
- \-> C ------/
+```mermaid
+graph RL;
+A(Enroll);
+B("AddBalance { amount: 10 }");
+C("AddBalance { amount: 100 }");
+D("Withdrawal { amount: 50 }");
+M{{M}};
+
+M --> D & C
+C & B --> A
+D --> B
 ```
 
-Now which branch comes first determines whether the `Authorize` command
-in `D` is true or false. Because if we order it `A, C, B, D` it's like
-before, but if it's `A, B, D, C` we only have one `Increment` before the
-`Authorize` and it will produce `AuthorizationResult { authorized: false
+Now which branch comes first determines whether the `Withdrawal` command
+succeeds or fails. Because if we order it the top branch before the
+bottom one, it's like before. But if it's the other way around, we only
+have one `AddBalance` before the `Withdrawal` and it will produce
+`WithdrawalResult { completed: false, remaining_balance: 10
 }`[^weave-order].
 
 [^weave-order]: Weave order isn't actually a branch-to-branch choice.
-    The resulting order could have interleaved `C` between `B` and `D`.
+    The resulting order could have interleaved `AddBalance { amount: 100
+    }` between `AddBalance { amount: 10 }` and `Withdrawal { amount: 50
+    }`.
 
-How do we make sure the order is what we expect? Commands can be given
-priorities that let the weave function know which commands should come
-first when there's a decision to be made. If we gave `Increment` a
-higher priority than `Authorize` we would have an optimistic solution
-that orders both `B` and `C` before `D`. If we gave `Authorize` a higher
-priority, we'd have a pessimistic solution that would order `C` after
-`D`. It's important to understand that there is no one solution for
-ordering commands and it depends on your application.
+As we discussed earlier in [The Weave](commands-graph.md#the-weave), we
+could add a priority value to make this less ambiguous. If we gave
+`AddBalance` a higher priority than `Withdrawal` we would have an
+optimistic solution that orders both `AddBalance`s before `Withdrawal`.
+If we gave `Withdrawal` a higher priority, we'd have a pessimistic
+solution that would order `AddBalance { amount: 100 }` after the
+`Withdrawal`. You probably want the optimistic solution here, but there
+is generally no one correct solution for ordering commands and how you
+set priorities depends on your application.
 
 ## Using Keys and Bind Markers
 

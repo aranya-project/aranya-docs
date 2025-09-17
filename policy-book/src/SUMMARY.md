@@ -6,6 +6,7 @@
 
 - [Named Values](concepts/named-values.md)
 - [Scope](concepts/scope.md)
+- [Commands and the Graph](concepts/commands-graph.md)
 - [Facts](concepts/facts.md)
 
 # Language Reference

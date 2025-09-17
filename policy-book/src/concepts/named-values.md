@@ -11,6 +11,7 @@ let x = 3
 let x = 4  // Error - cannot redefine `x`
 if foo is None {
     let x = 5  // Can't shadow in an inner scope, either.
+    let y = x + 1  // `x` is inherited from the enclosing scope
 }
 ```
 

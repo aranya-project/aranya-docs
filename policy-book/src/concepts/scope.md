@@ -8,6 +8,15 @@ certain operational constants that will be used repeatedly. See [Global
 Values](../reference/top-level/global-values.md) for more information on
 what is allowed in global scope.
 
+```
+let MAX_RETRIES = 3
+
+function retry_thing() bool {
+    let state = unwrap_check query State[]=>{retries: ?}
+    return state.retries > MAX_RETRIES
+}
+```
+
 ## Blocks
 
 Named values are scoped to blocks. A block is usually anything enclosed
@@ -16,8 +25,8 @@ in curly brackets that contains [statements](../reference/statements.md)
 block, a block expression, etc.
 
 [`let`](../reference/statements/let.md) in an enclosing block is scoped
-to that block. It is an error to use such a definition outside of that
-block, and it will cause a compile error.
+to that block. Using such a definition outside of that block will cause
+a compile error.
 
 ```
 action foo(x int) {
