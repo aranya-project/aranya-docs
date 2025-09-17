@@ -255,13 +255,17 @@ type ChannelId = u32
 
 
 ```rust
-fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
+fn Seal(channel_id, SealKey, SealBaseNonce, sequence, plaintext) {
+    nonce = xor(SealBaseNonce, i2osp(sequence, AEAD_nonce_len()))
+
+    // Find the 'seal' key and the label_id associated with this channel
+    (SealKey, label_id) = FindSealKey(channel_id)
+
     header = concat(
         i2osp(version, 4), // version is a constant
         label_id,
     )
-    nonce = xor(SealBaseNonce, i2osp(sequence, AEAD_nonce_len()))
-    SealKey = FindSealKey(channel_id)
+
     ciphertext = AEAD_Seal(
         key=SealKey,
         nonce=nonce,
@@ -271,17 +275,13 @@ fn Seal(channel_id, label_id, SealKey, SealBaseNonce, sequence, plaintext) {
     return (ciphertext, sequence)
 }
 
-fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext) {
+fn Open(channel_id, OpenKey, OpenBaseNonce, ciphertext) {
     (cipher_text, header) = split(ciphertext);
     sequence = parse(header)
     nonce = xor(OpenBaseNonce, i2osp(sequence, AEAD_nonce_len()))
 
     // Find the 'open' key and the label_id associated with this channel
-    (OpenKey, label_id_from_channel) = FindOpenKey(channel_id)
-
-    if label_id != label_id_from_channel {  
-        return Err(InvalidLabel)
-    }
+    (OpenKey, label_id) = FindOpenKey(channel_id)
 
     ad = concat (
         i2osp(version, 4), // version is a constant
@@ -294,7 +294,7 @@ fn Open(channel_id, label_id, OpenKey, OpenBaseNonce, ciphertext) {
         ciphertext=ciphertext,
         ad=ad,
     )
-    return (plaintext, sequence)
+    return (plaintext, label_id)
 }
 ```
 
