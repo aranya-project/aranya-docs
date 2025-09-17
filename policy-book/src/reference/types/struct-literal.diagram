@@ -1,0 +1,6 @@
+[`struct-expression` <'struct-literal', 'struct-conversion', 'struct-subselection'>]
+
+[`struct-literal` "struct" 'identifier' "{" <
+        ['identifier' ":" 'expression'],
+        ["..." 'identifier']#`Struct Composition`
+    >*"," ","? "}"]
