@@ -109,12 +109,12 @@ Channel type is determined by the policy action used to create it.
   Creates a new entry for a channel.
 - `remove(channel_id)` -
   Removes an existing channel
-- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
+- `seal(channel_id, ciphertext_buffer, plaintext) -> Header` -
   Encrypts plaintext for the specified channel.
   Returns the header which includes channel metadata, like the AFC protocol version.
-- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
-  Decrypts ciphertext from the peer. Returns the sequence number.
-  N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
+- `open(channel_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
+  Decrypts ciphertext from the peer. 
+  Returns the label_id associated with the channel and the sequence number of the ciphertext.
 
 ### Policy
 
