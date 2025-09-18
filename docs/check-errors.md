@@ -1,45 +1,53 @@
 # Overview
 
-Policy writers should be able to provide custom errors for `check` and `check_unwrap` statements. These errors would be returned to the application in case of a check failure, to help the developer narrow down the cause of the failure.
+Currently, check failures simply terminate with no additional information. This makes it hard to diagnose errors. We want to improve the way check failures are handled in the policy, and the way errors are communicated back to the application.
 
-When a check fails, the VM terminates with an `ExitReson::Check` variant, which is returned to the application. This exit variant will accept an error value, provided by the failing check statement.
+# Proposal
+
+* Commands can now have more than one recall block. This lets the policy decide how to respond to errors.
+  * Each block has a name and optional arguments.
+  * The default empty block remains, and is called by `check` statements that don't specify a recall block. This keeps existing policies working. Only one unnamed block is allowed.
+  * Named blocks may accept arguments. The number and types are verified by the compiler at the check site, based on block name.
+* Recall blocks emit effects to signal errors to the application. Which effect(s), if any, are emitted is up to the policy.
+* The runtime adds an `error: true` attribute to effects emitted in a recall context. This lets the application distinguish successful effects from errors.
+* The `check` statement gains an optional `or recall <name>` clause, which specifies which recall block to execute if the check fails. 
+* The `or recall` clause is optional to avoid breaking existing policies.
+* `check` is not allowed in actions anymore since there's no command to recall. This will break existing policies. Needs more discussion.
 
 Example:
 
 ```policy
-enum Err { InvalidUserId, UserNotFound }
+enum Err {NoUser, NoPermission}
 
-action foo(user_id int) {
-    check user_id > 0 else Err::InvalidUserId
-    let user = check_unwrap query User[user_id: user_id] else Err::UserNotFound
-    ...
-}
-```
+effect Result { error optional enum Err }
 
-# Implementation
+command Foo {
+    policy {
+        check ... // calls default recall block
+        check ... or recall user(Err::NoUser) // calls named block
+        check ... or recall something_else
+        finish {
+            emit Result { error: None } // success
+        }
+    }
+    recall {
 
-## Capturing error information
+    }
+    recall no_user(error enum Err) {
+        emit Result { error: error }
+    }
+    recall something_else { // named recall block with no args... allowed?
 
-The `check` and `check_unwrap` statements gain a required `else` clause to specify the error to return if the check fails. For example, `check <expr> else <error>`. The `error` is an expression yielding a `VType`.
-
-> **TBD**: Should the else clause be optional? Otherwise it would be a breaking change.
-
-## Responding to errors
-
-If a check fails within a command, the command's `recall` block will be called, with the error as an argument. 
-
-```policy
-recall(error /* optional string|enum|... */) {
-    match error {
-        ...
     }
 }
+
+action foo() {
+    publish Foo {}
+}
 ```
 
-> **TBD**: Not sure how the `error` parameter type will work. Each check can "throw" any VType, so the compiler can't verify it. The policy writer would have to be consistent with the error type.
+## TBD
 
-Check failures outside command contexts simply terminate.
+> Should we allow named recall blocks with no args, e.g. the `something_else` block in the example above?
 
-## Returning errors to the application
-
-The check error is captured by the VM's `ExitReason::Check` enum variant. But the runtime (VmPolicy) terminates with an `EngineError::Check` variant, which will also need an error parameter. The VmPolicy will need to copy the VM's error value to the engine error.
+> If `check` is no longer allowed in actions, what should be done instead?
