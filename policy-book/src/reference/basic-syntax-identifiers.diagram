@@ -1,0 +1,3 @@
+[`ASCII-alpha` <'char a-z', 'char A-Z'>]
+[`ASCII-alphanumeric` <'ASCII-alpha', 'char 0-9'>]
+[`identifier` 'ASCII-alpha' <'ASCII-alphanumeric', "_">*!]

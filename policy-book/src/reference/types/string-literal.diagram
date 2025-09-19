@@ -1,0 +1,5 @@
+[`hex-digit` <'char 0-9', 'char A-F'>]
+
+[`string_literal` "\""
+  <"\\n", "\\\\", "\\\"", ["\\x" 'hex-digit' 'hex-digit'], 'not \"'>*!
+"\""]
