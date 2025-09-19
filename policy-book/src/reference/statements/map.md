@@ -21,8 +21,9 @@ map FooCounter[deviceID: ?]=>{count: ?} as counter {
 ```
 
 `map` executes a fact query, and for each fact found, defines the given
-name as a struct containing the bound fields. This can result in zero
-or more iterations.
+name as a struct containing the fact's fields. This can result in zero
+or more iterations. Just like in `query`, the value side of the fact can
+be omitted if all its fields are bound.
 
 You can think of this kind of like a for loop over all possible matching
 facts. The name given after `as` is scoped to the block.

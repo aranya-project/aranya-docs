@@ -11,7 +11,7 @@ and `\r`).
 ## Comments
 
 Comments are C99-style, supporting both block comments(`/* */`) and
-line comments (`//`).
+line comments (`//`). Block comments do not nest.
 
 ```policy
 /* This is a block comment

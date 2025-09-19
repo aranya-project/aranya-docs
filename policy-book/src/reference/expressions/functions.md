@@ -14,6 +14,9 @@ function increment_twice(x int) int {
 }
 ```
 
+Functions cannot be called recursively, and any attempt to do so are
+a compiler error.
+
 <img src="function-call.svg">
 
 FFI functions can be called similarly, but must be specified with their

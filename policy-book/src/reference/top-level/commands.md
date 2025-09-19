@@ -49,10 +49,8 @@ like a failed check or unwrapping a `None` optional (see
 [Errors](../errors.md) for how different kinds of errors affect policy
 execution). Policy is transactional - a command is only accepted and
 facts are only updated if policy execution reaches the end of a `finish`
-block without terminating (though it may still not be accepted if it is
-created from an action with mutliple `publish`es and a later one fails).
-Recall blocks allow the production of effects and mutation of facts
-after a command is recalled.
+block without terminating. Recall blocks allow the production of effects
+and mutation of facts after a command is recalled.
 
 Inside a `command` block are several sub-blocks:
 
@@ -145,7 +143,7 @@ being processed; and `envelope`, described above.
 
 ### Finish block
 
-A finish block can contain [`create`](../statements/create.md),
+A finish block can contain only [`create`](../statements/create.md),
 [`update`](../statements/update.md),
 [`delete`](../statements/delete.md), and [`emit`](../statements/emit.md)
 statements, as well as call [finish

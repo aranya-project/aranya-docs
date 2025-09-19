@@ -33,15 +33,16 @@ things can cause runtime exceptions, including but not limited to:
 
 There is no way to detect or recover from a runtime exception in the
 policy language. Runtime exceptions do not execute `recall` blocks, and
-instead execute a "default recall" defined by the policy runtime.
+instead return an error to the application.
 
 ## Errors in Actions
 
 Errors in action code can fail as you'd expect, but they can also fail
 if their `publish`ed commands fail. Regardless of whether the commands
 fail due to check failure or a runtime exception, any failure during an
-action causes the published commands to not be accepted into the graph.
-For example, this action will never successfully publish a command:
+action causes all commands published from the action to not be accepted
+into the graph[^atomic-action-clarifier]. For example, this action will
+never successfully publish a command:
 
 ```
 action do_nothing() {
@@ -70,3 +71,8 @@ action do_nothing_harder() {
     publish FailCommand{ fail: true }
 }
 ```
+
+[^atomic-action-clarifier]: This does not mean that the set of commands
+    published in an action are treated atomically. Each command is
+    processed individually whether they are published by one action or
+    many.

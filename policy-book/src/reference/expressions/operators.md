@@ -43,7 +43,7 @@ Integers can be compared against each other.
 |----------|---------|
 | `.`      | `A.B` accesses field B in struct A |
 | `as` | `A as B` creates a `struct B` from the fields of `A` only if the two struct types have the same fields |
-| `substruct` | `A substruct B` creates a `struct B` from the fields of `A` |
+| `substruct` | `A substruct B` creates a `struct B` from the fields of `A` only if the fields of `struct B` are a subset of `A`|
 
 ## Optional Operators
 

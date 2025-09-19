@@ -18,4 +18,7 @@ Insertion](structs.md#struct-definition-field-insertion) to define the
 fields of an effect with a previously defined struct.
 
 Effects delivered through the application API report the ID and recall
-status of the Command that emitted them.
+status of the Command that emitted them. Because commands may be
+reevaluated after syncing and merging, effects can be issued multiple
+times. An application might use the command ID and recall status to
+filter out duplicate effects.

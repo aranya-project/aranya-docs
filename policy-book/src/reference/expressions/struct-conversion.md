@@ -23,7 +23,7 @@ command Bar {
     ...
 }
 
-action frob(f Foo) {
+action frob() {
     // external::foo_creator() returns a Foo
     let b = external::foo_creator() as Bar
     publish b
