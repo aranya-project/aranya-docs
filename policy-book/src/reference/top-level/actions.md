@@ -11,7 +11,7 @@ An action is a function callable from the application, which can perform
 data transformations and publish zero or more commands. The effects of
 an action are all or none &ndash; the commands published and side
 effects emitted will only be visible to the rest of the system if the
-entire action succeeds[^action-publish-clarification]. And error that
+entire action succeeds[^action-publish-clarification]. An error that
 causes termination will result in no changes (see [Errors in
 Actions](../errors.md)).
 
