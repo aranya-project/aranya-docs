@@ -45,3 +45,13 @@ global scope is the last scope in this search and is always present.
 `let` assignments cannot assign to any names already resolvable in the
 current scope. Shadowing an existing identifier this way is a compile
 error.
+
+```
+action foo() {
+    let x = 1
+    if x == 1 {
+        // This is an error - x is already defined
+        let x = 4
+    }
+}
+```

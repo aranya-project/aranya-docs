@@ -34,18 +34,22 @@ There are some more required parts here (see [the
 reference](../reference/top-level/commands.md)), but we'll omit them for
 brevity. First, the command has `fields`, which define the data stored
 in the command. And next it has `policy`, which is run both when the
-command is created in the local graph and when it is added to other
+command is created in the local graph and when it is synced to other
 devices' graphs. It checks the validity of the data, then finally
 updates the state of the system.
 
+Note the use of the automatically defined name `this`, which refers to
+the fields of the command currently under evaluation.
+
 A sequence of these commands will progressively update an account
-balance. We'll dive into this state mechanism later in
+balance. We'll dive into the details of this state mechanism later in
 [Facts](facts.md).
 
 ## The Graph
 
-The Graph is a directed acyclic graph of commands, where each command
-points toward its ancestor(s). Here is a simple graph with six commands.
+Each command refers to its ancestor(s) (except for the first), creating
+a directed acyclic graph we simply call "the graph". Here is a simple
+graph with six commands.
 
 ```mermaid
 graph RL;
@@ -53,23 +57,24 @@ A(A); B(B); C(C); D(D); E{{E}}; F(F);
 F --> E --> C & D --> B --> A;
 ```
 
-A is the root, or the "init" command. B points to A, and both C and D
-point to B. Command E is a "merge command", which rejoins divergent
-graph segments. F points to E.
+A is the root, or the "init" command. B's parent is A, and both C and
+D's parent is B. Command E is a "merge command", which has both C and D
+as parents. Merges are automatically created by Aranya after syncing.
+They rejoin divergent graph segments so that commands can be added
+linearly afterwards. F's parent is then the merge commit E.
 
 ## The Weave
 
-The graph above is an unordered view of the system, but Aranya needs to
-have a total ordering of the commands to determine the state of the
-system. It creates this ordering with the "[weave
-function](/graph-auth/#weave)", which deterministically flattens the
-graph so that it can determine the state of the system.
+The graph above is a complete view of the system, but a graph with
+branches introduces ambiguity about how commands affect state. Does C or
+D evaluate first? To solve this, Aranya creates a total ordering with
+the "[weave function](/graph-auth/#weave)", which deterministically
+flattens the graph so that it can evaluate commands linearly.
 
-But how does this ordering happen? Which comes first, `C` or `D`?
-Without any more information, the weave function just makes an arbitrary
-decision[^weave-decision]. Let's say for the sake of demonstration that
-this decision is "alphabetical order" so `B` comes first. Then this
-looks like:
+But how does this ordering happen? Without any more information, the
+weave function just makes an arbitrary decision[^weave-decision]. Let's
+say for the sake of demonstration that this decision is "alphabetical
+order" so C comes first. Then this looks like:
 
 ```mermaid
 graph RL;
@@ -100,8 +105,8 @@ command C {
 }
 ```
 
-This higher priority would tell the weave function to always order `C`
-before `B`.
+This higher priority would tell the weave function to always order C
+before B.
 
 We'll talk a bit more about how this ordering affects state later in
 [Facts](facts.md).

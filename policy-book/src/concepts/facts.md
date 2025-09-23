@@ -7,8 +7,8 @@ branch, the value of a fact depends on what commands currently exist in
 your graph.
 
 Let's expand on our [account balance
-example](commands-graph.md#commands) from earlier. Suppose you have a
-fact that keeps track of an account balance value per user.
+example](commands-graph.md#commands) from earlier. Here is a fact that
+keeps track of an account balance value per user.
 
 ```policy
 fact Account[user id]=>{balance int}
@@ -41,7 +41,7 @@ command Enroll {
 This command first [`check`](../reference/statements/check.md)s that no
 fact exists using
 [`exists`](../reference/expressions/functions/queries.md#exists).
-`query` returns a boolean for whether the fact exists in the fact
+`exists` returns a boolean for whether the fact exists in the fact
 database. Since we're creating a new fact, we want to ensure that it
 doesn't exist yet. Then in the `finish` block we use
 [`create`](../reference/statements/create.md) to create the fact with
@@ -144,8 +144,8 @@ and a `WithdrawalResult` is emitted that explains this result.
 ## Exploring Alternate Realities
 
 Now that we have our commands, let's see what happens if we issue a
-series of them. I'll omit the `user` field in these graphs for the sake
-of brevity.
+series of them. I'll omit the `user` field in these commands for the
+sake of brevity.
 
 ```mermaid
 graph RL;
@@ -162,11 +162,7 @@ add a balance twice, then we withdraw 50, which according to our rules
 should succeed and emit `WithdrawalResult { completed: true,
 remaining_balance: 60 }`.
 
-What's important to understand about the fact database is it is not just
-the sum of all database operations. It exists and is queryable at every
-point in this sequence so that it can be reconstructed when other
-sequences of commands are merged. Let's suppose that instead the graph
-looks like this:
+Let's suppose that instead the graph looks like this:
 
 ```mermaid
 graph RL;
@@ -180,15 +176,13 @@ D --> M --> B & C --> A;
 ```
 
 Where `AddBalance { amount: 10 }` and `AddBalance { amount: 100 }` were
-created in parallel branches. Here `M` is a "merge command", which is
-just a join point for diverging parts of the graph so that we can
-continue to add commands linearly. But we still need to turn this into a
-linear sequence of commands so we can calculate the final facts in `D`.
-The Aranya runtime does this with the [weave
-function](commands-graph.md#the-weave), which makes repeatable choices
-to turn a graph into a linear sequence of commands. Here it doesn't
-matter which `AddBalance` comes first. We'll always have a sufficient
-balance to satisfy the `Withdrawal` after the merge.
+created in parallel branches. Here `M` is the "merge command" we learned
+about in [Commands and the Graph](commands-graph.md#the-graph). And
+Aranya then uses the [weave function](commands-graph.md#the-weave) to
+turn this into a linear sequence of commands so we can calculate the
+ final facts in `D`. Here it doesn't matter which `AddBalance` comes
+first. We'll always have a sufficient balance to satisfy the
+`Withdrawal` after the merge.
 
 But sometimes order does matter. Suppose we had this instead.
 
@@ -261,12 +255,12 @@ authorization level &ndash; won't work as you expect.
 query Users[user: ?]=>{level: AuthorizationLevel::Admin}
 ```
 
-Why not? It's important to understand that anything on the value side of
-a query is only matched against what the key side finds. This query
-means "find the first user with any user ID, and if that user's level is
-admin, return it." It does not mean "find the first user whose level is
-admin". To do the latter query, you will have to create a fact with both
-fields as keys and no values.
+Why not? Anything on the value side of a query is only matched against
+the first fact that the key side finds. This query means "find the first
+user with any user ID, and if that user's level is admin, return it." It
+does not mean "find the first user whose level is admin". To do the
+latter query, you will have to create a fact with both fields as keys
+and no values.
 
 ```policy
 fact UsersByAuthorization[level enum AuthorizationLevel, user id]=>{}
