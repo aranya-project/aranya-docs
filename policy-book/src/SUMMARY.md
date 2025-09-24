@@ -2,6 +2,13 @@
 
 [Introduction](reference/introduction.md)
 
+# Language Concepts
+
+- [Named Values](concepts/named-values.md)
+- [Scope](concepts/scope.md)
+- [Commands and the Graph](concepts/commands-graph.md)
+- [Facts](concepts/facts.md)
+
 # Language Reference
 
 - [File Format](reference/file-format.md)
