@@ -332,7 +332,6 @@ pub struct AfcOpenChannel {
 - `CreateUniChannelSend(team_id, device_id, label_id) -> (AfcSendChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer device and label_id where the author is the sender.
 - `CreateUniChannelOpen(team_id, device_id, label_id) -> (AfcOpenChannel, AfcCtrlMessage)` - create a unidirectional channel with the given peer and label_id where the author is the opener.
 - `ReceiveCtrl(team_id, AfcCtrlMessage) -> AfcChannel` - creates an AFC channel by processing a 'ctrl' message.
-- `DeleteChannel(channel_id)` - Deletes an AFC channel. **Note**: This will remove the keys used for encryption/decryption.
 
 **Note**: The channel author must send `AfcCtrlMessage` to the peer via any transport. Once the peer receives `AfcCtrlMessage`, it should call `ReceiveCtrl()` to receive the other side of the channel.
 
@@ -364,6 +363,7 @@ Method on `AfcBidiChannel` and `AfcSendChannel`
 Methods on `AfcBidiChannel`, `AfcSendChannel` and `AfcOpenChannel`
 
 ```rust
+fn delete(&self) -> Result<(), Error>;
 fn channel_id(&self) -> AfcChannelId;
 fn label_id(&self) -> LabelId;
 ```
