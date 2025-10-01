@@ -13,9 +13,10 @@ statements in the document.
 
 #### The runtime model and FFI functions
 
-Because policy may be evaluated more than once, imported functions
-should not have side effects or rely on external state. In computer
-science parlance, they should be "pure".
+Because policy may be evaluated more than once or never committed,
+imported functions should not have side effects and rely only on
+constant external state. In computer science parlance, they should be
+"pure".
 
 In a linear history of commands, each command will only be evaluated
 once. But because Aranya allows divergent branches of commands that are
@@ -25,7 +26,8 @@ the braid.
 
 Suppose a command uses FFI to increment a value in an external database.
 When the command is reevaluated after a merge, that increment will
-happen again, causing double-counting.
+happen again, causing double-counting. Alternatively, if a command is
+evaluated but not committed there will be over-counting.
 
 If you need to keep track of state in response to commands, you should
 maintain that state external to Aranya by responding to
