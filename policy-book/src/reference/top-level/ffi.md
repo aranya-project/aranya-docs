@@ -21,7 +21,7 @@ In a linear history of commands, each command will only be evaluated
 once. But because Aranya allows divergent branches of commands that are
 automatically merged, new commands can appear in the history where they
 weren't before, prompting reevaluation of commands that occur later in
-the weave.
+the braid.
 
 Suppose a command uses FFI to increment a value in an external database.
 When the command is reevaluated after a merge, that increment will

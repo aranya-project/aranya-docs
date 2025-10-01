@@ -178,7 +178,7 @@ D --> M --> B & C --> A;
 Where `AddBalance { amount: 10 }` and `AddBalance { amount: 100 }` were
 created in parallel branches. Here `M` is the "merge command" we learned
 about in [Commands and the Graph](commands-graph.md#the-graph). And
-Aranya then uses the [weave function](commands-graph.md#the-weave) to
+Aranya then uses the [braid function](commands-graph.md#the-braid) to
 turn this into a linear sequence of commands so we can calculate the
  final facts in `D`. Here it doesn't matter which `AddBalance` comes
 first. We'll always have a sufficient balance to satisfy the
@@ -204,14 +204,14 @@ succeeds or fails. Because if we order it the top branch before the
 bottom one, it's like before. But if it's the other way around, we only
 have one `AddBalance` before the `Withdrawal` and it will produce
 `WithdrawalResult { completed: false, remaining_balance: 10
-}`[^weave-order].
+}`[^braid-order].
 
-[^weave-order]: Weave order isn't actually a branch-to-branch choice.
+[^braid-order]: Braid order isn't actually a branch-to-branch choice.
     The resulting order could have interleaved `AddBalance { amount: 100
     }` between `AddBalance { amount: 10 }` and `Withdrawal { amount: 50
     }`.
 
-As we discussed earlier in [The Weave](commands-graph.md#the-weave), we
+As we discussed earlier in [The Braid](commands-graph.md#the-braid), we
 could add a priority value to make this less ambiguous. If we gave
 `AddBalance` a higher priority than `Withdrawal` we would have an
 optimistic solution that orders both `AddBalance`s before `Withdrawal`.

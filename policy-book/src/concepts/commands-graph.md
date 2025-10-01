@@ -63,16 +63,16 @@ as parents. Merges are automatically created by Aranya after syncing.
 They rejoin divergent graph segments so that commands can be added
 linearly afterwards. F's parent is then the merge commit E.
 
-## The Weave
+## The Braid
 
 The graph above is a complete view of the system, but a graph with
 branches introduces ambiguity about how commands affect state. Does C or
 D evaluate first? To solve this, Aranya creates a total ordering with
-the "[weave function](/graph-auth/#weave)", which deterministically
-flattens the graph so that it can evaluate commands linearly.
+the "braid function", which deterministically flattens the graph so that
+it can evaluate commands linearly.
 
 But how does this ordering happen? Without any more information, the
-weave function just makes an arbitrary decision[^weave-decision]. Let's
+braid function just makes an arbitrary decision[^braid-decision]. Let's
 say for the sake of demonstration that this decision is "alphabetical
 order" so C comes first. Then this looks like:
 
@@ -90,7 +90,7 @@ A(A); B(B); C(C); D(D); F(F);
 F --> C --> D --> B --> A;
 ```
 
-[^weave-decision]: It actually orders them based on their command ID,
+[^braid-decision]: It actually orders them based on their command ID,
     which is a hash derived from their serialized contents.
 
 The order of commands can be influenced by adding a priority value to
@@ -105,7 +105,7 @@ command C {
 }
 ```
 
-This higher priority would tell the weave function to always order C
+This higher priority would tell the braid function to always order C
 before B.
 
 We'll talk a bit more about how this ordering affects state later in
