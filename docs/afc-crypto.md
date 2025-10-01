@@ -294,7 +294,7 @@ fn Open(channel_id, OpenKey, OpenBaseNonce, ciphertext) {
         ciphertext=ciphertext,
         ad=ad,
     )
-    return (plaintext, label_id)
+    return (plaintext, sequence, label_id)
 }
 ```
 
