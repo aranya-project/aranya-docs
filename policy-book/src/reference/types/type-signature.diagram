@@ -1,0 +1,5 @@
+[`type` <'non-optional-type', ["optional" 'non-optional-type']>]
+[`non-optional-type` <"int", "string", "bytes", "bool", "id",
+  ["struct" 'name'],
+  ["enum" 'name']>
+]

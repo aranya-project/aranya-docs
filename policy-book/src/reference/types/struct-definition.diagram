@@ -1,0 +1,3 @@
+[`struct-definition` "struct" 'identifier' "{"
+    <['identifier' 'type'], 'struct-field-insertion'>*"," ","?
+"}"]
