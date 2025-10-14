@@ -36,7 +36,7 @@ Each of the obligations are due prior to the operation being executed.
 > **Note:** The current language also has runtime exceptions from arithmetic underflow and overflow but these are being addressed in other work by moving to checked arithmetic.
 
 ## Analysis
-The analyzer must make observations about the control flow allow it to ensure that all obligations are satisfied before they are due or issue a error.
+The analyzer must make observations about the control flow allow it to ensure that all obligations are satisfied before they are due or issue an error.
 
 An observation is any `check` expression or branch where the operation which creates the obligation is only reachable if the test passes. Ex:
 
