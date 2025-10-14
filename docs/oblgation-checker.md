@@ -4,7 +4,7 @@ This note captures some of the high level ideas about the obligations checker pr
 
 ## Motivation
 
-Where the design of the Policy Language prevents many types of errors there is still lots of room for improvement towards supporting policy writers. This work intends to make two improvements to the static guarantees the policy compiler provides.
+While the design of the Policy Language prevents many types of errors, there is still lots of room for improvement towards supporting policy writers. This work intends to make two improvements to the static guarantees the policy compiler provides.
 
  1. The first improvement will be to guarantee that runtime exceptions can not exist in a policy.
  2. Later work will continue by statically ensuring relational invariants between different facts.
