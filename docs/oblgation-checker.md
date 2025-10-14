@@ -51,7 +51,7 @@ command SetBalance {
     policy {
         let maby_account = query Account[id: this.user]
 
-        // Provieds observation that `Account[id: this.user]` exists
+        // Provides observation that `Account[id: this.user]` exists
         check maby_account is Some 
         
         finish {
