@@ -12,7 +12,7 @@ While the design of the Policy Language prevents many types of errors, there is 
 While these seem like they are orthogonal work, they will use the same mechanisms of Obligations and Observations to reason about policies.
 
 ## Exceptions
-In the policy language exceptions are distinct from check failures. They do not invoke error handling thought `recall` instead causing the runtime to panic. If a policy triggers a picnic it is assumed that system is in a state the developers did not consider and it is therefor unsafe to continue forward. In this situation the client must stop working with the graph.
+In the policy language exceptions are distinct from check failures. They do not invoke error handling through `recall` instead causing the runtime to panic. If a policy triggers a panic, it is assumed that system is in a state the developers did not consider and it is therefore unsafe to continue forward. In this situation the client must stop working with the graph.
 
 Avoiding exceptions is therefor highly important for any policy. Today it is up to the developers to ensure that guards are in place to avoid exceptions, but there is no way to check this requirement.
 
