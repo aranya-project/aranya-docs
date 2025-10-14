@@ -62,7 +62,7 @@ command SetBalance {
 }
 ```
 
-The observation needs to be about the query but the check is on the result of the query. To enable this I prepose we extend the type of the result during analysis to include the queried key. In the above this would change the type of `maby_account` from `Option<Account>` to `Option<Account> where key [id: this.user]`. Then we make the observation that `Account[id: this.user] exists` and `maby_account is Some` past the check of `maby_account`. If `check_unwarap` had been used:
+The observation needs to be about the query but the check is on the result of the query. To enable this I propose we extend the type of the result during analysis to include the queried key. In the above this would change the type of `maby_account` from `Option<Account>` to `Option<Account> where key [id: this.user]`. Then we make the observation that `Account[id: this.user] exists` and `maby_account is Some` past the check of `maby_account`. If `check_unwarap` had been used:
 
 ```policy
     let account = check_unwrap maby_account
