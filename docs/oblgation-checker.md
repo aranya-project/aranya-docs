@@ -16,7 +16,7 @@ In the policy language exceptions are distinct from check failures. They do not 
 
 Avoiding exceptions is therefore highly important for any policy. Today it is up to the developers to ensure that guards are in place to avoid exceptions, but there is no way to check this requirement.
 
-Conceptually any operation that could fail with a runtime exception creates an obligation that developers must add a guard statement  protecting against the exception occurring. This proposal intends to formalize these obligations and add an analyzer that statically ensures that all guards are in place.
+Conceptually, any operation that could fail with a runtime exception creates an obligation that developers must add a guard statement which protects against the exception occurring. This proposal intends to formalize these obligations and add an analyzer that statically ensures that all guards are in place.
 
 > **Note:** There are two classes of obligations, ones on the program flow and ones on the runtime. This work dose not cover obligations on the run time such as ensuring there is enough memory or other resources to execute a command. That is important work but out of scope for this proposal.
 
