@@ -14,7 +14,7 @@ While these seem like they are orthogonal work, they will use the same mechanism
 ## Exceptions
 In the policy language exceptions are distinct from check failures. They do not invoke error handling through `recall` instead causing the runtime to panic. If a policy triggers a panic, it is assumed that system is in a state the developers did not consider and it is therefore unsafe to continue forward. In this situation the client must stop working with the graph.
 
-Avoiding exceptions is therefor highly important for any policy. Today it is up to the developers to ensure that guards are in place to avoid exceptions, but there is no way to check this requirement.
+Avoiding exceptions is therefore highly important for any policy. Today it is up to the developers to ensure that guards are in place to avoid exceptions, but there is no way to check this requirement.
 
 Conceptually any operation that could fail with a runtime exception creates an obligation that developers must add a guard statement  protecting against the exception occurring. This proposal intends to formalize these obligations and add an analyzer that statically ensures that all guards are in place.
 
