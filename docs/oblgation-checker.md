@@ -9,7 +9,7 @@ While the design of the Policy Language prevents many types of errors, there is 
  1. The first improvement will be to guarantee that runtime exceptions can not exist in a policy.
  2. Later work will continue by statically ensuring relational invariants between different facts.
 
-Where these seem like they are orthogonal work they will use the same mechanisms of Obligations and Observations to reason about policies.
+While these seem like they are orthogonal work, they will use the same mechanisms of Obligations and Observations to reason about policies.
 
 ## Exceptions
 In the policy language exceptions are distinct from check failures. They do not invoke error handling thought `recall` instead causing the runtime to panic. If a policy triggers a picnic it is assumed that system is in a state the developers did not consider and it is therefor unsafe to continue forward. In this situation the client must stop working with the graph.
