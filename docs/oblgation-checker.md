@@ -31,7 +31,7 @@ Conceptually, any operation that could fail with a runtime exception creates an 
 
 Each of the obligations are due prior to the operation being executed.
 
-> **DISCUSSION**: After thinking implementing checks on update where would be extra work and I wonder if it's worth it. Dose putting the invariant in the update as well as a check help?
+> **DISCUSSION**: After thinking implementing checks on update where would be extra work and I wonder if it's worth it. Does putting the invariant in the update as well as a check help?
 
 > **Note:** The current language also has runtime exceptions from arithmetic underflow and overflow but these are being addressed in other work by moving to checked arithmetic.
 
