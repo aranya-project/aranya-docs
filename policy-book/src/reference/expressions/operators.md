@@ -49,8 +49,8 @@ Integers can be compared against each other.
 
 | Operator | Meaning |
 |----------|---------|
-| `unwrap` | `unwrap A` is the value inside A if the option is Some, or else stop with a runtime exception |
-| `check_unwrap` | Same as `unwrap`, but stop with a check failure instead of a runtime exception |
+| `unwrap` | `unwrap A` is the value inside A if the option is Some, or else stop with a [runtime exception](../errors.md#runtime-exceptions) |
+| `check_unwrap` | Same as `unwrap`, but stop with a [check failure](../errors.md#check-failures) instead of a runtime exception |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
 

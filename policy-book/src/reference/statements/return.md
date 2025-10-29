@@ -15,11 +15,12 @@
 </div>
 
 ```
-function foo() {
+function foo() int {
     let x = unwrap query FooCount[deviceID: myId]
     return x.count
 }
 ```
 
 `return` evaluates an expression and returns the value from the
-function.
+function. The value returned must have the type specified in the
+function signature.

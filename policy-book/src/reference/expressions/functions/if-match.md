@@ -17,7 +17,8 @@ Not to be confused with the [`if` statement](../../statements/if.md).
 Much like the [`match` statement](../../statements/match.md), a `match`
 expression evaluates to one of its arm expressions based on an equality
 test against an expression. If no expression matches, it matches a
-default case represented by `_`. The default case must exist.
+default case represented by `_` if it exists. If `_` is not present, the
+failed match causes a runtime exception.
 
 ```policy
 action foo(x int) {

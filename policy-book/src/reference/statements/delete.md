@@ -32,3 +32,15 @@ In either case, if the values specified do not match anything, it is an
 error and will terminate policy execution with a runtime exception.
 Deleting a fact that has not been defined by schema will fail with a
 compile error.
+
+<div class="warning">
+
+Prefix deletion is not yet supported in the policy VM. So a request to delete all matching records like:
+
+```
+delete FooCounter[deviceId: ?]
+```
+
+Will not delete all facts as expected.
+
+</div>

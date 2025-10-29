@@ -1,10 +1,10 @@
 # Structs
 
-A struct is a collection of named values accessed with the `.` operator.
-In addition to being returned by some internal and FFI functions, like
-`query`, named struct types can be defined by the user. Named structs
-are also defined by Commands, Effects, and Facts (see [Struct
-Auto-definition](#struct-auto-definition) below).
+A struct is a collection of named value fields accessed with the `.`
+operator. In addition to being returned by some internal and FFI
+functions, like `query`, named struct types can be defined by the user.
+Named structs are also defined by Commands, Effects, and Facts (see
+[Struct Auto-definition](#struct-auto-definition) below).
 
 A struct literal is the name of the struct, followed by a series of
 field definitions enclosed in curly braces. All fields must be

@@ -224,7 +224,7 @@ set priorities depends on your application.
 ## Using Keys and Bind Markers
 
 The query engine in the fact database can match on partial keys using
-the bind marker, but it has an important constraints. First is that any
+the bind marker, but it has important constraints. First is that any
 bound key fields must be strictly to the right of any concretely
 specified key fields (see [Bind
 Marker](../reference/expressions/functions/queries.md#bind-marker)). The
