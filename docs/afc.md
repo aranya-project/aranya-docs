@@ -83,7 +83,6 @@ when the daemon is restarted. See [aranya#483](https://github.com/aranya-project
 ## Aranya Fast Channel IDs
 
 Channels are locally identified by a `channel_id` which is a 32-bit integer. 
-The Aranya daemon generates channel IDs by incrementing a monotonic counter.
 
 This provides direct lookup without hash truncation.
 
@@ -105,16 +104,17 @@ Channel type is determined by the policy action used to create it.
 
 **Note: This is an overview of the relevant Public APIs for the aranya-fast-channels crate.
 
-- `add(channel_id, label_id, keys)` -
+- `add(label_id, keys) -> ChannelId` -
   Creates a new entry for a channel.
+  Returns the ID of the channel.
 - `remove(channel_id)` -
   Removes an existing channel
-- `seal(channel_id, label_id, ciphertext_buffer, plaintext) -> Header` -
+- `seal(channel_id, ciphertext_buffer, plaintext) -> Header` -
   Encrypts plaintext for the specified channel.
   Returns the header which includes channel metadata, like the AFC protocol version.
-- `open(channel_id, label_id, plaintext_buffer, ciphertext) -> sequence_number` -
-  Decrypts ciphertext from the peer. Returns the sequence number.
-  N.B. the `label_id` given as input is compared against the `label_id` associated with the channel.
+- `open(channel_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
+  Decrypts ciphertext from the peer. 
+  Returns the label_id associated with the channel and the sequence number of the ciphertext.
 
 ### Policy
 
