@@ -15,7 +15,7 @@
 </div>
 
 ```
-map FooCounter[deviceID: ?]=>{count: ?} as counter {
+map FooCounter[deviceId: ?]=>{count: ?} as counter {
     check counter.count > 0
 }
 ```
@@ -27,6 +27,16 @@ be omitted if all its fields are bound.
 
 You can think of this kind of like a for loop over all possible matching
 facts. The name given after `as` is scoped to the block.
+
+ `map` can be nested.
+
+ ```
+ map Devices[deviceId:?] as device {
+    map Keys[deviceId: device, id: ?] as key {
+        check owner.valid
+    }
+ }
+ ```
 
 Like `query` and related functions, fact values or the entire value part
 of the fact literal can be omitted. And likewise, bind values must
