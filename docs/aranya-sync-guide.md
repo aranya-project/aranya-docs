@@ -1,10 +1,10 @@
 ---
 layout: page
 title: Aranya Sync
-permalink: "/aranya-sync/"
+permalink: "/aranya-sync-guide/"
 ---
 
-# Aranya Sync
+# Aranya Sync Guide
 
 ## Introduction
 
@@ -27,7 +27,7 @@ Poll sync is a request-response synchronization method where one peer queries an
 **Advantages:**
 - Simple and reliable
 - Works well for occasional synchronization
-- No state management required on the sending peer
+- Initiated by Peer A letting it control when it syncs
 
 **Disadvantages:**
 - Overhead from sending graph samples in each request
