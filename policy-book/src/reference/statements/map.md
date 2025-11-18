@@ -1,0 +1,44 @@
+# map
+
+<div class="right">
+
+| Scope  | |
+|--------|----|
+| global | ❌ |
+| `action` | ✅ |
+| `function` | ❌ |
+| `policy`/`recall` | ❌ |
+| `seal`/`open` | ❌ |
+| `finish` | ❌ |
+| `finish function` | ❌ |
+
+</div>
+
+```
+map FooCounter[deviceId: ?]=>{count: ?} as counter {
+    check counter.count > 0
+}
+```
+
+`map` executes a fact query, and for each fact found, defines the given
+name as a struct containing the fact's fields. This can result in zero
+or more iterations. Just like in `query`, the value side of the fact can
+be omitted if all its fields are bound.
+
+You can think of this kind of like a for loop over all possible matching
+facts. The name given after `as` is scoped to the block.
+
+ `map` can be nested.
+
+ ```
+ map Devices[deviceId:?] as device {
+    map Keys[deviceId: device, id: ?] as key {
+        check owner.valid
+    }
+ }
+ ```
+
+Like `query` and related functions, fact values or the entire value part
+of the fact literal can be omitted. And likewise, bind values must
+[follow the positioning
+rules](../expressions/functions/queries.md#bind-marker).
