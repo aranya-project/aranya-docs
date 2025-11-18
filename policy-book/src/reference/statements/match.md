@@ -36,8 +36,8 @@ means `_` should be the last match arm, as nothing will be matched
 afterwards.
 
 A match expression must match exactly one arm in order for the match
-statement to be valid. Non-exhaustive matches may produce a compile
-error or a runtime exception when all match arms have failed to match.
+statement to be valid. Non-exhaustive matches will produce a compile
+error when all match arms have failed to match.
 Duplicate match arms will produce a compile error.
 
 Note that unlike the [`match`
