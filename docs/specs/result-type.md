@@ -18,8 +18,8 @@ Where:
 
 
 ```policy
-Ok(value)
-Err(value)
+Ok(result)
+Err(err)
 ```
 
 ## Usage
