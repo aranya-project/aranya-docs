@@ -17,6 +17,7 @@ A comprehensive guide to understanding Aranya as a distributed system and writin
   - [Control Plane vs Data Plane](#control-plane-vs-data-plane)
   - [The Directed Acyclic Graph (DAG)](#the-directed-acyclic-graph-dag)
   - [The Braid Algorithm](#the-braid-algorithm)
+  - [Execution Model: Actions vs Commands](#execution-model-actions-vs-commands)
 - [Policy Language Fundamentals](#policy-language-fundamentals)
   - [File Format](#file-format)
   - [Basic Syntax](#basic-syntax)
@@ -177,6 +178,122 @@ command HighPriorityCmd {
     ...
 }
 ```
+
+### Execution Model: Actions vs Commands
+
+Understanding when and where code executes is **critical** for writing correct policies, especially when dealing with cryptography, random number generation, or other nondeterministic operations.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          EXECUTION MODEL                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  CALLER'S DEVICE (executes ONCE)         ALL RECEIVING DEVICES (each node) │
+│  ════════════════════════════════         ═══════════════════════════════  │
+│                                                                             │
+│  ┌─────────────────────────┐              ┌─────────────────────────┐      │
+│  │       ACTION            │              │    COMMAND POLICY       │      │
+│  │  • Runs once locally    │   sync       │  • Re-evaluated on      │      │
+│  │  • Can use FFI freely   │ ─────────▶   │    EVERY node           │      │
+│  │  • Nondeterminism OK    │              │  • Must be deterministic│      │
+│  │  • Publishes commands   │              │  • FFI must be pure     │      │
+│  └───────────┬─────────────┘              └─────────────────────────┘      │
+│              │                                                              │
+│              ▼                                                              │
+│  ┌─────────────────────────┐              ┌─────────────────────────┐      │
+│  │       SEAL BLOCK        │              │      OPEN BLOCK         │      │
+│  │  • Runs once locally    │   wire       │  • Runs on each node    │      │
+│  │  • Encrypt here         │ ─────────▶   │  • Decrypt here         │      │
+│  │  • Sign here            │   format     │  • Verify here          │      │
+│  └─────────────────────────┘              └─────────────────────────┘      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key Principles
+
+1. **Actions execute once** on the caller's device when the application invokes them
+2. **Command `policy` blocks are re-evaluated** on every device that receives the command via sync
+3. **`seal` blocks execute once** on the publishing device (use for encryption, signing)
+4. **`open` blocks execute on every receiving device** (use for decryption, verification)
+
+#### Why This Matters
+
+**Encryption must happen in `seal`, not `policy`:**
+```policy
+// CORRECT: Encryption in seal (runs once on sender)
+command SecureMessage {
+    fields {
+        recipient id,
+        plaintext bytes,
+    }
+
+    seal {
+        // This runs ONCE on the sender's device
+        let encrypted = crypto::encrypt(this.plaintext, this.recipient)
+        return envelope::new(encrypted)
+    }
+
+    open {
+        // This runs on EACH receiving device
+        let decrypted = crypto::decrypt(envelope::payload(envelope))
+        return deserialize(decrypted)
+    }
+
+    policy {
+        // Policy runs on EVERY device - no encryption here!
+        check this.recipient != envelope::author_id(envelope)
+        finish { ... }
+    }
+}
+```
+
+**Nondeterministic operations must be in actions:**
+```policy
+// CORRECT: Random ID generated in action (runs once)
+action createResource(name string) {
+    let resourceId = crypto::random_id()  // Nondeterministic - OK in action
+    publish CreateResource {
+        resourceId: resourceId,
+        name: name,
+    }
+}
+
+// WRONG: Random in policy would give different results on each node!
+command BadCommand {
+    policy {
+        let id = crypto::random_id()  // WRONG! Different on each device!
+        ...
+    }
+}
+```
+
+**FFI calls in policy must be deterministic:**
+```policy
+command ProcessData {
+    policy {
+        // OK: Deterministic FFI (same input = same output)
+        let hash = crypto::hash(this.data)
+        let valid = crypto::verify(this.signature, this.data)
+
+        // NOT OK: Nondeterministic FFI
+        // let timestamp = time::now()      // Different on each device!
+        // let random = crypto::random()    // Different on each device!
+
+        finish { ... }
+    }
+}
+```
+
+#### Summary Table
+
+| Block/Context | Executes | Can Use Nondeterministic FFI | Use For |
+|---------------|----------|------------------------------|---------|
+| Action body | Once (caller) | Yes | Validation, random IDs, timestamps |
+| `seal` block | Once (publisher) | Yes | Encryption, signing |
+| `open` block | Each node | No (must verify deterministically) | Decryption, signature verification |
+| `policy` block | Each node | No (must be deterministic) | Authorization checks, state updates |
+| `recall` block | Each node | No (must be deterministic) | Cleanup, error notifications |
 
 ---
 
@@ -343,25 +460,35 @@ Policies are built from four interconnected concepts:
 
 Actions are the **application's entry point** into the policy. They are callable functions that perform data transformations and publish commands.
 
+**Critical: Actions execute exactly once on the caller's device.** This makes them the appropriate place for nondeterministic operations like generating random IDs, getting timestamps, or performing encryption that should only happen once.
+
 ```policy
 action enrollUser(userId id, name string) {
-    // Validation logic
+    // Validation logic - runs once on caller's device
     check name != ""
 
-    // Publish a command
+    // Nondeterministic operations are safe here
+    let enrollmentId = crypto::random_id()
+    let timestamp = time::now()
+
+    // Publish a command (command policy will be re-evaluated on all nodes)
     let cmd = EnrollUser {
+        enrollmentId: enrollmentId,
         userId: userId,
         name: name,
+        timestamp: timestamp,
     }
     publish cmd
 }
 ```
 
 **Key characteristics:**
+- **Execute once** on the caller's device only
 - Called by the application through the API
 - Can publish zero or more commands
 - Execute atomically - all succeed or all fail
 - Cannot return values to the application (use effects instead)
+- **Safe for nondeterministic FFI** (random, timestamps, encryption)
 
 ### Commands
 
@@ -371,30 +498,46 @@ Commands are the **core functional unit**. They define:
 - Validation and state changes (`policy`)
 - Error recovery (`recall`)
 
+**Critical: Command `policy` blocks are re-evaluated on EVERY node** that receives the command via sync. This means:
+- Policy blocks must be **deterministic** - same inputs must produce same outputs
+- **Never use nondeterministic FFI** in policy blocks (no random, no timestamps)
+- Encryption/decryption should happen in `seal`/`open`, not `policy`
+
 ```policy
 command EnrollUser {
     fields {
+        // Data from the action - already contains any random/time values
+        enrollmentId id,
         userId id,
         name string,
+        timestamp int,
     }
 
     seal {
+        // Runs ONCE on the publishing device
         let bytes = serialize(this)
         return envelope::new(bytes)
     }
 
     open {
+        // Runs on EACH receiving device
         let fields = deserialize(envelope::payload(envelope))
         return fields
     }
 
     policy {
+        // Runs on EVERY device - must be deterministic!
+        // Uses data from fields (set by action), not generated here
+
         // Validate: user doesn't already exist
         check !exists User[userId: this.userId]
 
         finish {
             // Create the user fact
-            create User[userId: this.userId]=>{name: this.name}
+            create User[userId: this.userId]=>{
+                name: this.name,
+                enrolledAt: this.timestamp,  // Use timestamp from fields
+            }
 
             // Notify application
             emit UserEnrolled {
@@ -405,6 +548,7 @@ command EnrollUser {
     }
 
     recall {
+        // Also runs on every device when command is recalled
         finish {
             emit EnrollmentFailed {
                 userId: this.userId,
@@ -785,41 +929,63 @@ command LowPriorityCommand {
 
 ### Seal and Open Blocks
 
-These blocks handle serialization between command fields and the wire format:
+These blocks handle serialization between command fields and the wire format. Understanding their execution model is critical for security:
+
+- **`seal`**: Executes **once** on the publishing device when the command is created
+- **`open`**: Executes on **every device** that receives the command via sync
+
+This asymmetry is intentional and enables secure encryption patterns:
 
 ```policy
 command SecureCommand {
     fields {
-        payload bytes,
-        signature bytes,
+        recipient id,
+        secretData bytes,
     }
 
     seal {
-        // Serialize fields
-        let bytes = serialize(this)
+        // RUNS ONCE on sender's device
+        // Safe for encryption, signing, and nondeterministic operations
 
-        // Sign the data (using FFI)
-        let sig = crypto::sign(bytes)
+        // Encrypt the sensitive data (uses recipient's public key)
+        let encrypted = crypto::encrypt(this.secretData, this.recipient)
 
-        // Create envelope
-        return envelope::new_signed(bytes, sig)
+        // Sign the envelope (may use random nonce internally)
+        let sig = crypto::sign(encrypted)
+
+        return envelope::new_signed(encrypted, sig)
     }
 
     open {
-        // Verify signature (using FFI)
+        // RUNS ON EVERY RECEIVING DEVICE
+        // Must successfully decrypt/verify or command is rejected
+
+        // Verify signature first (deterministic)
         let valid = crypto::verify(
             envelope::payload(envelope),
-            envelope::signature(envelope)
+            envelope::signature(envelope),
+            envelope::author_id(envelope)
         )
         check valid
 
-        // Deserialize fields
-        return deserialize(envelope::payload(envelope))
+        // Decrypt the data (deterministic given same ciphertext + key)
+        let decrypted = crypto::decrypt(envelope::payload(envelope))
+
+        return deserialize(decrypted)
     }
 
-    policy { ... }
+    policy {
+        // RUNS ON EVERY DEVICE after open succeeds
+        // this.secretData is now the decrypted plaintext
+        // ... authorization checks here ...
+    }
 }
 ```
+
+**Why this pattern works:**
+1. Sender encrypts in `seal` (runs once, can use random nonces)
+2. Each receiver decrypts in `open` (deterministic given the ciphertext)
+3. Policy evaluates the decrypted data (deterministic checks)
 
 ### Recall Blocks
 
@@ -869,29 +1035,95 @@ Import external function libraries for cryptography, envelope handling, etc.:
 use crypto
 use envelope
 use device
+```
 
-command Example {
+**Critical: FFI usage depends on execution context.** Because command `policy` blocks are re-evaluated on every node, FFI calls in policy must be deterministic (same inputs = same outputs).
+
+#### FFI in Different Contexts
+
+**In Actions (runs once - nondeterministic OK):**
+```policy
+action createSecureResource(name string) {
+    // These are safe in actions - they run once on the caller
+    let resourceId = crypto::random_id()
+    let timestamp = time::now()
+    let nonce = crypto::random_bytes(32)
+
+    publish CreateResource {
+        resourceId: resourceId,
+        name: name,
+        timestamp: timestamp,
+        nonce: nonce,
+    }
+}
+```
+
+**In Seal Blocks (runs once - nondeterministic OK):**
+```policy
+command EncryptedMessage {
+    fields {
+        recipient id,
+        message bytes,
+    }
+
     seal {
-        let bytes = serialize(this)
-        let encrypted = crypto::encrypt(bytes)
-        return envelope::new(encrypted)
+        // Safe: seal runs once on the sender
+        let encrypted = crypto::encrypt(this.message, this.recipient)
+        let signature = crypto::sign(encrypted)
+        return envelope::new_signed(encrypted, signature)
     }
 
     open {
+        // Decryption is deterministic given the same ciphertext and key
         let encrypted = envelope::payload(envelope)
         let decrypted = crypto::decrypt(encrypted)
         return deserialize(decrypted)
     }
 
+    policy { ... }
+}
+```
+
+**In Policy Blocks (runs on every node - MUST be deterministic):**
+```policy
+command VerifyData {
+    fields {
+        data bytes,
+        signature bytes,
+        expectedHash bytes,
+    }
+
     policy {
+        // SAFE: Deterministic operations
         let author = envelope::author_id(envelope)
-        let currentDevice = device::current_device_id()
-        ...
+        let computedHash = crypto::hash(this.data)
+        let validSig = crypto::verify(this.signature, this.data, author)
+
+        check computedHash == this.expectedHash
+        check validSig
+
+        // UNSAFE - DO NOT DO THIS:
+        // let timestamp = time::now()       // Different on each device!
+        // let random = crypto::random()     // Different on each device!
+        // let newId = crypto::random_id()   // Different on each device!
+
+        finish { ... }
     }
 }
 ```
 
-**Note:** FFI functions should not have side effects since policy may be executed multiple times.
+#### FFI Determinism Summary
+
+| FFI Category | Example Functions | Safe in Action | Safe in Seal | Safe in Policy |
+|--------------|-------------------|----------------|--------------|----------------|
+| Random | `random()`, `random_id()`, `random_bytes()` | ✓ | ✓ | ✗ |
+| Time | `now()`, `timestamp()` | ✓ | ✓ | ✗ |
+| Encryption | `encrypt()` | ✓ | ✓ | ✗ (nonce generation) |
+| Decryption | `decrypt()` | ✓ | ✓ | ✓ (deterministic) |
+| Hashing | `hash()`, `hmac()` | ✓ | ✓ | ✓ |
+| Signing | `sign()` | ✓ | ✓ | ✗ (may use random) |
+| Verification | `verify()` | ✓ | ✓ | ✓ |
+| Envelope | `author_id()`, `payload()` | ✓ | ✓ | ✓ |
 
 ---
 
@@ -1001,6 +1233,94 @@ command RevokeAccess {
 command GrantAccess {
     attributes { priority: 50 }
     ...
+}
+```
+
+### 8. Generate Nondeterministic Values in Actions
+
+Move all random IDs, timestamps, and nonces to actions:
+
+```policy
+// GOOD: Nondeterministic values generated in action
+action createDocument(title string, content bytes) {
+    let docId = crypto::random_id()
+    let createdAt = time::now()
+
+    publish CreateDocument {
+        docId: docId,
+        title: title,
+        content: content,
+        createdAt: createdAt,
+    }
+}
+
+// BAD: Generating in policy causes different values on each node
+command BadCreateDocument {
+    policy {
+        let docId = crypto::random_id()  // WRONG!
+        ...
+    }
+}
+```
+
+### 9. Encrypt in Seal, Not in Actions or Policy
+
+Encryption should happen in `seal` to keep plaintext out of command fields:
+
+```policy
+// GOOD: Encrypt in seal block
+command SecureMessage {
+    fields {
+        recipient id,
+        plaintext bytes,  // Will be encrypted before transmission
+    }
+
+    seal {
+        let ciphertext = crypto::encrypt(this.plaintext, this.recipient)
+        return envelope::new(ciphertext)
+    }
+
+    open {
+        let plaintext = crypto::decrypt(envelope::payload(envelope))
+        return Message { recipient: ..., plaintext: plaintext }
+    }
+}
+
+// BAD: Encrypting in action exposes to all nodes
+action badSendMessage(recipient id, message bytes) {
+    let encrypted = crypto::encrypt(message, recipient)  // Less secure pattern
+    publish Message { data: encrypted }
+}
+```
+
+### 10. Keep Policy Blocks Deterministic
+
+Always ask: "If this command runs on 100 different devices, will they all produce the same result?"
+
+```policy
+command DeterministicExample {
+    fields {
+        userId id,
+        amount int,
+        timestamp int,  // Passed from action, not generated here
+    }
+
+    policy {
+        // DETERMINISTIC: These produce same results on all nodes
+        let author = envelope::author_id(envelope)
+        let user = check_unwrap query User[id: this.userId]
+        let hash = crypto::hash(serialize(this))
+
+        check user.balance >= this.amount
+        check author == this.userId
+
+        finish {
+            update User[id: this.userId] to {
+                balance: user.balance - this.amount,
+                lastTransaction: this.timestamp,  // From fields, not time::now()
+            }
+        }
+    }
 }
 ```
 
@@ -1360,10 +1680,26 @@ action leaveTeam(teamId id, timestamp int) {
 Writing effective Aranya policies requires understanding:
 
 1. **The distributed nature** of Aranya - commands propagate asynchronously and the graph can branch
-2. **The braid algorithm** - how concurrent commands are ordered and how priorities affect this
-3. **Facts as state** - the fact database represents current system state, built from command execution
-4. **Actions as entry points** - the public API your application calls
-5. **Effects as output** - how the policy communicates results back to your application
-6. **Error handling** - the difference between check failures (recoverable) and runtime exceptions
+2. **The execution model** - actions run once locally; command policy blocks are re-evaluated on every node
+3. **Determinism requirements** - policy blocks must be deterministic; use actions for random/time operations
+4. **The braid algorithm** - how concurrent commands are ordered and how priorities affect this
+5. **Seal/Open for cryptography** - encrypt in `seal` (runs once), decrypt in `open` (runs on each node)
+6. **Facts as state** - the fact database represents current system state, built from command execution
+7. **Actions as entry points** - the public API your application calls (safe for nondeterministic FFI)
+8. **Effects as output** - how the policy communicates results back to your application
+9. **Error handling** - the difference between check failures (recoverable) and runtime exceptions
+
+### Quick Reference: Where to Put Operations
+
+| Operation | Where | Why |
+|-----------|-------|-----|
+| Generate random ID | Action | Runs once, deterministic result stored in command |
+| Get current timestamp | Action | Runs once, timestamp stored in command fields |
+| Encrypt data | `seal` block | Runs once on sender, ciphertext transmitted |
+| Decrypt data | `open` block | Each receiver decrypts deterministically |
+| Sign data | `seal` block | Signing may use random nonce |
+| Verify signature | `open` or `policy` | Verification is deterministic |
+| Authorization checks | `policy` block | Re-evaluated on each node for consistency |
+| State updates | `finish` block | Deterministic fact mutations |
 
 By following the patterns and best practices in this guide, you can build robust, secure policies for decentralized access control and data exchange.
