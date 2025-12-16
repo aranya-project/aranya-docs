@@ -1,9 +1,9 @@
 # Aranya Policy Tester
 
 The Aranya Policy Tester is a CLI tool to execute actions and commands
-in a production-ish environment, and inspect/validate the emitted
-effects. It should be able to load production policy and execute it in
-much the same way it works in the [Aranya
+in a production-ish environment, and inspect the emitted effects. It
+should be able to load production policy and execute it in much the same
+way it works in the [Aranya
 daemon](https://github.com/aranya-project/aranya/tree/main/crates/aranya-daemon).
 
 ## `aranya-runtime` Requirements
@@ -28,7 +28,9 @@ the working directory in paths.
 
 ### RNG
 
-The default RNG (`spideroak_crypto::default::Rng`) will be used.
+`spideroak_crypto`'s RNG (`spideroak_crypto::default::Rng`) will be used
+by default. Alternatively, a deterministic RNG can be chosen via a
+command-line flag, which also specifies the seed.
 
 ### Crypto Engine
 
@@ -55,37 +57,40 @@ use the implementation specified above.
 The `device` FFI needs a device ID specified. One will be randomly
 generated and stored in `<wd>/device_id`.
 
-## Test Library
+## Run input format
 
-This is probably a useful set of tools to have generally for integration
-testing, so the non-CLI parts of this should be available as a library
-for use in rust tests.
+A "run file" format contains an action/command sequence and an optional
+additional values section.
 
-## Input format
-
-The input file will contain a sequence of items, which are either action
+The action/command sequence is a list of items, which are either action
 calls or raw command structs. The format of these are the same as in the
 policy itself (or the `vm_action!()` macro). These calls and structs
 will be compiled in the same way as the rest of the policy, which means
 they can use policy-defined types and global values.
 
-The input file will also have an "additional values" section that
-defines values that will be made available to policy execution as
-globals. This section will be able to define `id` and `bytes` values
-that the policy cannot.
-
-And finally, there will be an optional validation section that contains
-a sequence of effect structs that are expected to be produced.
+The additional values section defines values that will be made available
+to policy execution as globals (and thus available in the action calls
+and command structs described above). This will be able to define any
+legal `Value`s supported by the policy VM, including `id` and `bytes`
+values that the policy cannot express as literals.
 
 ## Operation
 
-The tool will accept a policy file and a test file as command-line
-arguments. First it will compile the policy file into a VM. Then it will
-load the test file, define any additional values specified in it, then
-execute its sequence of actions and command structs.
+The tool will accept a policy file and one or more run files as
+command-line arguments.
 
-If the validation section is present, the effects emitted by execution
-will be checked against it. The tool will alert the user if there is a
-deviation, and produce a diff between the expected and received effects.
-If the validation section is absent or overridden by a command-line
-flag, it will simply print out the effects produced.
+```
+policy-tester [OPTIONS] <POLICY> <RUNFILE> [RUNFILE ...]
+```
+
+First it will compile the policy file into a VM. Then for each run file,
+it will load the file, define any additional values specified in it,
+then execute its sequence of actions and command structs. Additional
+values defined in earlier run files will remain defined while executing
+later run files, to allow sequences to be composed through multiple
+files. For example, you can have one run file that sets up a team, then
+several others which perform more specific team manipulations.
+
+Any effects produced will be printed out in the `Display` implementation
+for `Value`s, which describes every fields' content, including `id` and
+`bytes`.
