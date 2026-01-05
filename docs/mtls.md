@@ -22,6 +22,22 @@ Abbreviations in this document:
 - certificate -> cert
 - certificates -> certs
 
+## Relationships Between APIs, Commands, Effects, FactDB, Cert Store
+
+A table showing the relationships between API calls, graph commands, effects, factdb, and the local cert store.
+
+| API | Command | Effect(s) | Updates FactDB Certs | Updates Local Cert Store |
+| - | - | - | - | - |
+| CreateTeam() | CreateTeam | CertAdded | Yes | Yes |
+| AddDevice() | AddDevice | CertAdded | Yes | Yes |
+| AddDeviceCert() | N/A | N/A | No | Yes |
+| RemoveDeviceCert() | N/A | N/A | No | No |
+| SignDeviceCert() | N/A | N/A | No | Yes (trusts signed cert) |
+| SetSignedDeviceCert() | UpdateCert | CertRemoved, CertAdded | Yes | Yes |
+| RegenerateDeviceCert() | UpdateCert | CertRemoved, CertAdded | Yes | Yes |
+| GetDeviceCert() | QueryDeviceCert | QueriedCert | No | No |
+| GetDeviceCerts() | QueryDeviceCerts | QueriedCert | No | No |
+
 ## Certificate Generation
 
 When each peer generates its initial key bundle, it will also generate a random mTLS secret key from which the mTLS cert is derived.
@@ -51,6 +67,15 @@ Add new Aranya APIs for adding/removing/signing device certs:
 - `RegenerateDeviceCert()` - regenerates a random cert for the current device replacing the old cert with the newly generated cert. Invokes the `UpdateCert` command.
 - `GetDeviceCert() -> x509_cert` - returns the current device's x509 cert. The cert returned by this API can be passed into `SignDeviceCert()` on another device to obtain a signed cert. The signed cert can be set on the current device with `SetSignedDeviceCert()`.
 - `GetDeviceCerts() -> [(DeviceId, x509_cert)]` - lists the x509 certs for all devices on the team.
+
+## APIs Affected By mTLS Certs
+
+- `GetKeyBundle()` - will now return the device's public mTLS cert as part of the key bundle.
+- `CreateTeam()` - adds cert of team owner device to graph.
+- `AddDevice()` - when a device is added to the team, its cert will be added to the graph.
+- `RemoveTeam(team_id)` - will remove all device certs for that team.
+
+All PSK and IKM related APIs and configs for the QUIC syncer will be replaced with the new cert APIs defined in this document.
 
 ## Storing Certs On The Graph
 
@@ -85,6 +110,11 @@ A new `query_device_cert(device_id) -> cert` query will be added to the default 
 mTLS certs will be stored in a persistent location such as a cert directory on disk.
 
 The filename of each cert will be the hash of the cert so there are no naming collisions.
+
+Certs will be stored in a subdirectory based on the team ID so that certs can be tracked independently for each team.
+
+Example cert path:
+<daemon_working_directory>/certs/<team_id>/<cert_hash>
 
 Storing the certs in a directory on disk is flexible since certs can be manually added/removed by an operator or automatically by syncing graph commands which update certs.
 
