@@ -8,19 +8,23 @@ permalink: "/mtls/"
 
 ## Overview
 
-mTLS is mutual TLS authentication. Traditional TLS only authenticates the server to the client, but not the client to the server. mTLS provides mutual authentication by validating the identities of both peers to each other via their TLS certificates before sending data over a secure channel.
+mTLS is mutual TLS authentication. Traditional TLS only authenticates the server to the client, but not the client to the server. mTLS provides mutual authentication by validating the identities of both peers to each other via their TLS certs before sending data over a secure channel.
 
 mTLS is commonly used in zero-trust environments where there is no trusted third party (TPP) or root CA server that can be trusted. This aligns well with the zero-trust architecture of Aranya.
 
 Aranya's sync traffic is currently secured via `s2n_quic` PSKs. We developed our own fork of `s2n_quic` to add support for PSKs to the library. While PSKs are the ideal solution for securing QUIC communications for our zero-trust application, there are a few realities that make it impractical:
 - Upstreaming our PSK branch to the `main` branch of `s2n_quic` is not going to happen any time soon.
-- There is better support for TLS certificates in the broader security and networking community as well as the QUIC libraries available in Rust.
+- There is better support for TLS certs in the broader security and networking community as well as the QUIC libraries available in Rust.
 
 Because of this, we plan to migrate the authentication/encryption of the Aranya syncer transport from QUIC PSKs to QUIC mTLS certs.
 
+Abbreviations in this document:
+- certificate -> cert
+- certificates -> certs
+
 ## Certificate Generation
 
-When each peer generates its initial key bundle, it will also generate an a random mTLS secret key from which the mTLS cert is derived.
+When each peer generates its initial key bundle, it will also generate a random mTLS secret key from which the mTLS cert is derived.
 
 The mTLS secret key is a 2048 byte RSA key generated using Aranya's CSPRNG.
 A public, self-signed x509 mTLS cert is derived from the secret RSA key.
@@ -34,16 +38,16 @@ In order to sync with each other, peers must either exchange their self-signed c
 
 It is important to exchange certs via a secure out-of-band channel or they are susceptible to man-in-the-middle attacks.
 
-Certificates can be exchanged in a few different ways:
-- Directly, by exchanging certificates with a peer via a secure, out-of-band channel
-- Indirectly, by syncing certificates via the graph from another peer
+Certs can be exchanged in a few different ways:
+- Directly, by exchanging certs with a peer via a secure, out-of-band channel
+- Indirectly, by syncing certs via the graph from another peer
 - Indirectly, by sharing root certs which can be used to validate cert signatures
 
 Add new Aranya APIs for adding/removing/signing device certs:
-- `AddDeviceCert(x509_cert)` - adds a device's cert to the certificate store. The QUIC transport will now trust this cert when syncing. If a root cert is added via this API, any certs signed by that root cert will also be trusted. TODO: `NetworkIdentifier` for cert hostname?
-- `RemoveDeviceCert(x509_cert)` - removes a peer device's cert from the certificate store. The QUIC transport will no longer trust this cert when syncing.
+- `AddDeviceCert(x509_cert)` - adds a device's cert to the cert store. The QUIC transport will now trust this cert when syncing. If a root cert is added via this API, any certs signed by that root cert will also be trusted. TODO: `NetworkIdentifier` for cert hostname?
+- `RemoveDeviceCert(x509_cert)` - removes a peer device's cert from the cert store. The QUIC transport will no longer trust this cert when syncing.
 - `SignDeviceCert(x509_cert) -> (x509_cert_signed, x509_root_cert)` - signs a cert with the current device's cert. The QUIC transport will now trust this cert when syncing.
-- `SetSignedDeviceCert(x509_cert_signed, x509_root_cert)` - replace current device's cert with a cert signed by another device. Validates the cert is signed by the root cert before updating the device's cert. Invokes the `UpdateCert` command. Adds the root cert to the local cert store to trust it.
+- `SetSignedDeviceCert(x509_cert_signed, x509_root_cert)` - replace current device's cert with a cert signed by another device. Validates the devices current cert is signed by the root cert before updating the device's cert. Adds the root cert to the local cert store to trust it. Invokes the `UpdateCert` command.
 - `RegenerateDeviceCert()` - regenerates a random cert for the current device replacing the old cert with the newly generated cert. Invokes the `UpdateCert` command.
 - `GetDeviceCert() -> x509_cert` - returns the current device's x509 cert. The cert returned by this API can be passed into `SignDeviceCert()` on another device to obtain a signed cert. The signed cert can be set on the current device with `SetSignedDeviceCert()`.
 - `GetDeviceCerts() -> [(DeviceId, x509_cert)]` - lists the x509 certs for all devices on the team.
@@ -54,7 +58,7 @@ Add new Aranya APIs for adding/removing/signing device certs:
 
 Storing mTLS certs on the graph is beneficial, because it allows devices to sync the certs of other devices via the graph.
 
-However, there is a bootstrapping problem with this. If all the certs are stored on the graph, how does a peer initially sync the graph from another peer without knowing what mTLS certificates to authenticate the QUIC transport with?
+However, there is a bootstrapping problem with this. If all the certs are stored on the graph, how does a peer initially sync the graph from another peer without knowing what mTLS certs to authenticate the QUIC transport with?
 
 The solution to this is to exchange x509 certs with a peer prior to the initial team sync with that peer. Once this initial sync completes, the device will have access to other certs via the graph that it can use to sync with other peers in the future.
 
@@ -78,11 +82,11 @@ A new `query_device_cert(device_id) -> cert` query will be added to the default 
 
 ## Persistent Certificate Storage
 
-mTLS certificates will be stored in a persistent location such as a certificate directory on disk.
+mTLS certs will be stored in a persistent location such as a cert directory on disk.
 
-The filename of each certificate will be the hash of the certificate so there are no naming collisions.
+The filename of each cert will be the hash of the cert so there are no naming collisions.
 
-Storing the certificates in a directory on disk is flexible since certs can be manually added/removed by an operator or automatically by syncing graph commands which update certs.
+Storing the certs in a directory on disk is flexible since certs can be manually added/removed by an operator or automatically by syncing graph commands which update certs.
 
 Whenever an effect is processed that could add/remove certs, the Aranya daemon should make the corresponding updates to the cert store as well as the QUIC transport implementation's trusted certs.
 
@@ -101,4 +105,7 @@ Example of bootstrapping device certs for syncing.
 5. Team owner signs member A and B certs with `SignDeviceCert(cert) -> (signed_cert, root_cert)`. The team owner device now trusts the signed certs of members A and B because it has added their certs to its local cert store.
 6. Team owner sends signed certs back to members A and B along with the public root cert. This all happens out-of-band.
 7. Members A and B upgrade from self-signed certs to root-signed certs with `SetSignedDeviceCert(signed_cert, root_cert)`. The root cert has been added to the local cert store to trust it. Members A and B now trust the root cert as well as each other's root-signed certs.
-8. The team owner, member A, and member B have established a chain of trust via certificates that allows them to sync with each other.
+8. The team owner, member A, and member B have established a chain of trust via certs that allows them to sync with each other.
+
+A benefit of using root certs is that devices only need to trust a shared root cert and get their cert signed by the root cert in order to sync with each other.
+There is no need to self-sign certs and exchange all the certs ahead of time with all the devices you wish to sync with.
