@@ -34,24 +34,26 @@ Abbreviations in this document:
     `<daemon_working_directory>/certs/device/`
         `cert.pem`
         `cert.key`
-- A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs.
+- A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
+- QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
 
 Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
+- Cert revocation
+- Cert rotation/renewal
 
 ## Certificate Generation
 
 mTLS root and device certs are generated externally via a user's existing PKI infrastructure.
-Device certs are signed by one of the root certs using the PKI infrastructure.
-An example CA that generates root and device certs will be provided for users that do not have an existing PKI infrastructure.
+Device certs are signed by one of the root certs or an intermediate CA cert using the PKI infrastructure.
 
 We recommend using ECDSA certs generated from a secret key of at least 224 bits.
 
-Aranya assumes that all certs have been generated and signed prior to configuring and loading the Aranya daemon.
+An example CA that generates root and device certs will be provided for users that do not have an existing PKI infrastructure.
 
 ## Daemon Configuration
 
@@ -68,11 +70,19 @@ device_cert=<device cert directory>
 ...
 ```
 
-Assumptions:
+Aranya assumes the following before loading certs into the QUIC syncer:
+- Certs have been generated and signed by the user's external PKI infrastructure
+- Certs include any relevant SANs information
 - The root certs directory contains at least one root certificate (e.g. `root1.pem`).
-- The device cert directory contains the device cert (e.g. `cert.pem`) signed by one of the root certs and the corresponding secret key (e.g. `cert.key`).
+- The device cert directory contains the device cert (e.g. `cert.pem`) signed by one of the root certs or an intermediate CA cert and the corresponding secret key (e.g. `cert.key`).
 
-## Aranya API Changes
+## Breaking Changes
+
+### Breaking Aranya API Changes
 
 All QUIC syncer PSK and IKM related Aranya APIs and configs for the QUIC syncer will be replaced with the new daemon cert configuration defined in this document.
 This will cause breaking changes to the Aranya API.
+
+### Breaking Deployment Changes
+
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which have migrated to mTLS certs.
