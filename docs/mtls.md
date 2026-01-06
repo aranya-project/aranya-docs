@@ -24,9 +24,8 @@ Abbreviations in this document:
 
 ## Requirements
 
-Requirements:
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be x509 TLS certs generated from ECDH keys of at least 224 bits
+- mTLS certs must be X.509 TLS certs generated from ECDSA keys of at least 224 bits
 - Certs and their corresponding secret keys will be stored on the system's disk in plaintext (deployment should consider using an encrypted filesystem to protect them)
     Example:
     `<daemon_working_directory>/certs/roots/`
@@ -50,7 +49,7 @@ mTLS root and device certs are generated externally via a user's existing PKI in
 Device certs are signed by one of the root certs using the PKI infrastructure.
 An example CA that generates root and device certs will be provided for users that do not have an existing PKI infrastructure.
 
-We recommend using ECDH certs generated from a secret key of at least 224 bits.
+We recommend using ECDSA certs generated from a secret key of at least 224 bits.
 
 Aranya assumes that all certs have been generated and signed prior to configuring and loading the Aranya daemon.
 
