@@ -26,7 +26,7 @@ Abbreviations in this document:
 
 - Use TLS >= 1.3 in the QUIC library (Rust QUIC libraries such as `s2n_quic` and `quinn` require TLS 1.3)
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be X.509 TLS certs generated from P-256 ECDSA keys of at least 256 bits
+- mTLS certs must be X.509 TLS certs. We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards.
 - Certs and their corresponding secret keys will be stored on the system's disk in plaintext. We recommend using an encrypted filesystem, restricting file permissions, and encrypting with a HSM/TPM to secure the secret keys.
     Example:
     `<daemon_working_directory>/certs/roots/`
