@@ -24,9 +24,10 @@ Abbreviations in this document:
 
 ## Requirements
 
+- Use TLS >= 1.3 in the QUIC library (Rust QUIC libraries such as `s2n_quic` and `quinn` require TLS 1.3)
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be X.509 TLS certs generated from ECDSA keys of at least 224 bits
-- Certs and their corresponding secret keys will be stored on the system's disk in plaintext (deployment should consider using an encrypted filesystem to protect them)
+- mTLS certs must be X.509 TLS certs generated from P-256 ECDSA keys of at least 256 bits
+- Certs and their corresponding secret keys will be stored on the system's disk in plaintext. We recommend using an encrypted filesystem, restricting file permissions, and encrypting with a HSM/TPM to secure the secret keys.
     Example:
     `<daemon_working_directory>/certs/roots/`
         `root1.pem`
@@ -40,12 +41,13 @@ Abbreviations in this document:
 - QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail
 - Existing QUIC connections with expired certs should be closed
+- Security events such as failed authenticate or signature verification should be logged
 
 Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation
+- Cert revocation. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
 - Cert rotation/renewal
 
 ## Certificate Generation
