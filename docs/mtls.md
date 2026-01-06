@@ -38,6 +38,8 @@ Abbreviations in this document:
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
+- QUIC connection attempts with expired certs should fail
+- Existing QUIC connections with expired certs should be closed
 
 Future enhancements:
 - Different root and device certs for different teams
@@ -53,7 +55,7 @@ Device certs are signed by one of the root certs or an intermediate CA cert usin
 
 We recommend using ECDSA certs generated from a secret key of at least 224 bits.
 
-An example CA that generates root and device certs will be provided for users that do not have an existing PKI infrastructure.
+An example CA that generates root and device certs will be provided in an example application for users that do not have an existing PKI infrastructure.
 
 ## Daemon Configuration
 
@@ -85,4 +87,4 @@ This will cause breaking changes to the Aranya API.
 
 ### Breaking Deployment Changes
 
-Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which have migrated to mTLS certs.
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which have migrated to mTLS certs. Recommend upgrading all Aranya software in a deployment to a version that supports mTLS certs at the same time.
