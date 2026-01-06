@@ -89,4 +89,4 @@ This will cause breaking changes to the Aranya API.
 
 ### Breaking Deployment Changes
 
-Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which have migrated to mTLS certs. Recommend upgrading all Aranya software in a deployment to a version that supports mTLS certs at the same time.
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. We recommend upgrading all Aranya software in a deployment to a version that supports mTLS certs at the same time.
