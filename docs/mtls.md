@@ -24,7 +24,6 @@ Abbreviations in this document:
 
 ## Requirements
 
-- Use TLS >= 1.3 in the QUIC library (Rust QUIC libraries such as `s2n_quic` and `quinn` require TLS 1.3)
 - Users must be able to leverage their existing external PKI for generating/signing certs
 - mTLS certs must be X.509 TLS certs. We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards.
 - Certs and their corresponding secret keys will be stored on the system's disk in plaintext. We recommend using an encrypted filesystem, restricting file permissions, and encrypting with a HSM/TPM to secure the secret keys.
@@ -40,8 +39,10 @@ Abbreviations in this document:
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail
-- Existing QUIC connections with expired certs should be closed
 - Security events such as failed authentication or signature verification should be logged
+
+Note:
+QUIC requires TLS 1.3 so that is an implied requirement. It's worth mentioning here since it is relevant to the security properties of our mTLS implementation.
 
 Future enhancements:
 - Different root and device certs for different teams
@@ -57,7 +58,7 @@ Device certs are signed by one of the root certs or an intermediate CA cert usin
 
 We recommend using P-256 ECDSA certs generated from a secret key of at least 256 bits.
 
-An example CA that generates root and device certs will be provided in an example application for users that do not have an existing PKI infrastructure.
+An example of how to generate/sign certs with the `openssl` cli tool will be provided for users that do not have an existing PKI infrastructure. Certs should not be checked into the `aranya` repo and should always be generated/signed for each deployment.
 
 ## Daemon Configuration
 
