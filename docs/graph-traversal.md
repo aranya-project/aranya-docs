@@ -58,10 +58,40 @@ Skip lists compound this by adding additional edges that create more paths to th
 
 ### Affected Operations
 
-1. **`get_location_from`**: Finds a command by address starting from a given location
-2. **`is_ancestor`**: Determines if a location is an ancestor of a segment
+#### `get_location_from(start: Location, address: Address) -> Option<Location>`
 
-Both are called frequently during braiding, where `is_ancestor` is invoked O(B * S) times (B = braid size, S = active strands).
+Finds a command by its address, searching backward from a starting location. The algorithm:
+
+1. Initialize a queue with `start`
+2. Pop a location from the queue
+3. Scan commands in the current segment for matching address
+4. If not found, add the segment's prior location(s) to the queue
+5. Also add skip list targets to the queue for faster backward jumps
+6. Repeat until found or queue exhausted
+
+The exponential blowup occurs at step 4-5: each merge segment adds two parents to the queue, and skip lists add additional edges. Without visited tracking, the same segment can be reached and queued through multiple paths.
+
+#### `is_ancestor(candidate: Location, head: Segment) -> bool`
+
+Determines if a location is an ancestor of a given segment head. The algorithm:
+
+1. Initialize a queue with the head segment's prior location(s)
+2. Pop a location from the queue
+3. If location matches candidate, return true
+4. If location's max_cut < candidate's max_cut, skip (can't be ancestor)
+5. Add the segment's prior location(s) and skip list targets to queue
+6. Repeat until found or queue exhausted
+
+This operation is particularly expensive during braiding, where it is invoked O(B * S) times (B = braid size, S = active strands). Each call potentially traverses a significant portion of the graph.
+
+#### Why These Operations Are Vulnerable
+
+Both operations share a common pattern:
+- Backward traversal from a starting point
+- Queue-based exploration of prior segments
+- Multiple edges per segment (prior + skip list)
+
+Without visited tracking, the number of queue operations grows exponentially with merge depth rather than linearly with segment count.
 
 ## Design Constraints
 
@@ -77,12 +107,11 @@ Key observations:
 
 ### Capped Visited Set
 
-A fixed-size data structure tracking visited segments during traversal.
+A fixed-size data structure tracking visited segments during traversal, using `heapless::Vec` for no-alloc storage.
 
 ```rust
 struct CappedVisited<const CAP: usize> {
-    entries: [(usize, MaxCut); CAP],  // (segment_id, max_cut)
-    len: usize,
+    entries: heapless::Vec<(usize, MaxCut), CAP>,  // (segment_id, max_cut)
 }
 ```
 
@@ -94,24 +123,29 @@ Inserts a segment into the visited set. Returns true if the segment was not alre
 
 When the set is full, evicts the entry with the highest max_cut (least likely to be encountered again during backward traversal).
 
+The implementation combines the existence check with finding the eviction candidate in a single pass, avoiding redundant traversal when the set is full.
+
 ```rust
 fn insert(&mut self, segment: usize, max_cut: MaxCut) -> bool {
-    if self.entries[..self.len].iter().any(|(s, _)| *s == segment) {
-        return false;
+    // Single pass: check for existing segment and track max_cut entry for potential eviction
+    let mut max_cut_idx = 0;
+    let mut max_cut_val = MaxCut::MIN;
+
+    for (i, (s, mc)) in self.entries.iter().enumerate() {
+        if *s == segment {
+            return false;  // Already present
+        }
+        if *mc > max_cut_val {
+            max_cut_val = *mc;
+            max_cut_idx = i;
+        }
     }
 
-    if self.len < CAP {
-        self.entries[self.len] = (segment, max_cut);
-        self.len += 1;
+    if self.entries.len() < CAP {
+        self.entries.push((segment, max_cut)).unwrap();
     } else {
-        // Evict entry with highest max_cut
-        let evict_idx = self.entries[..self.len]
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, (_, mc))| mc)
-            .map(|(i, _)| i)
-            .unwrap();
-        self.entries[evict_idx] = (segment, max_cut);
+        // Evict entry with highest max_cut (already found above)
+        self.entries[max_cut_idx] = (segment, max_cut);
     }
     true
 }
@@ -120,11 +154,14 @@ fn insert(&mut self, segment: usize, max_cut: MaxCut) -> bool {
 ### Integration with Traversal
 
 ```rust
-let mut visited = CappedVisited::<256>::new();
-let mut queue = Vec::new();
-queue.push(start);
+let mut visited = CappedVisited::<256> {
+    entries: heapless::Vec::new(),
+};
+let mut queue = heapless::Vec::<_, MAX_QUEUE>::new();
+queue.push(start).unwrap();
 
 while let Some(loc) = queue.pop() {
+    let segment = storage.get_segment(loc.segment);
     if !visited.insert(loc.segment, segment.max_cut()) {
         continue;  // Already visited
     }
@@ -174,3 +211,14 @@ The algorithm remains correct even when the set overflows:
 - May revisit segments if capacity exceeded
 - O(CAP) lookup within set
 - Requires capacity tuning for workloads
+
+## Implementation Notes
+
+### Sorted List Optimization
+
+For larger CAP values, maintaining a sorted list by max_cut with binary search could reduce lookup time from O(CAP) to O(log CAP). However, this trades read performance for insert cost:
+
+- **Unsorted (specified above):** O(CAP) lookup, O(1) insert (amortized)
+- **Sorted:** O(log CAP) lookup, O(CAP) insert (due to shifting)
+
+The optimal choice depends on the hit rate and target architecture. On systems where CAP fits in L1 cache, linear scan may outperform binary search due to cache locality. Benchmarking on target hardware is recommended for CAP values exceeding ~64 entries.
