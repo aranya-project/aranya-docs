@@ -41,7 +41,7 @@ Abbreviations in this document:
 - QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail
 - Existing QUIC connections with expired certs should be closed
-- Security events such as failed authenticate or signature verification should be logged
+- Security events such as failed authentication or signature verification should be logged
 
 Future enhancements:
 - Different root and device certs for different teams
@@ -55,7 +55,7 @@ Future enhancements:
 mTLS root and device certs are generated externally via a user's existing PKI infrastructure.
 Device certs are signed by one of the root certs or an intermediate CA cert using the PKI infrastructure.
 
-We recommend using ECDSA certs generated from a secret key of at least 224 bits.
+We recommend using P-256 ECDSA certs generated from a secret key of at least 256 bits.
 
 An example CA that generates root and device certs will be provided in an example application for users that do not have an existing PKI infrastructure.
 
