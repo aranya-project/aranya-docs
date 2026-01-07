@@ -25,7 +25,7 @@ Abbreviations in this document:
 ## Requirements
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be X.509 TLS certs. We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards.
+- mTLS certs must be X.509 TLS certs. We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2).
 - Certs and their corresponding secret keys will be stored on the system's disk in plaintext. We recommend using an encrypted filesystem, restricting file permissions, and encrypting with a HSM/TPM to secure the secret keys.
     Example:
     `<daemon_working_directory>/certs/roots/`
@@ -56,7 +56,7 @@ Future enhancements:
 mTLS root and device certs are generated externally via a user's existing PKI infrastructure.
 Device certs are signed by one of the root certs or an intermediate CA cert using the PKI infrastructure.
 
-We recommend using P-256 ECDSA certs generated from a secret key of at least 256 bits.
+We recommend using P-256 ECDSA certs generated from a secret key of at least 256 bits (NIST SP 800-52 Rev. 2).
 
 An example of how to generate/sign certs with the `openssl` cli tool will be provided for users that do not have an existing PKI infrastructure. Certs should not be checked into the `aranya` repo and should always be generated/signed for each deployment.
 
@@ -75,11 +75,17 @@ device_cert=<device cert directory>
 ...
 ```
 
-Aranya assumes the following before loading certs into the QUIC syncer:
-- Certs have been generated and signed by the user's external PKI infrastructure
-- Certs include any relevant SANs information
+The Aranya daemon will refuse to start if the following conditions are not met:
 - The root certs directory contains at least one root certificate (e.g. `root1.pem`).
-- The device cert directory contains the device cert (e.g. `cert.pem`) signed by one of the root certs or an intermediate CA cert and the corresponding secret key (e.g. `cert.key`).
+- The device cert directory contains the device cert (e.g. `cert.pem`) and the corresponding secret key (e.g. `cert.key`).
+
+Verification of the cert chain is not performed by the daemon when starting up and loading certs into the QUIC library. For simplicity, we will rely on the QUIC library to detect invalid certs at runtime when performing the TLS handshake for QUIC connections.
+
+Please ensure that your PKI infrastructure has done the following before loading certs into the daemon's QUIC syncer:
+- Generated the root certs and any intermediate CA certs
+- Signed device certs with root certs or intermediate CA certs
+- Included any relevant SANs information in the certs
+- Ideally, the cert chain should be validated before loading certs into Aranya to avoid troubleshooting failed TLS handshakes at runtime
 
 ## Breaking Changes
 
