@@ -25,20 +25,12 @@ Abbreviations in this document:
 ## Requirements
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be X.509 TLS certs. We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2).
-- Certs and their corresponding secret keys will be stored on the system's disk in plaintext. We recommend using an encrypted filesystem, restricting file permissions, and encrypting with a HSM/TPM to secure the secret keys.
-    Example:
-    `<daemon_working_directory>/certs/roots/`
-        `root1.pem`
-        `root2.pem`
-    `<daemon_working_directory>/certs/device/`
-        `cert.pem`
-        `cert.key`
+- mTLS certs must be X.509 TLS certs in PEM format.
 - A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
-- QUIC connection attempts by the syncer should fail to be established if certs have not been configured/signed properly
-- QUIC connection attempts with expired certs should fail
+- QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
+- QUIC connection attempts with expired certs should fail the TLS handshake
 - Security events such as failed authentication or signature verification should be logged
 
 Note:
@@ -50,6 +42,12 @@ Future enhancements:
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
 - Cert revocation. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
 - Cert rotation/renewal
+- Supporting cert formats other than PEM
+
+## Suggested Integration Requirements
+
+- We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2).
+- Certs and their corresponding secret keys are stored on disk without further protection. Therefore, we recommend protecting the secret keys with an encrypted filesystem, restricted file permissions, and a HSM/TPM.
 
 ## Certificate Generation
 
@@ -63,8 +61,8 @@ An example of how to generate/sign certs with the `openssl` cli tool will be pro
 ## Daemon Configuration
 
 Paths to the root certs and device cert will be provided in the daemon config.
-These certs will be loaded into the QUIC syncer module when the daemon loads.
-All QUIC syncer traffic will be authenticated by checking root cert signatures.
+The root cert directory is assumed to be flat: we do not support any recursion or symlinks.
+Certs will be loaded into the QUIC syncer module when the daemon loads.
 
 daemon_config.toml:
 ```
