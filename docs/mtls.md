@@ -55,12 +55,14 @@ Future enhancements:
 - Must be able to generate a root CA cert and P-256 ECDSA secret key pair
 - Must be able to generate new certs signed by a root CA along with their P-256 ECDSA secret key
 - Must output certs in PEM format
+- Must allow a CN (Common Name) to be specified for each generated cert
 - Must allow SANs to be specified for non-CA certs such as DNS names and IP addresses
+- Must allow a validity period to be specified so certs can expire
 
 Example usage:
 ```bash
 # Create a root CA
-aranya-certgen ca --cert ca.pem --key ca.key --ca-name "My Company CA"
+aranya-certgen ca --cert ca.pem --key ca.key --ca-name "My Company CA" --validity-days 10
 
 # Create a signed certificate
 aranya-certgen signed \
@@ -69,6 +71,7 @@ aranya-certgen signed \
   --cn server \
   --dns example.com --dns www.example.com \
   --ip 192.168.1.10
+  --validity-days 10
 ```
 
 Future enhancements:
