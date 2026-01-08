@@ -49,6 +49,31 @@ Future enhancements:
 - We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2).
 - Certs and their corresponding secret keys are stored on disk without further protection. Therefore, we recommend protecting the secret keys with an encrypted filesystem, restricted file permissions, and a HSM/TPM.
 
+## Certgen CLI Tool Requirements
+
+- Must use P-256 ECDSA secret keys
+- Must be able to generate a root CA cert and P-256 ECDSA secret key pair
+- Must be able to generate new certs signed by a root CA along with their P-256 ECDSA secret key
+- Must output certs in PEM format
+- Must allow SANs to be specified for non-CA certs such as DNS names and IP addresses
+
+Example usage:
+```bash
+# Create a root CA
+aranya-certgen ca --cert ca.pem --key ca.key --ca-name "My Company CA"
+
+# Create a signed certificate
+aranya-certgen signed \
+  --ca-cert ca.pem --ca-key ca.key \
+  --cert server.pem --key server.key \
+  --cn server \
+  --dns example.com --dns www.example.com \
+  --ip 192.168.1.10
+```
+
+Future enhancements:
+- HSM encryption of secret keys
+
 ## Certificate Generation
 
 mTLS root and device certs are generated externally via a user's existing PKI infrastructure.
