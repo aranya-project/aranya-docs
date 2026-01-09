@@ -54,7 +54,7 @@ For `n` merge levels, this produces up to `2^n` segment visits:
 | 10           | 1,024            | ~20           |
 | 20           | 1,048,576        | ~40           |
 
-Skip lists compound this by adding additional edges that create more paths to the same segments.
+Skip lists help mitigate this by allowing larger backward jumps. When a valid skip list entry exists, it is used *instead of* the prior locations, reducing the number of segments visited.
 
 ### Affected Operations
 
@@ -65,11 +65,10 @@ Finds a command by its address, searching backward from a starting location. The
 1. Initialize a queue with `start`
 2. Pop a location from the queue
 3. Scan commands in the current segment for matching address
-4. If not found, add the segment's prior location(s) to the queue
-5. Also add skip list targets to the queue for faster backward jumps
-6. Repeat until found or queue exhausted
+4. If not found, add either a skip list target or the prior location(s) to the queue
+5. Repeat until found or queue exhausted
 
-The exponential blowup occurs at step 4-5: each merge segment adds two parents to the queue, and skip lists add additional edges. Without visited tracking, the same segment can be reached and queued through multiple paths.
+The exponential blowup occurs at step 4: each merge segment adds two parents to the queue. Without visited tracking, the same segment can be reached and queued through multiple paths.
 
 #### `is_ancestor(candidate: Location, head: Segment) -> bool`
 
@@ -79,7 +78,7 @@ Determines if a location is an ancestor of a given segment head. The algorithm:
 2. Pop a location from the queue
 3. If location matches candidate, return true
 4. If location's max_cut < candidate's max_cut, skip (can't be ancestor)
-5. Add the segment's prior location(s) and skip list targets to queue
+5. If a valid skip list entry exists, add only that skip target to the queue; otherwise add prior location(s)
 6. Repeat until found or queue exhausted
 
 This operation is particularly expensive during braiding, where it is invoked O(B * S) times (B = braid size, S = active strands). Each call potentially traverses a significant portion of the graph.
@@ -89,7 +88,7 @@ This operation is particularly expensive during braiding, where it is invoked O(
 Both operations share a common pattern:
 - Backward traversal from a starting point
 - Queue-based exploration of prior segments
-- Multiple edges per segment (prior + skip list)
+- Merge segments contribute two parent edges to the queue
 
 Without visited tracking, the number of queue operations grows exponentially with merge depth rather than linearly with segment count.
 
