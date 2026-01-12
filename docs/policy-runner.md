@@ -74,7 +74,8 @@ The additional values section defines values that will be made available
 to policy execution as globals (and thus available in the action calls
 and command structs described above). This will be able to define any
 legal `Value`s supported by the policy VM, including `id` and `bytes`
-values that the policy cannot express as literals.
+values that the policy cannot express as literals. Additionally, it will
+be able to generate keys which will be stored in the keystore.
 
 ## Operation
 
@@ -85,13 +86,17 @@ command-line arguments.
 policy-tester [OPTIONS] <POLICY> <RUNFILE> [RUNFILE ...]
 ```
 
-First it will compile the policy file into a VM. Then for each run file,
-it will load the file, define any additional values specified in it,
-then execute its sequence of actions and command structs. Additional
-values defined in earlier run files will remain defined while executing
-later run files, to allow sequences to be composed through multiple
-files. For example, you can have one run file that sets up a team, then
-several others which perform more specific team manipulations.
+First, the run files are all parsed. Additional values in these files
+are combined into additional global definitions. Next, it will compile
+the policy file into a VM including the additional global definitions.
+Then for each run file, it will execute its sequence of actions and
+command structs, outputting effects as they are committed to the sink.
+
+All additional values are defined while executing run files, which means
+their identifiers cannot overlap. This also allows sequences to be
+composed through multiple files. For example, you can have one run file
+that sets up a team, then several others which perform more specific
+team manipulations using the keys defined in that earlier team run file.
 
 Any effects produced will be printed out in the `Display` implementation
 for `Value`s, which describes every fields' content, including `id` and
