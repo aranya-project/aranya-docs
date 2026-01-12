@@ -3,7 +3,7 @@
 ```
 effect FooEffect {
     a int,
-    b string,
+    b string dynamic,
 }
 ```
 
@@ -22,3 +22,7 @@ status of the Command that emitted them. Because commands may be
 reevaluated after syncing and merging, effects can be issued multiple
 times. An application might use the command ID and recall status to
 filter out duplicate effects.
+
+The `dynamic` keyword is an annotation used to indicate to the effect
+consumer that the value is not based on static data and may change in
+future evaluations. It has no effect on policy execution.
