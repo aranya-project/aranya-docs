@@ -1,9 +1,11 @@
 # Aranya Policy Tester
 
 The Aranya Policy Tester is a CLI tool to execute actions and commands
-in a production-ish environment, and inspect the emitted effects. It
-should be able to load production policy and execute it in much the same
-way it works in the [Aranya
+in a production-ish environment, and inspect the emitted effects. It is
+intended as a prototyping tool for policy writers so that they can test
+a policy design without having to scaffold or continually rebuild a
+crate that hosts it. It should be able to load production policy and
+execute it in much the same way it works in the [Aranya
 daemon](https://github.com/aranya-project/aranya/tree/main/crates/aranya-daemon).
 
 ## `aranya-runtime` Requirements
@@ -40,8 +42,8 @@ and stored under `<wd>/crypto_root_key`.
 
 ### Key Store
 
-The tool will use the `fs_keystore` implementation with data stored
-in `<wd>/key_store`.
+The tool will use the `aranya_crypto::keystore::fs_keystore`
+implementation with data stored in `<wd>/key_store`.
 
 ### Graph Storage
 
@@ -93,4 +95,5 @@ several others which perform more specific team manipulations.
 
 Any effects produced will be printed out in the `Display` implementation
 for `Value`s, which describes every fields' content, including `id` and
-`bytes`.
+`bytes`. A command-line option will be available to print a separator
+between the effects produced by different run files.
