@@ -2,7 +2,8 @@
 
 ## `int`
 
-A 64-bit two's complement signed integer.
+A 64-bit two's complement signed integer. It represents whole numbers
+from -9223372036854775808 to 9223372036854775807.
 
 ```
 let x = 3
