@@ -22,6 +22,7 @@
 - [Expressions](reference/expressions.md)
   - [Operators](reference/expressions/operators.md)
   - [Functions](reference/expressions/functions.md)
+    - [Math Functions](reference/expressions/functions/math.md)
     - [Queries and Counting](reference/expressions/functions/queries.md)
     - [If and Match](reference/expressions/functions/if-match.md)
     - [Serialize and Deserialize](reference/expressions/functions/serialize-deserialize.md)

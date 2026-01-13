@@ -7,14 +7,8 @@ exception.
 
 ## Mathematical Operators
 
-The only mathematical operators allowed are addition, subtraction, and
-negation of integers.
-
-| Operator | Meaning |
-|----------|---------|
-| `+`      | `A + B` adds A and B |
-| `-`      | `A - B` subtracts B from A |
-| `-` (unary prefix) | `-A` is the numerical negation of A |
+There are no mathematical operators in the policy language. See [Math Functions](functions/math.md) for safe methods to do addition and
+subtraction.
 
 ## Numerical Comparison Operators
 

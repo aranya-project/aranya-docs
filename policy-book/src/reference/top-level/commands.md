@@ -133,9 +133,13 @@ manipulate it directly.
 ## Policy block
 
 The `policy` block contains statements which query data and check its
-validity. The `policy` block must terminate with a `finish` block
-(though it can have multiple `finish` blocks in branching paths). The
-`finish` block must be specified even if it is empty (e.g. `finish {}`).
+validity.
+
+Execution of a `policy` block terminates successfully after it executes
+a `finish` block, even when it is not the last thing in the `policy`
+block. A `policy` block can have multiple `finish` blocks in branching
+paths. The `finish` block must be specified even if it is empty (e.g.
+`finish {}`).
 
 The policy block also defines the automatically-defined variables
 `this`, which is a struct containing all of the fields for the command
@@ -143,7 +147,8 @@ being processed; and `envelope`, described above.
 
 ### Finish block
 
-A finish block can contain only [`create`](../statements/create.md),
+A finish block concludes policy block execution. It can contain only
+[`create`](../statements/create.md),
 [`update`](../statements/update.md),
 [`delete`](../statements/delete.md), and [`emit`](../statements/emit.md)
 statements, as well as call [finish
