@@ -4,7 +4,6 @@ This lists major changes to the documentation over time.
 
 ## Revision B (January 2026)
 
-- Added documentation for the `dynamic` keyword in effect fields.
 - Removed math operators and added built-in math functions.
 
 ## Revision A (October 2025)
