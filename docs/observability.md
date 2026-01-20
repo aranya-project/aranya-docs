@@ -88,7 +88,7 @@ What items need to be logged:
 INFO:
 ```json
 { 
-    "timestanp": "2026-01-12T12:34:56.789012Z",
+    "timestamp": "2026-01-12T12:34:56.789012Z",
     "level": "INFO",
     "component": "sync",
     "device_id": "dev_a",
@@ -118,7 +118,7 @@ INFO:
 ERROR:
 ```json
 {
-    "timestanp": "2026-01-07T12:34:56.789012Z",
+    "timestamp": "2026-01-07T12:34:56.789012Z",
     "level": "ERROR",
     "component": "sync",
     "device_id": "dev_a",
@@ -146,7 +146,7 @@ ERROR:
 
 ```json
 {
-    "timestamp": "2026-01-15T12:34:56.789012Z",.
+    "timestamp": "2026-01-15T12:34:56.789012Z",
     "level": "ERROR",
     "component": "policy",
     "device_id": "dev_a",
@@ -159,7 +159,7 @@ ERROR:
         "check_failed": "CanCreateLabels",
         "policy_file": "src/policy.md",
         "policy_line": 456,
-        "policy_context": "action create_label requires permission CanCeateLabels",
+        "policy_context": "action create_label requires permission CanCreateLabels",
         "device_permissions": ["CanUseAfc","CanSync"],
         "required_permissions": ["CanCreateLabels"]
     }
@@ -210,7 +210,7 @@ ERROR:
 Critical events only such as:
 
 1. Device joins/leaves team
-2. Role assigments/revocations
+2. Role assignments/revocations
 3. Label creations/deletions
 4. Permission grants/revocations
 5. Sync peer connection/disconnections
