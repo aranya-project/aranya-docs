@@ -99,7 +99,7 @@ Target environments include:
 - **Large peer counts**: Thousands of peers (satellite constellations, drone swarms)
 
 Key observations:
-1. Branch width at any point is bounded by peer count (P)
+1. Branch width at any point is bounded by peer count (P), assuming well-behaved devices. Each device can only create one new branch from any given command (either via action or merge, but not both). Misbehaving devices could violate this bound.
 2. Traversal proceeds backward (high max_cut to low max_cut), so evicting high max_cut entries is safe
 
 ## Specification
@@ -156,23 +156,25 @@ fn insert(&mut self, segment: usize, max_cut: MaxCut) -> bool {
 let mut visited = CappedVisited::<256> {
     entries: heapless::Vec::new(),
 };
-let mut queue = heapless::Vec::<_, MAX_QUEUE>::new();
-queue.push(start).unwrap();
+let mut queue = heapless::Deque::<_, MAX_QUEUE>::new();
+queue.push_back(start).unwrap();
 
-while let Some(loc) = queue.pop() {
+while let Some(loc) = queue.pop_front() {
     let segment = storage.get_segment(loc.segment);
     if !visited.insert(loc.segment, segment.max_cut()) {
         continue;  // Already visited
     }
 
     // Process segment...
-    // Add prior locations to queue
+    // Add prior locations to queue with push_back()
 }
 ```
 
+Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the highest max_cut entries are removed—precisely the ones least likely to be encountered again.
+
 ### Capacity Sizing
 
-The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count. The lazy eviction strategy (evicting highest max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
+The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count for well-behaved devices. The lazy eviction strategy (evicting highest max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
 
 | Environment          | Suggested Capacity | Memory       |
 |:---------------------|:------------------:|:------------:|
