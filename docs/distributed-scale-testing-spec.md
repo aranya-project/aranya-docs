@@ -93,9 +93,23 @@ Base URL: `http://<host>:<port>/api/v1`
 
 | Method | Endpoint | Description | Request | Returns |
 |--------|----------|-------------|---------|---------|
-| POST | `.../teams/{team_id}/sync-peers` | Add sync peer | addr, interval_ms, sync_now | 204 |
+| POST | `.../teams/{team_id}/sync-peers` | Add sync peer | addr, interval_ms, sync_now, sync_on_hello | 204 |
 | DELETE | `.../teams/{team_id}/sync-peers` | Remove sync peer | addr | 204 |
 | POST | `.../teams/{team_id}/sync-now` | Trigger immediate sync | addr | 204 |
+| POST | `.../teams/{team_id}/hello-subscribe` | Subscribe to hello notifications | addr, graph_change_delay_ms, duration_ms, schedule_delay_ms | 204 |
+| DELETE | `.../teams/{team_id}/hello-subscribe` | Unsubscribe from hello notifications | addr | 204 |
+
+**sync-peers parameters:**
+- `addr`: peer's sync server address
+- `interval_ms`: polling interval (optional, disables polling if omitted)
+- `sync_now`: trigger immediate sync after adding
+- `sync_on_hello`: automatically sync when hello notification received from peer
+
+**hello-subscribe parameters:**
+- `addr`: peer's sync server address to subscribe to
+- `graph_change_delay_ms`: minimum time between notifications (rate limiting)
+- `duration_ms`: how long the subscription lasts
+- `schedule_delay_ms`: interval for periodic hello sends regardless of changes
 
 ### Label Operations
 
@@ -204,6 +218,267 @@ When daemons span multiple test servers, the orchestrator must:
 - Track which server hosts each device
 - Use the correct server's API for each sync-peer call
 - Ensure `sync_addr` is reachable across servers (not localhost)
+
+---
+
+## Orchestrator Library
+
+The orchestrator library provides a high-level Rust API for managing distributed test scenarios. It handles daemon tracking across servers, topology setup, and common test patterns.
+
+### Core Types
+
+```rust
+/// Connection to a test server
+pub struct TestServer {
+    pub server_id: String,
+    pub base_url: Url,
+}
+
+/// Tracked daemon with server location
+pub struct TrackedDaemon {
+    pub device_id: DeviceId,
+    pub name: String,
+    pub server: TestServer,
+    pub sync_addr: SocketAddr,
+    pub key_bundle: KeyBundle,
+}
+
+/// Team with member tracking
+pub struct TrackedTeam {
+    pub team_id: TeamId,
+    pub owner: TrackedDaemon,
+    pub members: Vec<TrackedDaemon>,
+}
+
+/// Orchestrator for managing distributed tests
+pub struct TestOrchestrator {
+    servers: Vec<TestServer>,
+    daemons: HashMap<DeviceId, TrackedDaemon>,
+    teams: HashMap<TeamId, TrackedTeam>,
+}
+```
+
+### Orchestrator API
+
+```rust
+impl TestOrchestrator {
+    /// Create orchestrator with list of test server URLs
+    pub fn new(server_urls: &[&str]) -> Result<Self>;
+
+    /// Start daemon on specific server (or round-robin if None)
+    pub async fn start_daemon(
+        &mut self,
+        name: &str,
+        server: Option<&str>,
+        config: DaemonConfig,
+    ) -> Result<&TrackedDaemon>;
+
+    /// Start multiple daemons distributed across servers (round-robin)
+    pub async fn start_daemons(
+        &mut self,
+        count: usize,
+        name_prefix: &str,
+        config: DaemonConfig,
+    ) -> Result<Vec<&TrackedDaemon>>;
+
+    /// Stop daemon (keeps state for restart)
+    pub async fn stop_daemon(&mut self, device_id: &DeviceId) -> Result<()>;
+
+    /// Remove daemon completely
+    pub async fn remove_daemon(&mut self, device_id: &DeviceId) -> Result<()>;
+
+    /// Get daemon by device ID
+    pub fn get_daemon(&self, device_id: &DeviceId) -> Option<&TrackedDaemon>;
+
+    /// Get daemon by name
+    pub fn get_daemon_by_name(&self, name: &str) -> Option<&TrackedDaemon>;
+
+    /// List all tracked daemons
+    pub fn daemons(&self) -> impl Iterator<Item = &TrackedDaemon>;
+}
+```
+
+### Team Management
+
+```rust
+impl TestOrchestrator {
+    /// Create team with owner daemon
+    pub async fn create_team(
+        &mut self,
+        owner: &DeviceId,
+        sync_seed: SyncSeed,
+    ) -> Result<&TrackedTeam>;
+
+    /// Add device to team (must be called on owner)
+    pub async fn add_device_to_team(
+        &mut self,
+        team_id: &TeamId,
+        device_id: &DeviceId,
+        initial_role: Option<RoleId>,
+    ) -> Result<()>;
+
+    /// Join team on non-owner device (after being added)
+    pub async fn join_team(
+        &mut self,
+        device_id: &DeviceId,
+        team_id: &TeamId,
+        sync_seed: SyncSeed,
+    ) -> Result<()>;
+
+    /// Get team by ID
+    pub fn get_team(&self, team_id: &TeamId) -> Option<&TrackedTeam>;
+
+    /// Setup default roles on team
+    pub async fn setup_default_roles(
+        &mut self,
+        team_id: &TeamId,
+        owning_role: RoleId,
+    ) -> Result<Vec<RoleId>>;
+}
+```
+
+### Sync Peer Management
+
+```rust
+impl TestOrchestrator {
+    /// Add sync peer
+    pub async fn add_sync_peer(
+        &mut self,
+        device_id: &DeviceId,
+        team_id: &TeamId,
+        peer_addr: SocketAddr,
+        config: SyncPeerConfig,
+    ) -> Result<()>;
+
+    /// Remove sync peer
+    pub async fn remove_sync_peer(
+        &mut self,
+        device_id: &DeviceId,
+        team_id: &TeamId,
+        peer_addr: SocketAddr,
+    ) -> Result<()>;
+
+    /// Subscribe to hello notifications from a peer
+    pub async fn hello_subscribe(
+        &mut self,
+        device_id: &DeviceId,
+        team_id: &TeamId,
+        peer_addr: SocketAddr,
+        config: HelloSubscribeConfig,
+    ) -> Result<()>;
+
+    /// Unsubscribe from hello notifications
+    pub async fn hello_unsubscribe(
+        &mut self,
+        device_id: &DeviceId,
+        team_id: &TeamId,
+        peer_addr: SocketAddr,
+    ) -> Result<()>;
+}
+
+pub struct SyncPeerConfig {
+    pub interval_ms: Option<u64>,  // None disables polling
+    pub sync_now: bool,
+    pub sync_on_hello: bool,
+}
+
+pub struct HelloSubscribeConfig {
+    pub graph_change_delay_ms: u64,
+    pub duration_ms: u64,
+    pub schedule_delay_ms: u64,
+}
+```
+
+### Topology Helpers
+
+Standalone functions for configuring sync topologies. These take a reference to the orchestrator and use its `add_sync_peer` method internally.
+
+```rust
+use aranya_test_orchestrator::topology;
+
+/// Configure star topology where spokes pull from hub only
+pub async fn setup_star_one_way(
+    orch: &mut TestOrchestrator,
+    team_id: &TeamId,
+    hub: &DeviceId,
+    config: SyncPeerConfig,
+) -> Result<()>;
+
+/// Configure star topology where hub and spokes pull from each other
+pub async fn setup_star_two_way(
+    orch: &mut TestOrchestrator,
+    team_id: &TeamId,
+    hub: &DeviceId,
+    config: SyncPeerConfig,
+) -> Result<()>;
+
+/// Configure ring topology where each device pulls from next neighbor
+pub async fn setup_ring_one_way(
+    orch: &mut TestOrchestrator,
+    team_id: &TeamId,
+    config: SyncPeerConfig,
+) -> Result<()>;
+
+/// Configure ring topology where each device pulls from both neighbors
+pub async fn setup_ring_two_way(
+    orch: &mut TestOrchestrator,
+    team_id: &TeamId,
+    config: SyncPeerConfig,
+) -> Result<()>;
+
+/// Configure full mesh where every device pulls from every other
+pub async fn setup_full_mesh(
+    orch: &mut TestOrchestrator,
+    team_id: &TeamId,
+    config: SyncPeerConfig,
+) -> Result<()>;
+```
+
+### Usage Example
+
+```rust
+use aranya_test_orchestrator::{TestOrchestrator, DaemonConfig, topology};
+
+#[tokio::test]
+async fn test_three_node_sync() -> Result<()> {
+    // Connect to test servers
+    let mut orch = TestOrchestrator::new(&[
+        "http://node-a:8080",
+        "http://node-b:8080",
+        "http://node-c:8080",
+    ])?;
+
+    // Start 3 daemons distributed across servers
+    let daemons = orch.start_daemons(3, "node", DaemonConfig::default()).await?;
+
+    // Create team on first daemon
+    let seed = SyncSeed::random();
+    let team = orch.create_team(&daemons[0].device_id, seed.clone()).await?;
+
+    // Add other daemons to team
+    for daemon in &daemons[1..] {
+        orch.add_device_to_team(&team.team_id, &daemon.device_id, None).await?;
+        orch.join_team(&daemon.device_id, &team.team_id, seed.clone()).await?;
+    }
+
+    // Setup star topology with first daemon as hub
+    // Sync happens automatically in background once peers are added
+    topology::setup_star_two_way(
+        &mut orch,
+        &team.team_id,
+        &daemons[0].device_id,
+        SyncPeerConfig {
+            interval_ms: Some(1000),
+            sync_now: true,
+            sync_on_hello: true,
+        },
+    ).await?;
+
+    // ... run test assertions ...
+
+    Ok(())
+}
+```
 
 ---
 
