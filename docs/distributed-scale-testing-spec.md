@@ -217,13 +217,12 @@ Each `add_sync_peer` call includes:
 When daemons span multiple test servers, the orchestrator must:
 - Track which server hosts each device
 - Use the correct server's API for each sync-peer call
-- Ensure `sync_addr` is reachable across servers (not localhost)
 
 ---
 
 ## Orchestrator Library
 
-The orchestrator library provides a high-level Rust API for managing distributed test scenarios. It handles daemon tracking across servers, topology setup, and common test patterns.
+The orchestrator library provides a high-level Rust API for managing distributed test scenarios. The primary concern of the orchestrator is to track the daemons and provide easy to use functions to work with local and remote test servers/daemons.
 
 ### Core Types
 
