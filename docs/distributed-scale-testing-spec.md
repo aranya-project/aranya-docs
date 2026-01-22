@@ -2,12 +2,14 @@
 
 ## Overview
 
-A distributed testing framework for Aranya that runs up to 250 daemons across multiple nodes. Test servers on each node expose a REST API that proxies daemon operations, allowing external test scripts to orchestrate complex scenarios.
+In order to support more realistic testing scenarios, this document describes a server that can be used to spawn daemons and control them from multiple machines. Each test server exposes a REST API that can be used to command the daemons based on device ID. An orchestrator can use the test server to start remote daemons and add them to a test scenario. 
+
+The test orchestrators can either interact with the test server APIs directly, or use a utility library to automatically track the location of daemons or set up sync topologies. 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Test Orchestrator                                │
-│                    (external test driver/script)                         │
+│                         Test Orchestrator                               │
+│                    (external test driver/script)                        │
 └─────────────────────────────────┬───────────────────────────────────────┘
                                   │ HTTP/REST
                     ┌─────────────┼─────────────┐
@@ -18,14 +20,14 @@ A distributed testing framework for Aranya that runs up to 250 daemons across mu
            │   (Node A)   │ │   (Node B)   │ │   (Node C)   │
            └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
                   │                │                │
-        ┌─────────┼─────────┐     ...             ...
-        ▼         ▼         ▼
+        ┌─────────┼────────────┐  ...             ...
+        ▼         ▼            ▼
    ┌─────────┐ ┌─────────┐ ┌─────────┐
    │ Daemon  │ │ Daemon  │ │ Daemon  │
    └─────────┘ └─────────┘ └─────────┘
 ```
 
-**Not in scope:** AFC testing (requires shared memory), production tooling, benchmarking.
+**Not in scope:** production tooling, benchmarking.
 
 ---
 
@@ -132,7 +134,7 @@ CLI: `aranya-test-server [-c config.toml] [-p port] [-w work_dir] [-v]`
 
 ## Sync Topologies
 
-The test orchestrator is responsible for topology setup. The test server doesn't manage topologies directly—it just proxies sync-peer operations to daemons.
+Sync topologies are set up by the orchestrator either manually (by adding sync peers) or via a library capable of automatically setting up a topology. 
 
 ### Sync Direction
 
@@ -192,8 +194,8 @@ for i, a in enumerate(devices):
 ### Sync Peer Config
 
 Each `add_sync_peer` call includes:
-- `addr`: peer's sync address (from daemon's `sync_addr` field)
-- `interval_ms`: polling interval (e.g., 100ms for tests)
+- `addr`: peer's sync server address 
+- `interval_ms`: polling interval
 - `sync_now`: trigger immediate sync after adding
 
 ### Cross-Server Considerations
