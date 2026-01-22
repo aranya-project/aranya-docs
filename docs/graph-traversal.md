@@ -76,10 +76,14 @@ Determines if a location is an ancestor of a given segment head. The algorithm:
 
 1. Initialize a queue with the head segment's prior location(s)
 2. Pop a location from the queue
-3. If location matches candidate, return true
-4. If location's max_cut < candidate's max_cut, skip (can't be ancestor)
-5. If a valid skip list entry exists, add only that skip target to the queue; otherwise add prior location(s)
-6. Repeat until found or queue exhausted
+3. If location is in the candidate's segment AND `location.command >= candidate.command`, return true (the candidate is reachable)
+4. If segment already visited, skip to step 2 (but note: step 3 runs first, so we still check for the target)
+5. Mark segment as visited
+6. If segment's max_cut < candidate's max_cut, skip (can't contain ancestor)
+7. If a valid skip list entry exists, add only that skip target to the queue; otherwise add prior location(s)
+8. Repeat until found or queue exhausted
+
+The ordering of steps 3-5 is critical: the found check (step 3) executes before the visited check (step 4). This ensures that entering a segment at different commands works correctly. If we enter segment S at command 3 and later at command 5 while searching for command 4, the second entry still finds the target (5 >= 4) even though the segment was already marked visited.
 
 This operation is particularly expensive during braiding, where it is invoked O(B * S) times (B = braid size, S = active strands). Each call potentially traverses a significant portion of the graph.
 
@@ -160,9 +164,15 @@ let mut queue = heapless::Deque::<_, MAX_QUEUE>::new();
 queue.push_back(start).unwrap();
 
 while let Some(loc) = queue.pop_front() {
+    // For is_ancestor: check if target found BEFORE visited check
+    // This ensures entering a segment at different commands works correctly
+    if loc.segment == target.segment && loc.command >= target.command {
+        return true;
+    }
+
     let segment = storage.get_segment(loc.segment);
     if !visited.insert(loc.segment, segment.max_cut()) {
-        continue;  // Already visited
+        continue;  // Already visited, don't expand priors again
     }
 
     // Process segment...
