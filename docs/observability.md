@@ -239,7 +239,97 @@ Critical events only such as:
 ```
 ## Implementation Roadmap
 
-TODO
+### Phase 1: Foundation
+
+**Goal:** Establish consistent structured logging with correlation IDs and device/team context across all operations.
+
+**Current State:** The tracing crate is integrated, but structured JSON logging with required fields is not implemented.
+
+**Tasks:**
+1. Configure `tracing-subscriber` with JSON formatter for structured logging output
+2. Implement correlation IDs across all operations
+   - Use UUIDs to tie related logs together
+   - Add integration test that traces a request from client through daemon
+3. Enhance error context with full causal chains
+   - Add specific fields to error types and expand error context
+   - Ensure error chains show full context in logs
+4. Add device/team ID filtering to logs
+
+### Phase 2: Enhanced Sync Debugging
+
+**Goal:** Provide visibility into sync operations, detect sync stalls, and enable top-down analysis.
+
+**Current State:** Sync logging exists but lacks first command tracking, stall detection, network quality metrics, and data path visualization.
+
+**Tasks:**
+1. Add first command address SENT tracking (hash + max_cts)
+   - Include fields: `last_first_cmd_hash`, `last_first_cmd_max_cts`, `stall_count`
+2. Detect stalled syncs (same first command sent repeatedly)
+   - Compare consecutive sync commands to detect stalls
+3. Add network quality measurements
+   - Implement RTT measurement
+   - Expose network metrics from QUIC connections
+   - Add querying methods for bandwidth and packet loss
+4. Enhanced timeout logging with context
+   - Wrap sync operations with timeout tracking
+   - Log: `last_successful_sync`, timestamp, `retry_count`, network quality on timeout
+5. Add sync peer topology tracking
+   - Store and update sync paths
+   - Include topology info in logs
+6. Complete `aranya-debug bundle` tool
+   - Build crate to collect logs from multiple devices
+   - Bundle logs for analysis
+7. Add `aranya-debug analyze` tool for basic log analysis
+   - Parse JSON log files
+   - Filter by time range, device, team, log level, component
+
+### Phase 3: Policy & AFC
+
+**Goal:** Enhance visibility of policy evaluation errors and AFC operations, particularly SHM key management.
+
+**Current State:** Policy errors lack source line numbers and detailed permission mismatches. AFC SHM operations and failures are not fully logged.
+
+**Tasks:**
+1. Enhanced policy error reporting
+   - Modify policy error types to include policy file path and line numbers
+   - Include specific failed checks and permission mismatches
+   - Add policy context to error messages
+2. AFC SHM operation logging
+   - Add logging to all SHM operations
+   - Track per-channel statistics
+   - Log OS-level errors with details (SHM path, permissions, size)
+3. AFC failure tracking and debugging
+   - Add source mapping in `aranya-policy-ifgen`
+   - Track SHM key add/remove failures
+
+### Phase 4: Analysis Tools
+
+**Goal:** Build user-friendly CLI tools to analyze debug data and identify root causes.
+
+**Tasks:**
+1. Build log analysis CLI
+   - Error aggregation by type and component
+   - Ordered timeline of events
+   - Summary statistics (log counts by level, warnings, devices)
+   - Request tracking across devices via correlation IDs
+   - Export analysis results to JSON
+2. Build sync diagnostics tool with topology visualization
+   - Parse sync logs to generate network topology graph
+   - Visualize sync paths and peer relationships
+3. Build state comparison tool
+   - Compare graph state between two timestamps
+   - Show differences in commands, effects, and state changes
+
+### Phase 5: Optional Monitoring (Future)
+
+**Goal:** Add real-time monitoring capabilities for operational visibility.
+
+**Tasks:**
+1. Prometheus metrics endpoint (for health monitoring, not debugging)
+2. Dashboard for real-time monitoring (separate from debugging)
+3. Alerting based on metrics
+
+**Note:** Phase 5 is for monitoring, not debugging. Focus is on remote debugging capabilities first.
 
 ## Configuration
 
