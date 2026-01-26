@@ -241,11 +241,11 @@ Critical events only such as:
 
 ### Phase 1: Foundation
 
-**Goal:** Establish consistent structured logging with correlation IDs and device/team context across all operations.
+Goal: Establish consistent structured logging with correlation IDs and device/team context across all operations.
 
-**Current State:** The tracing crate is integrated, but structured JSON logging with required fields is not implemented.
+Current State: The tracing crate is integrated, but structured JSON logging with required fields is not implemented.
 
-**Tasks:**
+Tasks:
 1. Configure `tracing-subscriber` with JSON formatter for structured logging output
 2. Implement correlation IDs across all operations
    - Use UUIDs to tie related logs together
@@ -257,11 +257,11 @@ Critical events only such as:
 
 ### Phase 2: Enhanced Sync Debugging
 
-**Goal:** Provide visibility into sync operations, detect sync stalls, and enable top-down analysis.
+Goal: Provide visibility into sync operations, detect sync stalls, and enable top-down analysis.
 
-**Current State:** Sync logging exists but lacks first command tracking, stall detection, network quality metrics, and data path visualization.
+Current State: Sync logging exists but lacks first command tracking, stall detection, network quality metrics, and data path visualization.
 
-**Tasks:**
+Tasks:
 1. Add first command address SENT tracking (hash + max_cts)
    - Include fields: `last_first_cmd_hash`, `last_first_cmd_max_cts`, `stall_count`
 2. Detect stalled syncs (same first command sent repeatedly)
@@ -285,11 +285,11 @@ Critical events only such as:
 
 ### Phase 3: Policy & AFC
 
-**Goal:** Enhance visibility of policy evaluation errors and AFC operations, particularly SHM key management.
+Goal: Enhance visibility of policy evaluation errors and AFC operations, particularly SHM key management.
 
-**Current State:** Policy errors lack source line numbers and detailed permission mismatches. AFC SHM operations and failures are not fully logged.
+Current State: Policy errors lack source line numbers and detailed permission mismatches. AFC SHM operations and failures are not fully logged.
 
-**Tasks:**
+Tasks:
 1. Enhanced policy error reporting
    - Modify policy error types to include policy file path and line numbers
    - Include specific failed checks and permission mismatches
@@ -304,9 +304,9 @@ Critical events only such as:
 
 ### Phase 4: Analysis Tools
 
-**Goal:** Build user-friendly CLI tools to analyze debug data and identify root causes.
+Goal: Build user-friendly CLI tools to analyze debug data and identify root causes.
 
-**Tasks:**
+Tasks:
 1. Build log analysis CLI
    - Error aggregation by type and component
    - Ordered timeline of events
@@ -322,14 +322,14 @@ Critical events only such as:
 
 ### Phase 5: Optional Monitoring (Future)
 
-**Goal:** Add real-time monitoring capabilities for operational visibility.
+Goal: Add real-time monitoring capabilities for operational visibility.
 
-**Tasks:**
+Tasks:
 1. Prometheus metrics endpoint (for health monitoring, not debugging)
 2. Dashboard for real-time monitoring (separate from debugging)
 3. Alerting based on metrics
 
-**Note:** Phase 5 is for monitoring, not debugging. Focus is on remote debugging capabilities first.
+Note: Phase 5 is for monitoring, not debugging. Focus is on remote debugging capabilities first.
 
 ## Configuration
 
