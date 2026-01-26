@@ -77,8 +77,8 @@ Determines if a location is an ancestor of a given segment head. The algorithm:
 1. Initialize a queue with the head segment's prior location(s)
 2. Pop a location from the queue
 3. If location is in the candidate's segment AND `location.command >= candidate.command`, return true (the candidate is reachable)
-4. If segment already visited, skip to step 2 (but note: step 3 runs first, so we still check for the target)
-5. Mark segment as visited
+4. If segment already visited at this entry point or higher, skip to step 2
+5. Mark segment as visited with current entry point
 6. If segment's max_cut < candidate's max_cut, skip (can't contain ancestor)
 7. If a valid skip list entry exists, add only that skip target to the queue; otherwise add prior location(s)
 8. Repeat until found or queue exhausted
@@ -104,7 +104,7 @@ Target environments include:
 
 Key observations:
 1. Branch width at any point is bounded by peer count (P), assuming well-behaved devices. Each device can only create one new branch from any given command (either via action or merge, but not both). Misbehaving devices could violate this bound.
-2. Traversal proceeds backward (high max_cut to low max_cut), so evicting high max_cut entries is safe
+2. Traversal proceeds backward (high max_cut to low max_cut), so evicting entries with high effective max_cut is safe
 
 ## Specification
 
@@ -114,41 +114,133 @@ A fixed-size data structure tracking visited segments during traversal, using `h
 
 ```rust
 struct CappedVisited<const CAP: usize> {
-    entries: heapless::Vec<(usize, MaxCut), CAP>,  // (segment_id, max_cut)
+    // (segment_id, min_max_cut, highest_command_visited)
+    entries: heapless::Vec<(usize, MaxCut, CommandIndex), CAP>,
 }
+```
+
+Each entry tracks:
+- **segment_id**: The segment being tracked
+- **min_max_cut**: The minimum max_cut in the segment (i.e., the max_cut of command 0)
+- **highest_command_visited**: The highest command index we've entered this segment at
+
+This allows calculating the max_cut of any entry point without loading the segment:
+```rust
+entry_point_max_cut = min_max_cut + command_index
 ```
 
 ### Operations
 
-#### `insert(segment: usize, max_cut: MaxCut) -> bool`
+#### `clear()`
 
-Inserts a segment into the visited set. Returns true if the segment was not already present.
-
-When the set is full, evicts the entry with the highest max_cut (least likely to be encountered again during backward traversal).
-
-The implementation combines the existence check with finding the eviction candidate in a single pass, avoiding redundant traversal when the set is full.
+Resets the visited set for reuse.
 
 ```rust
-fn insert(&mut self, segment: usize, max_cut: MaxCut) -> bool {
-    // Single pass: check for existing segment and track max_cut entry for potential eviction
-    let mut max_cut_idx = 0;
-    let mut max_cut_val = MaxCut::MIN;
+fn clear(&mut self) {
+    self.entries.clear();
+}
+```
 
-    for (i, (s, mc)) in self.entries.iter().enumerate() {
+#### `get(segment: usize) -> Option<(MaxCut, CommandIndex)>`
+
+Returns the min_max_cut and highest_command_visited for a segment if it exists in the set.
+
+```rust
+fn get(&self, segment: usize) -> Option<(MaxCut, CommandIndex)> {
+    self.entries
+        .iter()
+        .find(|(s, _, _)| *s == segment)
+        .map(|(_, min_mc, highest)| (*min_mc, *highest))
+}
+```
+
+#### `insert_or_update(segment: usize, min_max_cut: MaxCut, command: CommandIndex)`
+
+Inserts a new segment or updates the highest_command_visited if the segment already exists.
+
+When the set is full and a new segment needs to be inserted, evicts the entry with the highest effective max_cut (min_max_cut + highest_command), as this represents the newest point visited and is least likely to be encountered again during backward traversal.
+
+```rust
+fn insert_or_update(&mut self, segment: usize, min_max_cut: MaxCut, command: CommandIndex) {
+    // Single pass: check for existing segment and track eviction candidate
+    let mut evict_idx = 0;
+    let mut evict_max_cut = MaxCut::MIN;
+
+    for (i, (s, min_mc, highest)) in self.entries.iter_mut().enumerate() {
         if *s == segment {
-            return false;  // Already present
+            // Segment exists - update highest_command if this entry point is higher
+            if command > *highest {
+                *highest = command;
+            }
+            return;
         }
-        if *mc > max_cut_val {
-            max_cut_val = *mc;
-            max_cut_idx = i;
+        // Track entry with highest effective max_cut for potential eviction
+        let effective_max_cut = *min_mc + MaxCut::from(*highest);
+        if effective_max_cut > evict_max_cut {
+            evict_max_cut = effective_max_cut;
+            evict_idx = i;
         }
     }
 
+    // Segment not found - insert new entry
     if self.entries.len() < CAP {
-        self.entries.push((segment, max_cut)).unwrap();
+        self.entries.push((segment, min_max_cut, command)).unwrap();
     } else {
-        // Evict entry with highest max_cut (already found above)
-        self.entries[max_cut_idx] = (segment, max_cut);
+        // Evict entry with highest effective max_cut (already found above)
+        self.entries[evict_idx] = (segment, min_max_cut, command);
+    }
+}
+```
+
+### Capped Segment Set
+
+A simpler variant for cases where only segment-level visited tracking is needed, without entry point granularity. Used in operations like `find_needed_segments` where the question is simply "have I visited this segment?" rather than "have I visited this entry point?".
+
+```rust
+struct CappedSegmentSet<const CAP: usize> {
+    segments: heapless::Vec<usize, CAP>,  // segment_id only
+}
+```
+
+#### Operations
+
+##### `clear()`
+
+Resets the segment set for reuse.
+
+```rust
+fn clear(&mut self) {
+    self.segments.clear();
+}
+```
+
+##### `insert(segment: usize) -> bool`
+
+Inserts a segment into the set. Returns `true` if the segment was newly inserted, `false` if already present.
+
+When the set is full, evicts the entry with the highest segment ID. Higher segment IDs generally correspond to newer segments, which are less likely to be encountered again during backward traversal.
+
+```rust
+fn insert(&mut self, segment: usize) -> bool {
+    // Single pass: check for existing segment and track highest for eviction
+    let mut max_idx = 0;
+    let mut max_val = usize::MIN;
+
+    for (i, &s) in self.segments.iter().enumerate() {
+        if s == segment {
+            return false;  // Already present
+        }
+        if s > max_val {
+            max_val = s;
+            max_idx = i;
+        }
+    }
+
+    if self.segments.len() < CAP {
+        self.segments.push(segment).unwrap();
+    } else {
+        // Evict highest segment ID
+        self.segments[max_idx] = segment;
     }
     true
 }
@@ -156,41 +248,139 @@ fn insert(&mut self, segment: usize, max_cut: MaxCut) -> bool {
 
 ### Integration with Traversal
 
+The visited set enables skipping segment loads when we've already visited a segment at the same or higher entry point. Buffers are passed in by the caller to avoid large stack allocations in the traversal functions.
+
+#### is_ancestor traversal
+
 ```rust
-let mut visited = CappedVisited::<256> {
-    entries: heapless::Vec::new(),
-};
-let mut queue = heapless::Deque::<_, MAX_QUEUE>::new();
-queue.push_back(start).unwrap();
+fn is_ancestor(
+    target: Location,
+    start: Location,
+    storage: &Storage,
+    visited: &mut CappedVisited<CAP>,
+    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+) -> bool {
+    visited.clear();
+    queue.clear();
+    queue.push_back(start).unwrap();
 
-while let Some(loc) = queue.pop_front() {
-    // For is_ancestor: check if target found BEFORE visited check
-    // This ensures entering a segment at different commands works correctly
-    if loc.segment == target.segment && loc.command >= target.command {
-        return true;
+    while let Some(loc) = queue.pop_front() {
+        // Check if target found BEFORE visited check
+        if loc.segment == target.segment && loc.command >= target.command {
+            return true;
+        }
+
+        // Check if we can skip loading this segment entirely
+        if let Some((_, highest)) = visited.get(loc.segment) {
+            if loc.command <= highest {
+                continue;  // Already visited at this entry point or higher
+            }
+        }
+
+        // Must load segment
+        let segment = storage.get_segment(loc.segment);
+        visited.insert_or_update(loc.segment, segment.min_max_cut(), loc.command);
+
+        // Add priors to queue with push_back()
     }
-
-    let segment = storage.get_segment(loc.segment);
-    if !visited.insert(loc.segment, segment.max_cut()) {
-        continue;  // Already visited, don't expand priors again
-    }
-
-    // Process segment...
-    // Add prior locations to queue with push_back()
+    false
 }
 ```
 
-Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the highest max_cut entries are removed—precisely the ones least likely to be encountered again.
+#### get_location_from traversal
+
+For `get_location_from`, we may need to search only the portion of the segment we haven't searched before:
+
+```rust
+fn get_location_from(
+    start: Location,
+    target_address: Address,
+    storage: &Storage,
+    visited: &mut CappedVisited<CAP>,
+    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+) -> Option<Location> {
+    visited.clear();
+    queue.clear();
+    queue.push_back(start).unwrap();
+
+    while let Some(loc) = queue.pop_front() {
+        // Check visited status and determine search range
+        let search_start = if let Some((_, highest)) = visited.get(loc.segment) {
+            if loc.command <= highest {
+                continue;  // Already searched this entry point or higher
+            }
+            highest + 1  // Only search commands we haven't seen
+        } else {
+            0  // First visit - search from beginning
+        };
+
+        // Must load segment
+        let segment = storage.get_segment(loc.segment);
+        visited.insert_or_update(loc.segment, segment.min_max_cut(), loc.command);
+
+        // Search commands from search_start to loc.command
+        for cmd_idx in (search_start..=loc.command).rev() {
+            if segment.command(cmd_idx).address == target_address {
+                return Some(Location::new(loc.segment, cmd_idx));
+            }
+        }
+
+        // Add priors to queue with push_back()
+    }
+    None
+}
+```
+
+#### find_needed_segments traversal
+
+For operations that only need segment-level tracking (not entry point granularity), use `CappedSegmentSet`:
+
+```rust
+fn find_needed_segments(
+    storage: &Storage,
+    visited: &mut CappedSegmentSet<CAP>,
+    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+) -> Vec<Location> {
+    visited.clear();
+    queue.clear();
+    queue.push_back(storage.get_head()).unwrap();
+
+    let mut result = Vec::new();
+    while let Some(head) = queue.pop_front() {
+        // Simple segment-level check - no entry point tracking needed
+        if !visited.insert(head.segment) {
+            continue;  // Already visited this segment
+        }
+
+        let segment = storage.get_segment(head.segment);
+        // Process segment...
+        // Add priors to queue with push_back()
+    }
+    result
+}
+```
+
+Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the entries with highest effective max_cut (or highest segment ID for `CappedSegmentSet`) are removed—precisely the ones least likely to be encountered again.
 
 ### Capacity Sizing
 
-The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count for well-behaved devices. The lazy eviction strategy (evicting highest max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
+The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count for well-behaved devices. The lazy eviction strategy (evicting highest effective max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
+
+**CappedVisited**: Each entry requires approximately 24 bytes (8-byte segment_id + 8-byte MaxCut + 4-byte CommandIndex + padding).
 
 | Environment          | Suggested Capacity | Memory       |
 |:---------------------|:------------------:|:------------:|
-| Embedded (small)     | 64                 | ~1 KB        |
-| Embedded (standard)  | 256                | ~4 KB        |
-| Server               | 512                | ~8 KB        |
+| Embedded (small)     | 64                 | ~1.5 KB      |
+| Embedded (standard)  | 256                | ~6 KB        |
+| Server               | 512                | ~12 KB       |
+
+**CappedSegmentSet**: Each entry requires approximately 8 bytes (segment_id only).
+
+| Environment          | Suggested Capacity | Memory       |
+|:---------------------|:------------------:|:------------:|
+| Embedded (small)     | 64                 | ~0.5 KB      |
+| Embedded (standard)  | 256                | ~2 KB        |
+| Server               | 512                | ~4 KB        |
 
 Capacity should be tuned based on profiling of real-world graph topologies.
 
@@ -203,12 +393,29 @@ The algorithm remains correct even when the set overflows:
 
 ### Complexity
 
+**CappedVisited**:
+
 | Aspect               | Bound                             |
 |:---------------------|:----------------------------------|
 | Memory               | O(CAP) - constant                 |
+| `clear`              | O(1)                              |
+| `get`                | O(CAP)                            |
+| `insert_or_update`   | O(CAP)                            |
+
+**CappedSegmentSet**:
+
+| Aspect               | Bound                             |
+|:---------------------|:----------------------------------|
+| Memory               | O(CAP) - constant                 |
+| `clear`              | O(1)                              |
 | `insert`             | O(CAP)                            |
-| Traversal (typical)  | O(S) where S = segment count      |
-| Traversal (overflow) | O(S * R) where R = revisit factor |
+
+**Traversal**:
+
+| Aspect               | Bound                             |
+|:---------------------|:----------------------------------|
+| Typical              | O(S) where S = segment count      |
+| Overflow             | O(S * R) where R = revisit factor |
 
 ## Trade-offs
 
@@ -227,9 +434,9 @@ The algorithm remains correct even when the set overflows:
 
 ### Sorted List Optimization
 
-For larger CAP values, maintaining a sorted list by max_cut with binary search could reduce lookup time from O(CAP) to O(log CAP). However, this trades read performance for insert cost:
+For larger CAP values, maintaining a sorted list by effective max_cut with binary search could reduce eviction candidate lookup from O(CAP) to O(1). However, this trades eviction performance for insert cost:
 
-- **Unsorted (specified above):** O(CAP) lookup, O(1) insert (amortized)
-- **Sorted:** O(log CAP) lookup, O(CAP) insert (due to shifting)
+- **Unsorted (specified above):** O(CAP) insert (to find eviction candidate), O(CAP) lookup by segment_id
+- **Sorted by effective max_cut:** O(1) eviction candidate, O(CAP) insert (due to shifting), O(CAP) lookup by segment_id
 
-The optimal choice depends on the hit rate and target architecture. On systems where CAP fits in L1 cache, linear scan may outperform binary search due to cache locality. Benchmarking on target hardware is recommended for CAP values exceeding ~64 entries.
+Note that lookup by segment_id remains O(CAP) either way since we're searching by segment_id, not by max_cut. The optimal choice depends on the hit rate and target architecture. On systems where CAP fits in L1 cache, linear scan may outperform more complex data structures due to cache locality. Benchmarking on target hardware is recommended for CAP values exceeding ~64 entries.
