@@ -99,7 +99,7 @@ INFO:
         "peer_device_id": "dev_peer_a",
         "peer_addr": "192.168.1.100:5000",
         "local_addr": "192.168.1.101:5000",
-        "duration_ms": 100.,
+        "duration_ms": 100,
         "cmd_count_received": 5,
         "first_cmd_sent": {
             "hash": "abcdef1234567890",
