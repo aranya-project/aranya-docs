@@ -286,9 +286,11 @@ Current State: Sync logging exists but lacks first command tracking, stall detec
 
 Tasks:
 1. Add first command address SENT tracking (hash + max_cts)
-   - Include fields: `last_first_cmd_hash`, `last_first_cmd_max_cts`, `stall_count`
+   - Include fields: `last_first_cmd_hash`, `last_first_cmd_max_cts`, `stall_count`, `new_data_expected`
+   Note: Last_first being the first command in the last sync.
 2. Detect stalled syncs (same first command sent repeatedly)
    - Compare consecutive sync commands to detect stalls
+   Note: Stalls need to require that new commands are expected based on local head advanced, peer advertised newer head, or multiple sync windows with produced commands
 3. Add network quality measurements
    - Implement RTT measurement
    - Expose network metrics from QUIC connections
@@ -368,11 +370,15 @@ bind_addr = "127.0.0.1:9090"
 
 [logging]
 # Toggle logging
-enabled = "true"
+enabled = true
 # Log format (json or text)
 format = "json"
-# Default level
+# Default log level (error, warn, info, debug, trace)
 level = "info"
+# Per-component log level overrides (optional)
+# Format: "component1=level1,component2=level2"
+# Example: "sync=debug,afc=trace,policy=info"
+# component_levels = ""
 # Log path
 path = "/var/log/aranya/daemon.log"
 # Log rotation size in bytes
