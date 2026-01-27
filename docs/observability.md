@@ -67,6 +67,7 @@ Verbose logging should only be visible when the log level is set to TRACE. When 
 1. Network quality metrics (MTU, packet loss, RTT)
 2. Protocol info
 3. Full command details (only at trace level)
+4. Policy evaluation error logging
 
 ## Data Collection Tools
 
