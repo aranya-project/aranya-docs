@@ -61,6 +61,7 @@ Verbose logging should only be visible when the log level is set to TRACE. When 
 4. Command count received (per sync)
 5. First command address (hash+max_cts)
 6. Data volume transferred
+7. AFC Encrypt/Decrypt time?
 
 ### Nice to Have Items
 
