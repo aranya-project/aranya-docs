@@ -86,6 +86,26 @@ What items need to be logged:
 8. Peer address and network info for syncs
 9. Detailed policy evaluation with line number and what check failed
 
+**Log output example**
+info!(
+    component = "sync",
+    device_id = %device_id,
+    team_id = %team_id,
+    correlation_id = %correlation_id,
+    peer_device_id = %peer_device_id,
+    peer_addr = %peer_addr,
+    local_addr = %local_addr,
+    duration_ms = duration_ms,
+    cmd_count_received = cmd_count_received,
+    first_cmd_sent.hash = %first_cmd_hash,
+    first_cmd_sent.max_cts = first_cmd_max_cts,
+    bytes_transferred = bytes_transferred,
+    effects_count = effects_count,
+    network_stats.rtt_ms = rtt_ms,
+    network_stats.bandwidth_mbps = bandwidth_mbps,
+    "Sync completed successfully"
+);
+
 **Log Format:** 
 Sync Request Info:
 ```json
@@ -111,7 +131,7 @@ Sync Request Info:
         "effects_count": 3,
         "network_stats": {
             "rtt_ms": 45.2,
-            "bandwidth_mbps": 100
+            "bandwidth_mbps": 10
         }
     }
 }
