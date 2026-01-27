@@ -51,7 +51,7 @@ The observability system is designed for remote debugging of systems, not real-t
 
 ### Performance Considerations
 
-Verbose logging should be at trace level when debugging is enabled at INFO or DEBUG.
+Verbose logging should only be visible when the log level is set to TRACE. When the log level is INFO or DEBUG, TRACE logs should not be visible to minimize performance impact.
 
 ### Must Have Items
 
@@ -74,29 +74,30 @@ Verbose logging should be at trace level when debugging is enabled at INFO or DE
 
 What items need to be logged:
 
-1. Timestamp (ns precision)
+1. Timestamp (ms precision)
 2. Log level
 3. Component identifier (daemon, client, sync, afc, policy)
 4. Device and Team ID
 5. Correlation IDs (used for tracing across components)
+   - **Note:** Correlation IDs track logical operations/requests as they flow through multiple components (e.g., a single sync operation that involves policy checks, AFC operations, and storage updates). This is distinct from command IDs, which identify specific commands in the command graph representing state changes. A single operation may process multiple commands but shares one correlation ID for debugging the operational flow.
 6. Error context
 7. Operation duration for all syncs
 8. Peer address and network info for syncs
 9. Detailed policy evaluation with line number and what check failed
 
 **Log Format:** 
-INFO:
+Sync Request Info:
 ```json
 { 
-    "timestamp": "2026-01-12T12:34:56.789012Z",
+    "timestamp": "2026-01-12T12:34:56.789Z",
     "level": "INFO",
     "component": "sync",
-    "device_id": "dev_a",
-    "team_id": "team_123",
+    "device_id": { "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" },
+    "team_id": { "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321" },
     "correlation_id": "req_001",
     "message": "Sync completed successfully",
     "fields": {
-        "peer_device_id": "dev_peer_a",
+        "peer_device_id": { "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" },
         "peer_addr": "192.168.1.100:5000",
         "local_addr": "192.168.1.101:5000",
         "duration_ms": 100,
@@ -115,25 +116,25 @@ INFO:
 }
 ```
 
-ERROR:
+Sync Request Error:
 ```json
 {
-    "timestamp": "2026-01-07T12:34:56.789012Z",
+    "timestamp": "2026-01-07T12:34:56.789Z",
     "level": "ERROR",
     "component": "sync",
-    "device_id": "dev_a",
-    "team_id": "team_123",
+    "device_id": { "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" },
+    "team_id": { "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321" },
     "correlation_id": "req_001",
     "message": "Sync failed with peer",
     "error": {
-        "device_id": "dev_b",
+        "device_id": { "9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba" },
         "peer_addr": "192.168.1.100:5000",
         "local_addr": "192.168.1.101:5000",
         "duration_ms": 30000,
     },
     "metadata": {
         "retry_count": 3,
-        "last_successful_sync": "2026-01-07T12:30:00.000000Z",
+        "last_successful_sync": "2026-01-07T12:30:00.000Z",
         "network_stats": {
             "rtt_ms": 450,
             "bandwidth_mbps": 10,
@@ -146,11 +147,11 @@ ERROR:
 
 ```json
 {
-    "timestamp": "2026-01-15T12:34:56.789012Z",
+    "timestamp": "2026-01-15T12:34:56.789Z",
     "level": "ERROR",
     "component": "policy",
-    "device_id": "dev_a",
-    "team_id": "team_123",
+    "device_id": { "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" },
+    "team_id":{ "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321" },
     "correlation_id": "req_002",
     "message": "Policy authorization failed",
     "error": {
@@ -170,18 +171,18 @@ ERROR:
 
 ```json
 {
-    "timestamp": "2026-01-16T12:34:56.789012Z",
+    "timestamp": "2026-01-16T12:34:56.789Z",
     "level": "ERROR",
     "component": "afc",
-    "device_id": "dev_a",
-    "team_id": "team_123",
+    "device_id": { "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" },
+    "team_id": { "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321" },
     "correlation_id": "req_003",
     "message": "Failed to add key to SHMM",
     "error": {
         "kind": "ShmKeyAddFailed",
         "channel_id": "ch_123",
         "label_id": "label_123",
-        "peer_device_id": "dev_b",
+        "peer_device_id": { "9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba" },
         "shm_path": "/dev/shm/aranya_ch_123",
         "error_code": "EACCES",
         "error_message": "Permission denied",
@@ -193,7 +194,7 @@ ERROR:
     },
     "metadata": {
         "retry_count": 3,
-        "last_operation": "2026-01-16T11:34:56.789012Z",
+        "last_operation": "2026-01-16T11:34:56.789Z",
     }
 }
 ```
@@ -227,13 +228,13 @@ Critical events only such as:
 ```json
     {
         "event_id": "event_a",
-        "timestamp": "2026-01-16T11:34:56.789012Z",
+        "timestamp": "2026-01-16T11:34:56.789Z",
         "event_type": "device_joined_team",
-        "device_id": "dev_b",
-        "team_id": "team_123",
+        "device_id": { "9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba" },
+        "team_id": { "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321" },
         "details":{
             "assigned_role": "member",
-            "added_by": "dev_a",
+            "added_by": { "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" },
         }
     }
 ```
@@ -343,6 +344,8 @@ enabled = true
 bind_addr = "127.0.0.1:9090"
 
 [logging]
+# Toggle logging
+enabled = "true"
 # Log format (json or text)
 format = "json"
 # Default level
