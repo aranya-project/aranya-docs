@@ -300,6 +300,7 @@ Tasks:
    - Add logging to all SHM operations
    - Track per-channel statistics
    - Log OS-level errors with details (SHM path, permissions, size)
+   - Log whether the SHM is either already populated or empty when doing an operation.
 3. AFC failure tracking and debugging
    - Add source mapping in `aranya-policy-ifgen`
    - Track SHM key add/remove failures
