@@ -144,14 +144,14 @@ While mTLS validates the peer's certificate, it doesn't prevent the same certifi
 
 An attacker with a compromised cert could connect from many different IP addresses, each creating a separate entry in the connection map. This could exhaust connection slots or resources, preventing legitimate peers from connecting.
 
-### Solution: Fingerprint Uniqueness Enforcement
+### Solution
 
 Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. New connections with a fingerprint that matches an existing connection are rejected.
 
 Properties of fingerprint:
-- **Unique per certificate/identity**: Each certificate has a distinct fingerprint
+- **Unique per certificate**: Each certificate has a distinct fingerprint
 - **Survives certificate rotation**: If the same key pair is used for a renewed cert, the fingerprint remains the same
-- **Available only after TLS handshake**: Cannot be spoofed since it's extracted from the validated certificate
+- **Available only after TLS handshake**: Cannot be spoofed since it's computed from the validated certificate
 
 ### Fingerprint Type
 
@@ -173,9 +173,9 @@ impl Fingerprint {
 
 ### Fingerprint Computation
 
-The `Fingerprint::from_connection` method computes the fingerprint from the QUIC connection after the TLS handshake completes:
+`Fingerprint::from_connection` computes the fingerprint from the QUIC connection after the TLS handshake completes:
 
-1. Call `conn.peer_identity()` to get the certificate chain (returns `Option<Box<dyn Any>>`)
+1. Call `conn.peer_identity()` to get the certificate chain
 2. Downcast to `Vec<CertificateDer>` (rustls's certificate type)
 3. Take the first certificate (the leaf/end-entity cert) - TLS certificate chains are ordered with the leaf first
 4. Parse the DER-encoded certificate using `x509-parser` to extract the SubjectPublicKeyInfo
@@ -183,17 +183,13 @@ The `Fingerprint::from_connection` method computes the fingerprint from the QUIC
 
 We hash only the public key (not the entire certificate) so that certificate rotation with the same key pair preserves the fingerprint.
 
-Note: We only compute fingerprints for certificates that rustls has already validated against our root CA store. The fingerprint computation assumes a trusted certificate.
+Note: Fingerprints are only computed for certificates that rustls has already validated against our root CA store.
 
-### Dependencies
+Dependencies: `x509-parser` for parsing DER-encoded certificates, `aranya-crypto` for SHA-256.
 
-Fingerprint computation requires:
-- `x509-parser` crate for parsing DER-encoded certificates
-- `aranya-crypto` (already a dependency) for SHA-256 hashing
+## Connection Management
 
-### Connection Map Keying
-
-Connections are keyed by **address**. A separate set of fingerprints is maintained for efficient uniqueness checks.
+### Data Structures
 
 ```rust
 // Map keyed by network address to keep track of existing, long-lived QUIC connections.
@@ -205,22 +201,21 @@ connections: HashMap<SocketAddr, Connection>
 fingerprints: HashSet<Fingerprint>
 ```
 
-**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if it exists in the fingerprints set. If so, reject the new connection. This prevents a single device/certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
+### Connection Flow
 
-**Connection reuse flow:**
+1. Want to connect to address X
+2. Check if we have an existing healthy connection to X — if yes, reuse it
+3. Otherwise, initiate connection to X
+4. TLS handshake completes (validates peer certificate, verifies client SANs)
+5. Compute fingerprint from peer certificate
+6. If fingerprint exists in `fingerprints` set, reject the connection (duplicate identity)
+7. Add fingerprint to set, store connection in map
 
-1. Want to connect to addr X
-2. Check if we have an existing connection to addr X
-3. If yes and connection is healthy, reuse it
-4. If no (or connection is dead), connect to addr X
-5. Compute fingerprint, reject if fingerprint already exists in the set
-6. Add fingerprint to set and store the connection
+When a connection closes, remove its fingerprint from the set.
 
-When a connection is closed, remove its fingerprint from the set.
+### Peer Caches and Subscriptions
 
-### Peer Cache Keying
-
-Peer caches (used for sync state like last known command) are keyed by address:
+Peer caches (sync state) and hello subscriptions (push notifications) are keyed by `(SocketAddr, GraphId)`:
 
 ```rust
 struct PeerCacheKey {
@@ -229,73 +224,21 @@ struct PeerCacheKey {
 }
 ```
 
-### Hello Subscriptions
+## Client SAN Verification
 
-Hello subscriptions (used for push notifications) are also keyed by `(Addr, GraphId)`.
+By default, TLS only verifies server certificate SANs. Client certificate SANs are not verified because there is no "expected hostname" to check against. We enforce client SAN verification to ensure the client's connecting IP matches their certificate.
 
-### Security Model
+### Verification Rules
 
-**Key principle:** All maps are keyed by address. After establishing a connection, enforce that only one connection exists per fingerprint.
+The connection is accepted if ANY of the following are true:
+- A SAN contains an IP address matching the client's connecting IP
+- A SAN contains a DNS hostname that resolves to the client's connecting IP
 
-| Map | Key | Rationale |
-|-----|-----|-----------|
-| Connection map | Addr | Enables connection reuse by address |
-| Peer caches | (Addr, GraphId) | Tracks sync state by address |
-| Hello subscriptions | (Addr, GraphId) | Tracks subscriptions by address |
-| SyncManager.peers | (Addr, GraphId) | Our configuration of which peers to sync with |
+If no SAN matches, reject the connection.
 
-**Connection Flow:**
+### Implementation
 
-1. Want to connect to configured address X
-2. Check if we have an existing healthy connection to addr X
-3. If yes, reuse it
-4. If no, connect to addr X, TLS handshake validates peer certificate
-5. Compute fingerprint, reject if any existing connection has same fingerprint (from different address)
-6. Store connection
-
-### Implementation Notes
-
-**Certificate format during computation:** While certificates are stored on disk as PEM files, quinn/rustls internally converts them to DER during TLS setup. After the TLS handshake, `peer_identity()` returns `CertificateDer` (DER-encoded). The fingerprint computation parses DER format.
-
-**Connection reuse:** Since the connection map is keyed by address, we can check for an existing connection before initiating a new one. This avoids unnecessary TLS handshakes when a connection already exists.
-
-### Client SAN Verification
-
-By default, TLS only verifies server certificate SANs (the client checks that the server's SAN matches the hostname or IP being connected to). Client certificate SANs are not verified by default because there is no "expected hostname" to check against.
-
-**Verification rules:**
-
-1. Extract the client's connecting IP address from the QUIC connection
-2. Parse the client's certificate SANs
-3. The connection is accepted if ANY of the following are true:
-   - A SAN contains an IP address that matches the client's connecting IP
-   - A SAN contains a DNS hostname that resolves to the client's connecting IP
-4. If no SAN matches, reject the connection
-
-**Implementation:**
-
-```rust
-use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
-
-struct SanVerifyingClientCertVerifier {
-    roots: Arc<RootCertStore>,
-}
-
-impl ClientCertVerifier for SanVerifyingClientCertVerifier {
-    fn verify_client_cert(
-        &self,
-        end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
-        now: UnixTime,
-    ) -> Result<ClientCertVerified, rustls::Error> {
-        // 1. Perform standard chain verification against roots
-        // 2. SAN verification is performed after handshake when
-        //    the peer's IP address is known (see below)
-    }
-}
-```
-
-Note: The `ClientCertVerifier` trait does not have access to the peer's IP address. SAN verification must be performed after the TLS handshake completes, using the connection's remote address and the verified peer certificate:
+The `ClientCertVerifier` trait does not have access to the peer's IP address, so SAN verification is performed after the TLS handshake:
 
 ```rust
 fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
@@ -304,7 +247,6 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
         .and_then(|id| id.downcast::<Vec<CertificateDer>>().ok())?;
     let cert = certs.first()?;
 
-    // Parse certificate SANs using x509-parser
     let (_, parsed) = x509_parser::parse_x509_certificate(cert)?;
 
     for san in parsed.subject_alternative_name()?.value.general_names.iter() {
@@ -315,7 +257,6 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
                 }
             }
             GeneralName::DNSName(hostname) => {
-                // Resolve hostname and check if peer_ip is in the results
                 if dns_resolves_to(hostname, peer_ip) {
                     return Ok(());
                 }
@@ -328,8 +269,8 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 }
 ```
 
-**Security considerations:**
+### Security Considerations
 
-- DNS resolution introduces a dependency on DNS infrastructure. However, certificate fingerprint uniqueness mitigates DNS spoofing risk: even if an attacker spoofs DNS, they cannot establish a connection without a valid certificate signed by a trusted CA, and fingerprint uniqueness prevents them from impersonating an existing peer.
-- DNS resolution adds latency to the connection handshake. Consider caching DNS results.
-- If the client is behind NAT, the connecting IP may not match the cert SANs. Deployments using NAT should use DNS-based SANs that resolve to the NAT's external IP.
+- **DNS spoofing**: Fingerprint uniqueness mitigates this risk — even if an attacker spoofs DNS, they cannot establish a connection without a valid certificate, and fingerprint uniqueness prevents impersonating an existing peer.
+- **Latency**: DNS resolution adds latency. Consider caching results.
+- **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
