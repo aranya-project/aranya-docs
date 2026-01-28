@@ -28,6 +28,7 @@ Abbreviations in this document:
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail the TLS handshake
+- Client cert SANs must be verified against the client's connecting IP address (see Client SAN Verification section)
 - Security events such as failed authentication, signature verification failures, and suspicious connection patterns (e.g., same certificate from multiple IP addresses) should be logged
 
 Note:
@@ -192,68 +193,138 @@ Fingerprint computation requires:
 
 ### Connection Map Keying
 
-The `ConnectionKey` struct changes from:
+Connections are keyed by **address**. The fingerprint can be computed from the connection when needed via `Fingerprint::from_connection()`.
 
 ```rust
-struct ConnectionKey {
-    addr: SocketAddr,
-}
+// Keyed by address for efficient lookup
+connections: HashMap<SocketAddr, Connection>
 ```
 
-To:
+**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if any existing connection has the same fingerprint. If so, reject the new connection. This prevents a single certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
 
-```rust
-struct ConnectionKey {
-    fingerprint: Fingerprint,
-}
-```
+**Connection reuse flow:**
 
-Connections are keyed by **fingerprint**. When a new connection arrives with a fingerprint that already has a connection from a different address:
-- This is suspicious - same cert from multiple IPs suggests compromise
-- A warning is logged for investigation
-- Future enhancement: trigger certificate revocation
+1. Want to connect to addr X
+2. Check if we have an existing connection to addr X
+3. If yes and connection is healthy, reuse it
+4. If no (or connection is dead), connect to addr X
+5. Compute fingerprint, reject if any existing connection has the same fingerprint
+6. Store the connection
 
 ### Peer Cache Keying
 
-Peer caches (used for sync state like last known command) key on fingerprint to track state per identity:
+Peer caches (used for sync state like last known command) are keyed by address:
 
 ```rust
 struct PeerCacheKey {
-    fingerprint: Fingerprint,
+    addr: SocketAddr,
     graph_id: GraphId,
 }
 ```
 
-This separates concerns:
-- **SyncPeer** with `(Addr, GraphId)` - for scheduling which peers to connect to (our configuration)
-- **PeerCacheKey** with `(Fingerprint, GraphId)` - for caching sync state by validated identity
-- **ConnectionKey** with `Fingerprint` - for connection deduplication by validated identity
-
 ### Hello Subscriptions
 
-Hello subscriptions (used for push notifications) are also keyed by `PeerCacheKey` (Fingerprint, GraphId).
+Hello subscriptions (used for push notifications) are also keyed by `(Addr, GraphId)`.
 
 ### Security Model
 
-**Key principle:** Never use an address from a peer as a map key without first validating their certificate and computing their fingerprint.
+**Key principle:** All maps are keyed by address. After establishing a connection, enforce that only one connection exists per fingerprint.
 
 | Map | Key | Rationale |
 |-----|-----|-----------|
-| Connection map | Fingerprint | Prevents one compromised cert from occupying many connection slots |
-| Peer caches | (Fingerprint, GraphId) | Tracks sync state by validated identity |
-| Hello subscriptions | (Fingerprint, GraphId) | Tracks subscriptions by validated identity |
-| SyncManager.peers | (Addr, GraphId) | Safe because this is our configuration, not peer-provided |
+| Connection map | Addr | Enables connection reuse by address |
+| Peer caches | (Addr, GraphId) | Tracks sync state by address |
+| Hello subscriptions | (Addr, GraphId) | Tracks subscriptions by address |
+| SyncManager.peers | (Addr, GraphId) | Our configuration of which peers to sync with |
 
 **Connection Flow:**
 
-1. We initiate connection to a configured address (our config, not peer-provided)
-2. TLS handshake validates peer certificate against our root CA
-3. Compute fingerprint from validated certificate
-4. Use fingerprint for connection map and cache keying
-5. If peer connects to us, same flow: validate cert first, then compute fingerprint
+1. Want to connect to configured address X
+2. Check if we have an existing healthy connection to addr X
+3. If yes, reuse it
+4. If no, connect to addr X, TLS handshake validates peer certificate
+5. Compute fingerprint, reject if any existing connection has same fingerprint (from different address)
+6. Store connection
 
 ### Implementation Notes
 
 **Certificate format during computation:** While certificates are stored on disk as PEM files, quinn/rustls internally converts them to DER during TLS setup. After the TLS handshake, `peer_identity()` returns `CertificateDer` (DER-encoded). The fingerprint computation parses DER format.
 
-**Race condition on connect:** We cannot look up an existing connection by fingerprint before connecting (we don't know the fingerprint until after TLS). This matches existing behavior where duplicate connections may briefly exist.
+**Connection reuse:** Since the connection map is keyed by address, we can check for an existing connection before initiating a new one. This avoids unnecessary TLS handshakes when a connection already exists.
+
+### Client SAN Verification
+
+By default, TLS only verifies server certificate SANs (the client checks that the server's SAN matches the hostname being connected to). Client certificate SANs are not verified by default because there is no "expected hostname" to check against.
+
+Aranya implements custom client SAN verification to ensure clients are connecting from addresses they claim to control. After the TLS handshake, the server verifies the client's certificate SANs against the client's connecting IP address.
+
+**Verification rules:**
+
+1. Extract the client's connecting IP address from the QUIC connection
+2. Parse the client's certificate SANs
+3. The connection is accepted if ANY of the following are true:
+   - A SAN contains an IP address that matches the client's connecting IP
+   - A SAN contains a DNS hostname that resolves to the client's connecting IP
+4. If no SAN matches, reject the connection
+
+**Implementation:**
+
+```rust
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+
+struct SanVerifyingClientCertVerifier {
+    roots: Arc<RootCertStore>,
+}
+
+impl ClientCertVerifier for SanVerifyingClientCertVerifier {
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        // 1. Perform standard chain verification against roots
+        // 2. SAN verification is performed after handshake when
+        //    the peer's IP address is known (see below)
+    }
+}
+```
+
+Note: The `ClientCertVerifier` trait does not have access to the peer's IP address. SAN verification must be performed after the TLS handshake completes, using the connection's remote address and the verified peer certificate:
+
+```rust
+fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
+    let peer_ip = conn.remote_address().ip();
+    let certs = conn.peer_identity()
+        .and_then(|id| id.downcast::<Vec<CertificateDer>>().ok())?;
+    let cert = certs.first()?;
+
+    // Parse certificate SANs using x509-parser
+    let (_, parsed) = x509_parser::parse_x509_certificate(cert)?;
+
+    for san in parsed.subject_alternative_name()?.value.general_names.iter() {
+        match san {
+            GeneralName::IPAddress(ip_bytes) => {
+                if ip_from_bytes(ip_bytes) == peer_ip {
+                    return Ok(());
+                }
+            }
+            GeneralName::DNSName(hostname) => {
+                // Resolve hostname and check if peer_ip is in the results
+                if dns_resolves_to(hostname, peer_ip) {
+                    return Ok(());
+                }
+            }
+            _ => continue,
+        }
+    }
+
+    Err(SanError::NoMatchingSan)
+}
+```
+
+**Security considerations:**
+
+- DNS resolution introduces a dependency on DNS infrastructure and potential for DNS spoofing. Consider using DNSSEC or only accepting IP SANs in high-security environments.
+- DNS resolution adds latency to the connection handshake. Consider caching DNS results.
+- If the client is behind NAT, the connecting IP may not match the cert SANs. Deployments using NAT should use DNS-based SANs that resolve to the NAT's external IP.
