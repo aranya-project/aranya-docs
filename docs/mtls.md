@@ -23,6 +23,7 @@ Abbreviations in this document:
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
 - mTLS certs must be X.509 TLS certs in PEM format.
+- All certs must contain Subject Alternative Names (SANs). Certs without SANs will be rejected. TLS requires server certs to have SANs for hostname verification (CN is deprecated). TLS does not require client certs to have SANs, but we enforce this with our custom client cert verification for IP address verification.
 - A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
