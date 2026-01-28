@@ -218,33 +218,36 @@ The limit on connections per SVID serves as a safety net, but the real fix for a
 
 ### Peer Cache Keying
 
-Peer caches (used for sync state like last known command) must also key on SVID to prevent the same DOS attack vector:
+Peer caches (used for sync state like last known command) must key on SVID and address to isolate state per connection:
 
 ```rust
 struct PeerCacheKey {
     svid: Svid,
+    addr: SocketAddr,
     graph_id: GraphId,
 }
 ```
 
+Including the address prevents a compromised certificate at one IP from poisoning the cache state for a legitimate device using the same certificate at a different IP.
+
 This separates concerns:
 - **SyncPeer** with `(Addr, GraphId)` - for scheduling which peers to connect to (our configuration)
-- **PeerCacheKey** with `(Svid, GraphId)` - for caching sync state by validated identity
-- **ConnectionKey** with `(Svid, Addr)` - for connection deduplication by validated identity
+- **PeerCacheKey** with `(Svid, Addr, GraphId)` - for caching sync state by validated identity and address
+- **ConnectionKey** with `(Svid, Addr)` - for connection deduplication by validated identity and address
 
 ### Hello Subscriptions
 
-Hello subscriptions (used for push notifications) are also keyed by `PeerCacheKey` rather than address. The subscription stores the peer's address separately for sending notifications.
+Hello subscriptions (used for push notifications) are also keyed by `PeerCacheKey` (SVID, Addr, GraphId). This prevents a compromised certificate at one IP from hijacking or interfering with subscriptions for a legitimate device at another IP.
 
 ### Security Model
 
-**Key principle:** Never use an address from a peer as a map key without first validating their certificate and computing their SVID.
+**Key principle:** Never use an address from a peer as a map key without first validating their certificate and computing their SVID. Always include both SVID and address to isolate state per (identity, location) pair.
 
 | Map | Key | Rationale |
 |-----|-----|-----------|
 | Connection map | (SVID, Addr) | Prevents one compromised cert from occupying many connection slots |
-| Peer caches | (SVID, GraphId) | Prevents cache poisoning from spoofed addresses |
-| Hello subscriptions | (SVID, GraphId) | Same as peer caches |
+| Peer caches | (SVID, Addr, GraphId) | Prevents compromised cert from poisoning cache for legitimate device at different IP |
+| Hello subscriptions | (SVID, Addr, GraphId) | Prevents compromised cert from hijacking notifications for legitimate device at different IP |
 | SyncManager.peers | (Addr, GraphId) | Safe because this is our configuration, not peer-provided |
 
 **Connection Flow:**
