@@ -10,6 +10,22 @@ permalink: "/find-needed-segments-optimization/"
 
 The `find_needed_segments()` function in `responder.rs` determines which segments to send during sync. This document describes a performance optimization to reduce its complexity from O(n × m × k) to O(n log n).
 
+## Summary
+
+The optimization uses a max_cut-ordered breadth-first traversal to identify which segments the remote peer already has ("covered" segments). The core idea:
+
+1. **Walk segments by max_cut (highest first)** - This ensures we encounter have_locations (commands the peer has) before processing their ancestors.
+
+2. **Mark and propagate coverage** - When we find a have_location, mark it as covered and propagate this status to its ancestors (priors). Covered segments don't need to be sent.
+
+3. **Build a send list** - Segments that aren't covered go into a pending list. Once we're certain a segment won't become covered (all higher max_cut segments have been processed), move it to the final result.
+
+4. **Terminate early** - When all segments in the frontier are marked covered, stop. Everything beyond is already held by the peer.
+
+This eliminates expensive `is_ancestor()` calls by propagating coverage information during traversal rather than repeatedly checking ancestry relationships.
+
+**Complexity**: O(n log n) where n is segments traversed. The log n factor comes from priority queue operations; checking the have_location set is effectively O(1) for small sample sizes.
+
 ## Problem
 
 The current implementation has O(n × m × k) complexity where:
