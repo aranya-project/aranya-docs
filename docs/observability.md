@@ -24,7 +24,7 @@ This document is an outline of a strategy to use for debugging of Aranya deploym
 
 The observability system is designed for remote debugging of systems, not real-time monitoring.
 
-1. File based logging - which includes writing to local files, collecting them into a single bundle.
+1. File based logging - which includes writing to local path specified in the config and collecting them into a single bundle.
 2. Leveraging the rust tracing crate.
 3. Configuration at runtime - a means to enable or disable without recompilation.
 4. Keeping performance in mind - avoid verbose logging in hot paths.
