@@ -272,7 +272,7 @@ Tasks:
 1. Configure `tracing-subscriber` with JSON formatter for structured logging output
 2. Implement correlation IDs across all operations
    - Use UUIDs to tie related logs together
-   - Add integration test that traces a request from client through daemon
+   - Add integration test using trace level logging that traces a request from client through daemon.
 3. Enhance error context with full causal chains
    - Add specific fields to error types and expand error context
    - Ensure error chains show full context in logs
