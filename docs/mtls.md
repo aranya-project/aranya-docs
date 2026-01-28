@@ -152,18 +152,43 @@ Properties of SVID:
 - **Survives certificate rotation**: If the same key pair is used for a renewed cert, the SVID remains the same
 - **Available only after TLS handshake**: Cannot be spoofed since it's extracted from the validated certificate
 
+### Svid Type
+
+The `Svid` type is a 32-byte SHA-256 hash of the peer's certificate public key:
+
+```rust
+/// SHA-256 hash of a peer's certificate public key.
+/// Used to uniquely identify peers regardless of their network address.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub(crate) struct Svid([u8; 32]);
+
+impl Svid {
+    /// Extract SVID from a quinn Connection after TLS handshake.
+    ///
+    /// Returns an error if the peer identity cannot be extracted or parsed.
+    pub fn from_connection(conn: &quinn::Connection) -> Result<Self, SvidError>;
+}
+```
+
 ### SVID Extraction
 
-After the TLS handshake completes, the SVID is extracted as follows:
+The `Svid::from_connection` method extracts the SVID after the TLS handshake completes:
 
-1. Call `conn.peer_identity()` on the quinn `Connection` to get the certificate chain
-2. Take the first certificate (the leaf/end-entity cert) - TLS certificate chains are ordered with the leaf first
-3. Parse the certificate using an X.509 parser to extract the SubjectPublicKeyInfo
-4. Compute SHA-256 hash of the public key bytes
+1. Call `conn.peer_identity()` to get the certificate chain (returns `Option<Box<dyn Any>>`)
+2. Downcast to `Vec<CertificateDer>` (rustls's certificate type)
+3. Take the first certificate (the leaf/end-entity cert) - TLS certificate chains are ordered with the leaf first
+4. Parse the DER-encoded certificate using `x509-parser` to extract the SubjectPublicKeyInfo
+5. Compute SHA-256 hash of the public key bytes using `aranya-crypto`
 
 We hash only the public key (not the entire certificate) so that certificate rotation with the same key pair preserves the SVID.
 
 Note: We only compute SVIDs for certificates that rustls has already validated against our root CA store. The SVID extraction assumes a trusted certificate.
+
+### Dependencies
+
+SVID extraction requires:
+- `x509-parser` crate for parsing DER-encoded certificates
+- `aranya-crypto` (already a dependency) for SHA-256 hashing
 
 ### Connection Map Keying
 
