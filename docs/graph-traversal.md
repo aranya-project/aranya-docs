@@ -192,57 +192,27 @@ fn insert_or_update(&mut self, segment: usize, min_max_cut: MaxCut, command: Com
 }
 ```
 
-### Capped Segment Set
+### Segment-Level Tracking
 
-A simpler variant for cases where only segment-level visited tracking is needed, without entry point granularity. Used in operations like `find_needed_segments` where the question is simply "have I visited this segment?" rather than "have I visited this entry point?".
+For operations that only need segment-level visited tracking (not entry point granularity), use `CappedVisited` with `CommandIndex::MAX` to indicate the entire segment has been visited. This allows a single buffer to be reused across different traversal operations, reducing total memory allocation in embedded environments with static buffers.
+
+#### `mark_segment_visited(segment: usize, min_max_cut: MaxCut)`
+
+Helper for segment-level-only tracking:
 
 ```rust
-struct CappedSegmentSet<const CAP: usize> {
-    segments: heapless::Vec<usize, CAP>,  // segment_id only
+fn mark_segment_visited(&mut self, segment: usize, min_max_cut: MaxCut) {
+    self.insert_or_update(segment, min_max_cut, CommandIndex::MAX);
 }
 ```
 
-#### Operations
+#### `was_segment_visited(segment: usize) -> bool`
 
-##### `clear()`
-
-Resets the segment set for reuse.
+Check if a segment was visited at any entry point:
 
 ```rust
-fn clear(&mut self) {
-    self.segments.clear();
-}
-```
-
-##### `insert(segment: usize) -> bool`
-
-Inserts a segment into the set. Returns `true` if the segment was newly inserted, `false` if already present.
-
-When the set is full, evicts the entry with the highest segment ID. Higher segment IDs generally correspond to newer segments, which are less likely to be encountered again during backward traversal.
-
-```rust
-fn insert(&mut self, segment: usize) -> bool {
-    // Single pass: check for existing segment and track highest for eviction
-    let mut max_idx = 0;
-    let mut max_val = usize::MIN;
-
-    for (i, &s) in self.segments.iter().enumerate() {
-        if s == segment {
-            return false;  // Already present
-        }
-        if s > max_val {
-            max_val = s;
-            max_idx = i;
-        }
-    }
-
-    if self.segments.len() < CAP {
-        self.segments.push(segment).unwrap();
-    } else {
-        // Evict highest segment ID
-        self.segments[max_idx] = segment;
-    }
-    true
+fn was_segment_visited(&self, segment: usize) -> bool {
+    self.get(segment).is_some()
 }
 ```
 
@@ -333,12 +303,12 @@ fn get_location_from(
 
 #### find_needed_segments traversal
 
-For operations that only need segment-level tracking (not entry point granularity), use `CappedSegmentSet`:
+For operations that only need segment-level tracking (not entry point granularity), use `CappedVisited` with the segment-level helpers:
 
 ```rust
 fn find_needed_segments(
     storage: &Storage,
-    visited: &mut CappedSegmentSet<CAP>,
+    visited: &mut CappedVisited<CAP>,
     queue: &mut heapless::Deque<Location, MAX_QUEUE>,
 ) -> Vec<Location> {
     visited.clear();
@@ -348,11 +318,12 @@ fn find_needed_segments(
     let mut result = Vec::new();
     while let Some(head) = queue.pop_front() {
         // Simple segment-level check - no entry point tracking needed
-        if !visited.insert(head.segment) {
+        if visited.was_segment_visited(head.segment) {
             continue;  // Already visited this segment
         }
 
         let segment = storage.get_segment(head.segment);
+        visited.mark_segment_visited(head.segment, segment.min_max_cut());
         // Process segment...
         // Add priors to queue with push_back()
     }
@@ -360,13 +331,13 @@ fn find_needed_segments(
 }
 ```
 
-Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the entries with highest effective max_cut (or highest segment ID for `CappedSegmentSet`) are removed—precisely the ones least likely to be encountered again.
+Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the entries with highest effective max_cut are removed—precisely the ones least likely to be encountered again.
 
 ### Capacity Sizing
 
 The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count for well-behaved devices. The lazy eviction strategy (evicting highest effective max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
 
-**CappedVisited**: Each entry requires approximately 24 bytes (8-byte segment_id + 8-byte MaxCut + 4-byte CommandIndex + padding).
+Each entry requires approximately 24 bytes (8-byte segment_id + 8-byte MaxCut + 4-byte CommandIndex + padding).
 
 | Environment          | Suggested Capacity | Memory       |
 |:---------------------|:------------------:|:------------:|
@@ -374,13 +345,7 @@ The "active frontier" during traversal is bounded by concurrent branches, which 
 | Embedded (standard)  | 256                | ~6 KB        |
 | Server               | 512                | ~12 KB       |
 
-**CappedSegmentSet**: Each entry requires approximately 8 bytes (segment_id only).
-
-| Environment          | Suggested Capacity | Memory       |
-|:---------------------|:------------------:|:------------:|
-| Embedded (small)     | 64                 | ~0.5 KB      |
-| Embedded (standard)  | 256                | ~2 KB        |
-| Server               | 512                | ~4 KB        |
+Using a single `CappedVisited` buffer for all traversal operations (rather than separate structures for entry-point vs. segment-level tracking) reduces total memory allocation, particularly important in embedded environments with static buffers.
 
 Capacity should be tuned based on profiling of real-world graph topologies.
 
@@ -401,14 +366,6 @@ The algorithm remains correct even when the set overflows:
 | `clear`              | O(1)                              |
 | `get`                | O(CAP)                            |
 | `insert_or_update`   | O(CAP)                            |
-
-**CappedSegmentSet**:
-
-| Aspect               | Bound                             |
-|:---------------------|:----------------------------------|
-| Memory               | O(CAP) - constant                 |
-| `clear`              | O(1)                              |
-| `insert`             | O(CAP)                            |
 
 **Traversal**:
 
