@@ -155,7 +155,7 @@ Properties of fingerprint:
 
 ### Fingerprint Type
 
-The `Fingerprint` type is a 32-byte SHA-256 hash of the peer's certificate public key:
+The `Fingerprint` type is a 32-byte SHA-256 hash of the public key in the peer's certificate:
 
 ```rust
 /// SHA-256 hash of a peer's certificate public key.
@@ -173,7 +173,7 @@ impl Fingerprint {
 
 ### Fingerprint Computation
 
-The `Fingerprint::from_connection` method computes the fingerprint after the TLS handshake completes:
+The `Fingerprint::from_connection` method computes the fingerprint from the QUIC connection after the TLS handshake completes:
 
 1. Call `conn.peer_identity()` to get the certificate chain (returns `Option<Box<dyn Any>>`)
 2. Downcast to `Vec<CertificateDer>` (rustls's certificate type)
@@ -196,14 +196,16 @@ Fingerprint computation requires:
 Connections are keyed by **address**. A separate set of fingerprints is maintained for efficient uniqueness checks.
 
 ```rust
-// Keyed by address for efficient lookup
+// Map keyed by network address to keep track of existing, long-lived QUIC connections.
+// Allows existing connections to be reused rather than opening a new connection each time a request is made.
 connections: HashMap<SocketAddr, Connection>
 
-// For efficient fingerprint uniqueness checks
+// HashSet of certificate fingerprints to ensure a unique identity is used for all QUIC connections.
+// Prevents DOS attack where a compromised cert can block valid connections by opening connections from multiple spoofed IP addresses.
 fingerprints: HashSet<Fingerprint>
 ```
 
-**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if it exists in the fingerprints set. If so, reject the new connection. This prevents a single certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
+**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if it exists in the fingerprints set. If so, reject the new connection. This prevents a single device/certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
 
 **Connection reuse flow:**
 
@@ -259,9 +261,7 @@ Hello subscriptions (used for push notifications) are also keyed by `(Addr, Grap
 
 ### Client SAN Verification
 
-By default, TLS only verifies server certificate SANs (the client checks that the server's SAN matches the hostname being connected to). Client certificate SANs are not verified by default because there is no "expected hostname" to check against.
-
-Aranya implements custom client SAN verification to ensure clients are connecting from addresses they claim to control. After the TLS handshake, the server verifies the client's certificate SANs against the client's connecting IP address.
+By default, TLS only verifies server certificate SANs (the client checks that the server's SAN matches the hostname or IP being connected to). Client certificate SANs are not verified by default because there is no "expected hostname" to check against.
 
 **Verification rules:**
 
