@@ -325,6 +325,6 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 **Security considerations:**
 
-- DNS resolution introduces a dependency on DNS infrastructure and potential for DNS spoofing. Consider using DNSSEC or only accepting IP SANs in high-security environments.
+- DNS resolution introduces a dependency on DNS infrastructure. However, certificate fingerprint uniqueness mitigates DNS spoofing risk: even if an attacker spoofs DNS, they cannot establish a connection without a valid certificate signed by a trusted CA, and fingerprint uniqueness prevents them from impersonating an existing peer.
 - DNS resolution adds latency to the connection handshake. Consider caching DNS results.
 - If the client is behind NAT, the connecting IP may not match the cert SANs. Deployments using NAT should use DNS-based SANs that resolve to the NAT's external IP.
