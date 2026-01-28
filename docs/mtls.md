@@ -17,7 +17,7 @@ Aranya's sync traffic is secured via mTLS over QUIC using the `quinn` library wi
 Abbreviations in this document:
 - certificate -> cert
 - certificates -> certs
-- SVID -> Subject Verification ID (SHA-256 hash of certificate public key)
+- fingerprint -> SHA-256 fingerprint of the X.509 certificate's public key
 
 ## Requirements
 
@@ -37,7 +37,7 @@ Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation. SVID-based connection tracking can detect suspicious patterns (same cert from multiple IPs) that may indicate compromise. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
+- Cert revocation. Fingerprint-based connection tracking can detect suspicious patterns (same cert from multiple IPs) that may indicate compromise. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
 - Cert rotation/renewal
 - Supporting cert formats other than PEM
 
@@ -135,7 +135,7 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 Existing Aranya deployments using different PSKs for each team will no longer be able to manage different certs for each team. Reusing certs across teams is acceptable since it only leaks team metadata such as devices, roles, permissions, etc. Aranya's RBAC scheme must grant permissions to a device/role before it is allowed to perform any operations on the graph.
 If using different mTLS certs for each team is important, we recommend isolating each team into its own Aranya deployment with different certs rather than managing multiple teams in the same deployment. In the future, we intend to allow different certs to be used for each team in a single deployment.
 
-## SVID-Based Connection and Cache Keying
+## Fingerprint-Based Connection and Cache Keying
 
 ### Problem
 
@@ -143,36 +143,36 @@ The initial mTLS implementation keys connection maps and peer caches by socket a
 
 An attacker with a compromised cert could connect from many different IP addresses, each creating a separate entry in the connection map. This could exhaust connection slots or resources, preventing legitimate peers from connecting.
 
-### Solution: SVID (Subject Verification ID)
+### Solution: Fingerprint-Based Keying
 
-We introduce an SVID (Subject Verification ID), defined as the SHA-256 hash of the peer's validated certificate public key. Connection maps and peer caches are keyed by SVID rather than socket address.
+Connection maps and peer caches are keyed by fingerprint rather than socket address.
 
-Properties of SVID:
-- **Unique per certificate/identity**: Each certificate has a distinct SVID
-- **Survives certificate rotation**: If the same key pair is used for a renewed cert, the SVID remains the same
+Properties of fingerprint:
+- **Unique per certificate/identity**: Each certificate has a distinct fingerprint
+- **Survives certificate rotation**: If the same key pair is used for a renewed cert, the fingerprint remains the same
 - **Available only after TLS handshake**: Cannot be spoofed since it's extracted from the validated certificate
 
-### Svid Type
+### Fingerprint Type
 
-The `Svid` type is a 32-byte SHA-256 hash of the peer's certificate public key:
+The `Fingerprint` type is a 32-byte SHA-256 hash of the peer's certificate public key:
 
 ```rust
 /// SHA-256 hash of a peer's certificate public key.
 /// Used to uniquely identify peers regardless of their network address.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) struct Svid([u8; 32]);
+pub(crate) struct Fingerprint([u8; 32]);
 
-impl Svid {
-    /// Extract SVID from a quinn Connection after TLS handshake.
+impl Fingerprint {
+    /// Compute fingerprint from a QUIC connection's verified peer certificate.
     ///
     /// Returns an error if the peer identity cannot be extracted or parsed.
-    pub fn from_connection(conn: &quinn::Connection) -> Result<Self, SvidError>;
+    pub fn from_connection(conn: &quinn::Connection) -> Result<Self, FingerprintError>;
 }
 ```
 
-### SVID Extraction
+### Fingerprint Computation
 
-The `Svid::from_connection` method extracts the SVID after the TLS handshake completes:
+The `Fingerprint::from_connection` method computes the fingerprint after the TLS handshake completes:
 
 1. Call `conn.peer_identity()` to get the certificate chain (returns `Option<Box<dyn Any>>`)
 2. Downcast to `Vec<CertificateDer>` (rustls's certificate type)
@@ -180,13 +180,13 @@ The `Svid::from_connection` method extracts the SVID after the TLS handshake com
 4. Parse the DER-encoded certificate using `x509-parser` to extract the SubjectPublicKeyInfo
 5. Compute SHA-256 hash of the public key bytes using `aranya-crypto`
 
-We hash only the public key (not the entire certificate) so that certificate rotation with the same key pair preserves the SVID.
+We hash only the public key (not the entire certificate) so that certificate rotation with the same key pair preserves the fingerprint.
 
-Note: We only compute SVIDs for certificates that rustls has already validated against our root CA store. The SVID extraction assumes a trusted certificate.
+Note: We only compute fingerprints for certificates that rustls has already validated against our root CA store. The fingerprint computation assumes a trusted certificate.
 
 ### Dependencies
 
-SVID extraction requires:
+Fingerprint computation requires:
 - `x509-parser` crate for parsing DER-encoded certificates
 - `aranya-crypto` (already a dependency) for SHA-256 hashing
 
@@ -204,62 +204,56 @@ To:
 
 ```rust
 struct ConnectionKey {
-    svid: Svid,
-    addr: SocketAddr,
+    fingerprint: Fingerprint,
 }
 ```
 
-Connections are keyed by **(SVID, addr)**. When a new connection arrives with an SVID that already has a connection from a different address:
+Connections are keyed by **fingerprint**. When a new connection arrives with a fingerprint that already has a connection from a different address:
 - This is suspicious - same cert from multiple IPs suggests compromise
 - A warning is logged for investigation
 - Future enhancement: trigger certificate revocation
 
-The limit on connections per SVID serves as a safety net, but the real fix for a compromised cert is revocation.
-
 ### Peer Cache Keying
 
-Peer caches (used for sync state like last known command) must key on SVID and address to isolate state per connection:
+Peer caches (used for sync state like last known command) key on fingerprint to track state per identity:
 
 ```rust
 struct PeerCacheKey {
-    svid: Svid,
-    addr: SocketAddr,
+    fingerprint: Fingerprint,
     graph_id: GraphId,
 }
 ```
 
-Including the address prevents a compromised certificate at one IP from poisoning the cache state for a legitimate device using the same certificate at a different IP.
-
 This separates concerns:
 - **SyncPeer** with `(Addr, GraphId)` - for scheduling which peers to connect to (our configuration)
-- **PeerCacheKey** with `(Svid, Addr, GraphId)` - for caching sync state by validated identity and address
-- **ConnectionKey** with `(Svid, Addr)` - for connection deduplication by validated identity and address
+- **PeerCacheKey** with `(Fingerprint, GraphId)` - for caching sync state by validated identity
+- **ConnectionKey** with `Fingerprint` - for connection deduplication by validated identity
 
 ### Hello Subscriptions
 
-Hello subscriptions (used for push notifications) are also keyed by `PeerCacheKey` (SVID, Addr, GraphId). This prevents a compromised certificate at one IP from hijacking or interfering with subscriptions for a legitimate device at another IP.
+Hello subscriptions (used for push notifications) are also keyed by `PeerCacheKey` (Fingerprint, GraphId).
 
 ### Security Model
 
-**Key principle:** Never use an address from a peer as a map key without first validating their certificate and computing their SVID. Always include both SVID and address to isolate state per (identity, location) pair.
+**Key principle:** Never use an address from a peer as a map key without first validating their certificate and computing their fingerprint.
 
 | Map | Key | Rationale |
 |-----|-----|-----------|
-| Connection map | (SVID, Addr) | Prevents one compromised cert from occupying many connection slots |
-| Peer caches | (SVID, Addr, GraphId) | Prevents compromised cert from poisoning cache for legitimate device at different IP |
-| Hello subscriptions | (SVID, Addr, GraphId) | Prevents compromised cert from hijacking notifications for legitimate device at different IP |
+| Connection map | Fingerprint | Prevents one compromised cert from occupying many connection slots |
+| Peer caches | (Fingerprint, GraphId) | Tracks sync state by validated identity |
+| Hello subscriptions | (Fingerprint, GraphId) | Tracks subscriptions by validated identity |
 | SyncManager.peers | (Addr, GraphId) | Safe because this is our configuration, not peer-provided |
 
 **Connection Flow:**
 
 1. We initiate connection to a configured address (our config, not peer-provided)
 2. TLS handshake validates peer certificate against our root CA
-3. Extract SVID from validated certificate
-4. Use SVID for connection map and cache keying
-5. If peer connects to us, same flow: validate cert first, then extract SVID
+3. Compute fingerprint from validated certificate
+4. Use fingerprint for connection map and cache keying
+5. If peer connects to us, same flow: validate cert first, then compute fingerprint
 
 ### Implementation Notes
 
-**Certificate format during extraction:** While certificates are stored on disk as PEM files, quinn/rustls internally converts them to DER during TLS setup. After the TLS handshake, `peer_identity()` returns `CertificateDer` (DER-encoded). The SVID extraction parses DER format.
+**Certificate format during computation:** While certificates are stored on disk as PEM files, quinn/rustls internally converts them to DER during TLS setup. After the TLS handshake, `peer_identity()` returns `CertificateDer` (DER-encoded). The fingerprint computation parses DER format.
 
-**Race condition on connect:** We cannot look up an existing connection by SVID before connecting (we don't know the SVID until after TLS). This matches existing behavior where duplicate connections may briefly exist. A future optimization could maintain a secondary index from addr to SVID for quick lookups.
+**Race condition on connect:** We cannot look up an existing connection by fingerprint before connecting (we don't know the fingerprint until after TLS). This matches existing behavior where duplicate connections may briefly exist.
