@@ -23,13 +23,12 @@ Abbreviations in this document:
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
 - mTLS certs must be X.509 TLS certs in PEM format.
-- All certs must contain Subject Alternative Names (SANs). Certs without SANs will be rejected. TLS requires server certs to have SANs for hostname verification (CN is deprecated). TLS does not require client certs to have SANs, but we enforce this with our custom client cert verification for IP address verification.
+- All certs must contain Subject Alternative Names (SANs). Certs without SANs will be rejected. TLS requires server certs to have SANs for hostname verification (CN is deprecated). TLS does not require client certs to have SANs, but we enforce this with our custom client cert verification which checks the client's connecting IP against IP SANs or DNS SANs that resolve to the client's IP.
 - A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail the TLS handshake
-- Client cert SANs must be verified against the client's connecting IP address (see Client SAN Verification section)
 - Security events such as failed authentication, signature verification failures, and suspicious connection patterns (e.g., same certificate from multiple IP addresses) should be logged
 
 Note:
@@ -137,17 +136,17 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 Existing Aranya deployments using different PSKs for each team will no longer be able to manage different certs for each team. Reusing certs across teams is acceptable since it only leaks team metadata such as devices, roles, permissions, etc. Aranya's RBAC scheme must grant permissions to a device/role before it is allowed to perform any operations on the graph.
 If using different mTLS certs for each team is important, we recommend isolating each team into its own Aranya deployment with different certs rather than managing multiple teams in the same deployment. In the future, we intend to allow different certs to be used for each team in a single deployment.
 
-## Fingerprint-Based Connection and Cache Keying
+## Fingerprint Uniqueness
 
 ### Problem
 
-The initial mTLS implementation keys connection maps and peer caches by socket address (`SocketAddr`). While mTLS validates the peer's certificate, it doesn't bind the validated identity to the connection's network address. This creates a denial-of-service vulnerability:
+While mTLS validates the peer's certificate, it doesn't prevent the same certificate from being used to establish multiple connections from different IP addresses. This creates a denial-of-service vulnerability:
 
 An attacker with a compromised cert could connect from many different IP addresses, each creating a separate entry in the connection map. This could exhaust connection slots or resources, preventing legitimate peers from connecting.
 
-### Solution: Fingerprint-Based Keying
+### Solution: Fingerprint Uniqueness Enforcement
 
-Connection maps and peer caches are keyed by fingerprint rather than socket address.
+Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. New connections with a fingerprint that matches an existing connection are rejected.
 
 Properties of fingerprint:
 - **Unique per certificate/identity**: Each certificate has a distinct fingerprint
@@ -194,14 +193,17 @@ Fingerprint computation requires:
 
 ### Connection Map Keying
 
-Connections are keyed by **address**. The fingerprint can be computed from the connection when needed via `Fingerprint::from_connection()`.
+Connections are keyed by **address**. A separate set of fingerprints is maintained for efficient uniqueness checks.
 
 ```rust
 // Keyed by address for efficient lookup
 connections: HashMap<SocketAddr, Connection>
+
+// For efficient fingerprint uniqueness checks
+fingerprints: HashSet<Fingerprint>
 ```
 
-**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if any existing connection has the same fingerprint. If so, reject the new connection. This prevents a single certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
+**Fingerprint uniqueness:** Only one connection per fingerprint is allowed. After a new connection completes the TLS handshake, compute its fingerprint and check if it exists in the fingerprints set. If so, reject the new connection. This prevents a single certificate from maintaining multiple connections and protects against DOS attacks where an attacker with a compromised cert repeatedly connects to disrupt a legitimate device.
 
 **Connection reuse flow:**
 
@@ -209,8 +211,10 @@ connections: HashMap<SocketAddr, Connection>
 2. Check if we have an existing connection to addr X
 3. If yes and connection is healthy, reuse it
 4. If no (or connection is dead), connect to addr X
-5. Compute fingerprint, reject if any existing connection has the same fingerprint
-6. Store the connection
+5. Compute fingerprint, reject if fingerprint already exists in the set
+6. Add fingerprint to set and store the connection
+
+When a connection is closed, remove its fingerprint from the set.
 
 ### Peer Cache Keying
 
