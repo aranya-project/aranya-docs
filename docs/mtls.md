@@ -29,7 +29,7 @@ Abbreviations in this document:
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail the TLS handshake
-- Security events such as failed authentication, signature verification failures, and suspicious connection patterns (e.g., same certificate from multiple IP addresses) should be logged
+- Connection events (fingerprint, IP, accept/reject) should be logged for external security monitoring
 
 Note:
 QUIC requires TLS 1.3 so that is an implied requirement. It's worth mentioning here since it is relevant to the security properties of our mTLS implementation.
@@ -38,9 +38,7 @@ Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation. Syncing with a revoked cert only leaks team 
-  metadata. Devices can be removed from an Aranya team without the need for 
-  revoking certs.
+- Cert revocation. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
 - Cert rotation/renewal
 - Supporting cert formats other than PEM
 
@@ -150,7 +148,7 @@ An attacker with a compromised cert could connect from many different IP address
 
 Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. A new connection with a fingerprint that matches an existing connection will be accepted and cause the old connection to be closed.
 
-It's possible for an attacker with a compromised cert to DOS attack a connection by forcing it to close, but there isn't a way to prevent that if a cert has been compromised. A compromised cert should be revoked so a new cert can be generated and deployed to a device. The goal of this solution is to prevent a single compromised cert from DOS attacking the entire Aranya network.
+It's possible for an attacker with a compromised cert to DOS attack a single device by repeatedly connecting and forcing that device's connection to close. However, this requires the attacker to have that device's compromised cert. A compromised cert should be revoked and a new cert generated and deployed. The goal of this solution is to prevent a single compromised cert from DOS attacking the entire Aranya network — an attacker can only disrupt connections for the specific cert they have compromised.
 
 Properties of fingerprint:
 - **Unique per certificate**: Each certificate has a distinct fingerprint
@@ -160,7 +158,6 @@ Properties of fingerprint:
 ### Fingerprint Type
 
 The `Fingerprint` type is a 32-byte SHA-256 hash of the public key in the peer's certificate:
-
 ```rust
 /// SHA-256 hash of a peer's certificate public key.
 /// Used to uniquely identify peers regardless of their network address.
@@ -194,15 +191,13 @@ Dependencies: `x509-parser` for parsing DER-encoded certificates, `aranya-crypto
 ## Connection Management
 
 ### Data Structures
-
 ```rust
-// Map keyed by network address to keep track of existing, long-lived QUIC connections.
-// Allows existing connections to be reused rather than opening a new connection each time a request is made.
+/// Map keyed by network address for connection reuse.
 connections: HashMap<SocketAddr, Connection>
 
-// HashSet of certificate fingerprints to ensure a unique identity is used for all QUIC connections.
-// Prevents DOS attack where a compromised cert can block valid connections by opening connections from multiple spoofed IP addresses.
-fingerprints: HashSet<Fingerprint>
+/// Map from fingerprint to address for enforcing one connection per identity.
+/// New connections with an existing fingerprint cause the old connection to be closed.
+fingerprints: HashMap<Fingerprint, SocketAddr>
 ```
 
 ### Connection Flow
@@ -212,15 +207,14 @@ fingerprints: HashSet<Fingerprint>
 3. Otherwise, initiate connection to X
 4. TLS handshake completes (validates peer certificate, verifies client SANs)
 5. Compute fingerprint from peer certificate
-6. If fingerprint exists in `fingerprints` set, reject the connection (duplicate identity)
-7. Add fingerprint to set, store connection in map
+6. If fingerprint exists in `fingerprints` map, close the old connection and remove it from `connections`
+7. Insert fingerprint into `fingerprints` map, store connection in `connections` map
 
-When a connection closes, remove its fingerprint from the set.
+When a connection closes, remove its entry from both maps.
 
 ### Peer Caches and Subscriptions
 
 Peer caches (sync state) and hello subscriptions (push notifications) are keyed by `(SocketAddr, GraphId)`:
-
 ```rust
 struct PeerCacheKey {
     addr: SocketAddr,
@@ -243,7 +237,6 @@ If no SAN matches, reject the connection.
 ### Implementation
 
 The `ClientCertVerifier` trait does not have access to the peer's IP address, so SAN verification is performed after the TLS handshake:
-
 ```rust
 fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
     let peer_ip = conn.remote_address().ip();
@@ -275,6 +268,6 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 ### Security Considerations
 
-- **DNS spoofing**: Fingerprint uniqueness mitigates this risk — even if an attacker spoofs DNS, they cannot establish a connection without a valid certificate, and fingerprint uniqueness prevents impersonating an existing peer.
-- **Latency**: DNS resolution adds latency. Consider caching results.
+- **DNS resolution**: DNS resolution for SAN verification introduces a dependency on DNS infrastructure and adds latency. Consider caching results.
 - **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
+- **Dynamic IPs**: For clients with dynamic IP addresses, use DNS-based SANs and ensure DNS records are updated when IPs change.
