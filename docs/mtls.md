@@ -38,7 +38,13 @@ Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
+- Cert revocation. Currently, Aranya does not check certificate revocation status 
+  (CRL/OCSP). If a cert is revoked by external PKI infrastructure but not yet 
+  rotated, an attacker with the compromised cert can still establish connections 
+  and sync. This leaks graph metadata (e.g., number of devices, team structure) 
+  but not application data protected by Aranya's encryption. Devices should be 
+  removed from the Aranya team immediately upon cert compromise; cert revocation 
+  provides defense-in-depth once implemented.
 - Cert rotation/renewal
 - Supporting cert formats other than PEM
 
