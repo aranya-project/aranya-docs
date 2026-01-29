@@ -23,13 +23,17 @@ Abbreviations in this document:
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
 - mTLS certs must be X.509 TLS certs in PEM format.
-- All certs must contain Subject Alternative Names (SANs). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client certs are verified against connecting IP by default, but this can be disabled via `disable_client_san_verification` for deployments with dynamic client IPs.
+- All certs must contain Subject Alternative Names (SANs). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified against connecting IP by default. Both client and server SAN verification can be disabled via config flags for deployments with dynamic IPs.
 - A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
 - QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail the TLS handshake
-- Connection events (fingerprint, IP, accept/reject) should be logged for external security monitoring
+- Security-relevant events should be logged:
+  - Failed authentication attempts
+  - Certificate validation failures
+  - Connection accept/reject with fingerprint and IP
+  - Connections closed due to duplicate fingerprint
 
 Note:
 QUIC requires TLS 1.3 so that is an implied requirement. It's worth mentioning here since it is relevant to the security properties of our mTLS implementation.
@@ -38,13 +42,7 @@ Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation. Currently, Aranya does not check certificate revocation status 
-  (CRL/OCSP). If a cert is revoked by external PKI infrastructure but not yet 
-  rotated, an attacker with the compromised cert can still establish connections 
-  and sync. This leaks graph metadata (e.g., number of devices, team structure) 
-  but not application data protected by Aranya's encryption. Devices should be 
-  removed from the Aranya team immediately upon cert compromise; cert revocation 
-  provides defense-in-depth once implemented.
+- Cert revocation. Currently, Aranya does not check certificate revocation status (CRL/OCSP). If a cert is revoked by external PKI infrastructure but not yet rotated, an attacker with the compromised cert can still establish connections and sync. This leaks graph metadata (e.g., number of devices, team structure) but not application data protected by Aranya's encryption. Devices should be removed from the Aranya team immediately upon cert compromise; cert revocation provides defense-in-depth once implemented.
 - Cert rotation/renewal
 - Supporting cert formats other than PEM
 
@@ -113,10 +111,16 @@ addr = "0.0.0.0:4321"
 root_certs_dir = "/etc/aranya/certs/ca"
 device_cert = "/etc/aranya/certs/device.crt.pem"
 device_key = "/etc/aranya/certs/device.key.pem"
+
 # Optional: disable client SAN verification for deployments where client IPs
 # are dynamic and cannot be represented in certificate SANs.
 # Default: false (verification enabled)
 # disable_client_san_verification = true
+
+# DANGEROUS: Disable server SAN verification. Enables man-in-the-middle attacks.
+# Only use if servers have dynamic IPs AND no DNS infrastructure is available.
+# Default: false (verification enabled)
+# disable_server_san_verification = true
 ```
 
 The Aranya daemon will refuse to start if the following conditions are not met:
@@ -124,10 +128,9 @@ The Aranya daemon will refuse to start if the following conditions are not met:
 - The device cert file (`device_cert`) exists and contains a valid certificate.
 - The device key file (`device_key`) exists and contains a valid private key.
 
-If `disable_client_san_verification` is set to `true`, a warning will be logged at startup:
-```
-WARN: Client SAN verification is disabled. Clients will be accepted from any IP address.
-```
+Warnings are logged at startup when SAN verification is disabled:
+- `disable_client_san_verification`: `WARN: Client SAN verification is disabled. Clients will be accepted from any IP address.`
+- `disable_server_san_verification`: `ERROR: Server SAN verification is disabled. This enables man-in-the-middle attacks.`
 
 Verification of the cert chain is not performed by the daemon when starting up and loading certs into the QUIC library. For simplicity, we will rely on the QUIC library to detect invalid certs at runtime when performing the TLS handshake for QUIC connections.
 
@@ -220,7 +223,7 @@ fingerprints: HashMap<Fingerprint, SocketAddr>
 1. Want to connect to address X
 2. Check if we have an existing healthy connection to X — if yes, reuse it
 3. Otherwise, initiate connection to X
-4. TLS handshake completes (validates peer certificate, verifies client SANs if enabled)
+4. TLS handshake completes (validates peer certificate, verifies SANs if enabled)
 5. Compute fingerprint from peer certificate
 6. If fingerprint exists in `fingerprints` map, close the old connection and remove it from `connections`
 7. Insert fingerprint into `fingerprints` map, store connection in `connections` map
@@ -237,13 +240,13 @@ struct PeerCacheKey {
 }
 ```
 
-## Client SAN Verification
+## SAN Verification
 
-By default, TLS only verifies server certificate SANs. Client certificate SANs are not verified because there is no "expected hostname" to check against. We enforce client SAN verification to ensure the client's connecting IP matches their certificate.
+By default, TLS only verifies server certificate SANs. Client certificate SANs are not verified because there is no "expected hostname" to check against. We enforce client SAN verification by default to ensure the client's connecting IP matches their certificate.
 
-This verification can be disabled via the `disable_client_san_verification` config option for deployments where client IPs are dynamic and cannot be represented in certificate SANs.
+Both client and server SAN verification can be disabled via config flags for deployments with dynamic IPs where SANs cannot be reliably configured.
 
-### Verification Rules
+### Client SAN Verification
 
 The connection is accepted if ANY of the following are true:
 - A SAN contains an IP address matching the client's connecting IP
@@ -251,9 +254,17 @@ The connection is accepted if ANY of the following are true:
 
 If no SAN matches, reject the connection.
 
+Disabled via `disable_client_san_verification` config option.
+
+### Server SAN Verification
+
+Standard TLS server SAN verification ensures the server's certificate contains a SAN matching the hostname or IP the client is connecting to. This prevents man-in-the-middle attacks.
+
+Disabled via `disable_server_san_verification` config option. **This is dangerous and should only be used when absolutely necessary.**
+
 ### Implementation
 
-The `ClientCertVerifier` trait does not have access to the peer's IP address, so SAN verification is performed after the TLS handshake:
+The `ClientCertVerifier` trait does not have access to the peer's IP address, so client SAN verification is performed after the TLS handshake:
 ```rust
 fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
     let peer_ip = conn.remote_address().ip();
@@ -283,8 +294,10 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 }
 ```
 
+Server SAN verification is disabled by implementing a custom `ServerCertVerifier` that skips the server name matching while still verifying the certificate chain.
+
 ### Security Considerations
 
 - **DNS resolution**: DNS resolution for SAN verification introduces a dependency on DNS infrastructure and adds latency. Consider caching results.
 - **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
-- **Dynamic IPs**: For clients with dynamic IP addresses, use DNS-based SANs and ensure DNS records are updated when IPs change. If this is not feasible, disable client SAN verification via config.
+- **Dynamic IPs**: For deployments with dynamic IP addresses where DNS is not available, disable SAN verification via config flags.
