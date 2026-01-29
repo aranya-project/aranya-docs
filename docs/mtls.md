@@ -23,7 +23,7 @@ Abbreviations in this document:
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
 - mTLS certs must be X.509 TLS certs in PEM format.
-- All certs must contain Subject Alternative Names (SANs). Certs without SANs will be rejected. TLS requires server certs to have SANs for hostname verification (CN is deprecated). TLS does not require client certs to have SANs, but we enforce this with our custom client cert verification which checks the client's connecting IP against IP SANs or DNS SANs that resolve to the client's IP.
+- All certs must contain Subject Alternative Names (SANs). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client certs are verified against connecting IP by default, but this can be disabled via `disable_client_san_verification` for deployments with dynamic client IPs.
 - A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
 - A set of root certs is configured when the Aranya daemon loads
 - The configured root certs and device cert are used for all QUIC connections and Aranya teams
@@ -107,12 +107,21 @@ addr = "0.0.0.0:4321"
 root_certs_dir = "/etc/aranya/certs/ca"
 device_cert = "/etc/aranya/certs/device.crt.pem"
 device_key = "/etc/aranya/certs/device.key.pem"
+# Optional: disable client SAN verification for deployments where client IPs
+# are dynamic and cannot be represented in certificate SANs.
+# Default: false (verification enabled)
+# disable_client_san_verification = true
 ```
 
 The Aranya daemon will refuse to start if the following conditions are not met:
 - The root certs directory (`root_certs_dir`) contains at least one root certificate `.pem` file.
 - The device cert file (`device_cert`) exists and contains a valid certificate.
 - The device key file (`device_key`) exists and contains a valid private key.
+
+If `disable_client_san_verification` is set to `true`, a warning will be logged at startup:
+```
+WARN: Client SAN verification is disabled. Clients will be accepted from any IP address.
+```
 
 Verification of the cert chain is not performed by the daemon when starting up and loading certs into the QUIC library. For simplicity, we will rely on the QUIC library to detect invalid certs at runtime when performing the TLS handshake for QUIC connections.
 
@@ -205,7 +214,7 @@ fingerprints: HashMap<Fingerprint, SocketAddr>
 1. Want to connect to address X
 2. Check if we have an existing healthy connection to X — if yes, reuse it
 3. Otherwise, initiate connection to X
-4. TLS handshake completes (validates peer certificate, verifies client SANs)
+4. TLS handshake completes (validates peer certificate, verifies client SANs if enabled)
 5. Compute fingerprint from peer certificate
 6. If fingerprint exists in `fingerprints` map, close the old connection and remove it from `connections`
 7. Insert fingerprint into `fingerprints` map, store connection in `connections` map
@@ -225,6 +234,8 @@ struct PeerCacheKey {
 ## Client SAN Verification
 
 By default, TLS only verifies server certificate SANs. Client certificate SANs are not verified because there is no "expected hostname" to check against. We enforce client SAN verification to ensure the client's connecting IP matches their certificate.
+
+This verification can be disabled via the `disable_client_san_verification` config option for deployments where client IPs are dynamic and cannot be represented in certificate SANs.
 
 ### Verification Rules
 
@@ -270,4 +281,4 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 - **DNS resolution**: DNS resolution for SAN verification introduces a dependency on DNS infrastructure and adds latency. Consider caching results.
 - **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
-- **Dynamic IPs**: For clients with dynamic IP addresses, use DNS-based SANs and ensure DNS records are updated when IPs change.
+- **Dynamic IPs**: For clients with dynamic IP addresses, use DNS-based SANs and ensure DNS records are updated when IPs change. If this is not feasible, disable client SAN verification via config.
