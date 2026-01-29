@@ -38,7 +38,9 @@ Future enhancements:
 - Different root and device certs for different teams
 - Use system root certs
 - Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
-- Cert revocation. Fingerprint-based connection tracking can detect suspicious patterns (same cert from multiple IPs) that may indicate compromise. Syncing with a revoked cert only leaks team metadata. Devices can be removed from an Aranya team without the need for revoking certs.
+- Cert revocation. Syncing with a revoked cert only leaks team 
+  metadata. Devices can be removed from an Aranya team without the need for 
+  revoking certs.
 - Cert rotation/renewal
 - Supporting cert formats other than PEM
 
@@ -146,7 +148,9 @@ An attacker with a compromised cert could connect from many different IP address
 
 ### Solution
 
-Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. New connections with a fingerprint that matches an existing connection are rejected.
+Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. A new connection with a fingerprint that matches an existing connection will be accepted and cause the old connection to be closed.
+
+It's possible for an attacker with a compromised cert to DOS attack a connection by forcing it to close, but there isn't a way to prevent that if a cert has been compromised. A compromised cert should be revoked so a new cert can be generated and deployed to a device. The goal of this solution is to prevent a single compromised cert from DOS attacking the entire Aranya network.
 
 Properties of fingerprint:
 - **Unique per certificate**: Each certificate has a distinct fingerprint
