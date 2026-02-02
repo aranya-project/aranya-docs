@@ -27,7 +27,7 @@ See [Logging Configuration](logging.md#client-application-logging) for how to se
 
 ### Channel Lifecycle Events
 
-Log channel creation, acceptance, and closure at INFO level:
+Log channel creation, reception, and deletion at INFO level:
 
 ```rust
 // On channel creation
@@ -39,22 +39,22 @@ info!(
     "afc_channel_created"
 );
 
-// On channel acceptance
+// On channel reception
 info!(
     channel_id = %channel.id(),
     peer_device_id = %peer_id,
     label_id = %label_id,
     direction = "receive",
-    "afc_channel_accepted"
+  "afc_channel_received"
 );
 
-// On channel closure
+// On channel deletion
 info!(
     channel_id = %channel.id(),
     total_messages_sent,
     total_bytes_sent,
     total_seal_failures,
-    "afc_channel_closed"
+  "afc_channel_deleted"
 );
 ```
 
@@ -115,7 +115,7 @@ error!(
 
 ### Seal/Open Operations
 
-Log seal/open operations at **TRACE** level (very frequent), failures at ERROR:
+Log seal/open operations at **TRACE** level with timing information (very frequent), failures at ERROR:
 
 ```rust
 // Seal (encrypt) - TRACE level
@@ -124,6 +124,7 @@ trace!(
     plaintext_len = plaintext.len(),
     ciphertext_len = ciphertext.len(),
     seq_num = seq.0,
+    duration_us = duration_us,
     "afc_seal"
 );
 
@@ -133,6 +134,7 @@ trace!(
     ciphertext_len = ciphertext.len(),
     plaintext_len = plaintext.len(),
     seq_num = seq.0,
+    duration_us = duration_us,
     "afc_open"
 );
 
@@ -142,6 +144,7 @@ error!(
     error = %err,
     plaintext_len = plaintext.len(),
     seq_num = seq.0,
+    duration_us = duration_us,
     "afc_seal_failed"
 );
 
@@ -151,11 +154,13 @@ error!(
     error = %err,
     ciphertext_len = ciphertext.len(),
     seq_num = seq.0,
+    duration_us = duration_us,
     "afc_open_failed"
 );
 ```
 
-**Note:** TRACE logging for seal/open can generate huge volumes in high‑throughput scenarios. Use sparingly.
+**Timing:** Duration is recorded in microseconds for both successful and failed operations, enabling performance analysis and detection of crypto operation delays.
+**Note:** TRACE logging for seal/open can generate huge volumes in high-throughput scenarios. Use sparingly.
 
 ### Channel Statistics
 
