@@ -50,10 +50,6 @@ level = "info"
 # log_filter = ""
 # Log path
 path = "/var/log/aranya/daemon.log"
-# Log rotation size in bytes
-max_log_size = 104857600
-# Log rotation number
-max_log_files = 7
 # Log to standard out
 stdout = true
 
