@@ -18,8 +18,8 @@ Aranya uses Rust `tracing` for structured logging. Configure logging separately 
 
 - ERROR: Failures requiring immediate attention (sync failures, authorization denials, storage errors)
 - WARN: Potential issues or degraded performance (high resource usage, retry attempts, stalls)
-- INFO: Key operations and state changes (sync completion, role assignments, channel creation)
-- DEBUG: Detailed operation flow (individual operations, intermediate states)
+- INFO: Key operations and state changes (role assignments, channel creation)
+- DEBUG: Detailed operation flow (sync completion, individual operations, intermediate states)
 - TRACE: Verbose details (full command contents, crypto operations)
 
 Use TRACE only for targeted debugging sessions; it can significantly impact performance.
