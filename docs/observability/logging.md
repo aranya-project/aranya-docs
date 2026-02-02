@@ -262,31 +262,10 @@ error!(
 
 ## Best Practices
 
-1. Default to INFO: Use `info` level for production
-2. Debug on demand: Use env var to enable debug logging temporarily
-3. Avoid TRACE in production: TRACE can impact performance significantly
-4. Use structured fields: Add `device_id`, `team_id`, `duration_ms` to log entries
-5. Include error context: Log full error chains with `.report()` or `.context()`
-
-## Troubleshooting
-
-### Logs not appearing
-
-1. Check log filter is set: `ARANYA_DAEMON=info` or config `log_filter = "info"`
-2. Verify output destination: check stderr redirection or systemd journal
-3. Confirm module path: use exact module name (e.g., `aranya_daemon::sync`, not `aranya-daemon::sync`)
-
-### Too many logs
-
-1. Reduce level: `info` instead of `debug`
-2. Filter specific modules: `info,aranya_daemon::sync=debug` instead of `aranya_daemon=debug`
-3. Avoid TRACE level in production
-
-### Client logs not appearing
-
-1. Ensure application initializes `tracing_subscriber`
-2. Set application's log environment variable (not `ARANYA_DAEMON`)
-3. Check application code for tracing subscriber setup
+1. Debug on demand: Use env var to enable debug logging temporarily
+2. Avoid TRACE in production: TRACE can impact performance significantly
+3. Use structured fields: Add `device_id`, `team_id`, `duration_ms` to log entries
+4. Include error context: Log full error chains with `.report()` or `.context()`
 
 ## Implementation Checklist
 
