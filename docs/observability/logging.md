@@ -58,6 +58,7 @@ max_log_files = 7
 stdout = true
 
 **Common log filter configurations:**
+[Subscriber filter doc] (https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#filter-directives)
 ```toml
 # Debug sync operations only
 log_filter = "info,aranya_daemon::sync=debug"
