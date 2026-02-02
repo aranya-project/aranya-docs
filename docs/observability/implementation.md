@@ -59,13 +59,7 @@ Goal: Provide comprehensive sync visibility: first command tracking, stall detec
    - Measure RTT (round-trip time)
    - Calculate bandwidth from bytes transferred
    - Track packet loss (if using QUIC)
-   - Files: `crates/aranya-daemon/src/sync/mod.rs`, `crates/aranya-aqc-util/`
-
-4. **Sync topology tracking**
-   - Create `SyncTopology` struct tracking peer-to-peer edges
-   - Statistics per edge: duration, timeout rate, bandwidth
-   - Export to Graphviz format
-   - Files: `crates/aranya-daemon/src/sync/topology.rs` (new)
+   - Files: `crates/aranya-daemon/src/sync/mod.rs`, `crates/aranya-util/`
 
 ## Phase 3: Policy & AFC
 
