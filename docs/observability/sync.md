@@ -13,8 +13,8 @@ How to debug and monitor synchronization operations in Aranya.
 Sync issues are the most common in deployed Aranya systems. This guide covers:
 - What to log during sync operations
 - How to detect sync stalls and timeouts
+- PSK (pre-shared key) mismatches/ authentication failures.
 - Network quality metrics
-- Sync topology analysis
 - Performance timing breakdown
 
 ## What to Log
@@ -85,6 +85,39 @@ error!(
     "Sync timeout - exceeded maximum duration"
 );
 ```
+
+### PSK Authentication Failures
+
+PSK (pre-shared key) mismatches occur during QUIC connection establishment when peers attempt to sync:
+
+```rust
+error!(
+    peer_device_id = %peer.device_id,
+    peer_addr = %peer.addr,
+    error = "PSK authentication failed",
+    psk_id = %psk_id,
+    last_successful_sync = ?peer.last_successful_sync,
+    "QUIC connection failed: PSK mismatch with peer"
+);
+```
+
+**Common causes:**
+- Peer devices out of sync on label keys
+- Policy changes affecting label permissions
+- Device removed from label but still attempting to connect
+- Key rotation in progress
+
+**Debug steps:**
+1. Check both devices have the same label configuration
+2. Verify both devices successfully synced recent label updates
+3. Check policy permits both devices to use the label
+4. Verify AQC channel keys are current
+5. Check for clock skew (may affect key validity periods)
+
+**When to log:**
+- ERROR: Initial PSK failure
+- WARN: Repeated PSK failures (potential configuration issue)
+- INFO: PSK failure resolved after retry
 
 ## Stall Detection
 
@@ -219,40 +252,6 @@ When to use:
 - INFO level: Total sync duration only
 - DEBUG level: Phase breakdown (network, add_commands, commit)
 - TRACE level: Individual command processing (avoid in production)
-
-## Sync Topology
-
-### Tracking Connections
-
-Track who syncs with whom:
-
-```rust
-pub struct SyncTopology {
-    edges: HashMap<(DeviceId, DeviceId), SyncEdge>,
-}
-
-pub struct SyncEdge {
-    from: DeviceId,
-    to: DeviceId,
-    last_sync: SystemTime,
-    sync_count: u64,
-    avg_duration_ms: f64,
-    timeout_rate: f64,
-    total_bytes: u64,
-}
-```
-
-Update after each sync:
-
-```rust
-topology.update_sync_stats(
-    local_device_id,
-    peer_device_id,
-    duration,
-    success,
-    bytes_transferred
-);
-```
 
 ## JSON Log Examples
 

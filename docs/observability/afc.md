@@ -15,7 +15,6 @@ AFC provides high‑performance encrypted communication over shared memory. Comm
 - Key management failures (adding/removing keys to SHM)
 - Channel creation or connection issues
 - Seal/open operation failures (encryption/decryption)
-- PSK (pre-shared key) mismatches
 
 ## Client-Side Logging
 

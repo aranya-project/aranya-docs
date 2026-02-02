@@ -52,6 +52,7 @@ level = "info"
 path = "/var/log/aranya/daemon.log"
 # Log to standard out
 stdout = true
+```
 
 **Common log filter configurations:**
 [Subscriber filter doc] (https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#filter-directives)
