@@ -16,7 +16,6 @@ The Aranya observability system targets remote debugging of deployed systems rat
 
 ### Core Concepts
 - [Logging Configuration](logging.md) - Log levels, filters, output configuration for daemon and clients
-- [Analysis Tools](analysis.md) - The `aranya-debug` CLI tool for configuration, collection, and analysis
 
 ### Component-Specific Observability
 - [Sync Observability](sync.md) - Debugging sync operations, performance, stalls, and topology
