@@ -6,7 +6,7 @@ permalink: "/observability/implementation"
 
 # Implementation Roadmap
 
-This document outlines the phased implementation plan for Aranya observability. Work is organized into five phases: phases 1–4 focus on remote debugging, while phase 5 focuses on operational monitoring.
+This document outlines the phased implementation plan for Aranya observability.
 
 ## Phase Overview
 
@@ -15,8 +15,6 @@ This document outlines the phased implementation plan for Aranya observability. 
 | 1 | Foundation: structured logging, correlation IDs, error chains | Planned |
 | 2 | Enhanced sync debugging: stall detection, topology, bundling | Planned |
 | 3 | Policy & AFC: detailed error reporting, SHM logging | Planned |
-| 4 | Analysis tools: CLI for logs, sync, state comparison | Planned |
-| 5 | Monitoring: dashboard, alerts, real-time metrics | Future |
 
 ## Phase 1: Foundation
 
@@ -69,19 +67,6 @@ Goal: Provide comprehensive sync visibility: first command tracking, stall detec
    - Export to Graphviz format
    - Files: `crates/aranya-daemon/src/sync/topology.rs` (new)
 
-5. **Debug bundle tool**
-   - `aranya-debug bundle` - collect logs, state, system info
-   - Compress to .tar.gz
-   - Support time range filtering
-   - Anonymization option for sensitive data
-   - Files: `crates/aranya-debug/src/bundle.rs` (new)
-
-6. **Basic log analysis**
-   - `aranya-debug analyze logs` - filter, aggregate, timeline
-   - Filter by component, level, device, team, time range
-   - Error aggregation and summary statistics
-   - Files: `crates/aranya-debug/src/analyze.rs` (new)
-
 ## Phase 3: Policy & AFC
 
 Goal: Enhanced policy and AFC observability with detailed error reporting.
@@ -107,39 +92,3 @@ Goal: Enhanced policy and AFC observability with detailed error reporting.
    - Log seal/open failures with crypto context
    - Track failure patterns
    - Files: `crates/aranya-client/src/afc.rs`
-
-## Phase 4: Analysis Tools
-
-Goal: User-friendly CLI tools to analyze and visualize collected debugging data.
-
-### What Gets Done
-
-1. **Enhanced log analysis**
-   - Correlation tracking: follow request through system
-   - Pattern detection: identify error patterns
-   - Multiple output formats: text, JSON, CSV
-   - Files: `crates/aranya-debug/src/analyze/logs.rs` (new)
-
-2. **Sync diagnostics**
-   - Build topology graph from sync logs
-   - ASCII art visualization
-   - Bottleneck detection
-   - Network partition detection
-   - Graphviz/Mermaid export for visualization
-   - Files: `crates/aranya-debug/src/analyze/sync.rs` (new), `crates/aranya-debug/src/visualize.rs` (new)
-
-3. **State comparison**
-   - Compare two state snapshots
-   - Show device, role, label, peer, and graph changes
-   - Detect graph divergence
-   - Files: `crates/aranya-debug/src/analyze/state.rs` (new)
-
-4. **Documentation**
-   - Debugging guide with step-by-step troubleshooting
-   - Observability documentation
-   - README updates
-   - Files: `docs/DEBUGGING_GUIDE.md` (new), `docs/OBSERVABILITY.md` (new)
-
-## Phase 5: Optional Monitoring (Future)
-
-Goal: Real-time monitoring dashboard and alerting for production deployments.
