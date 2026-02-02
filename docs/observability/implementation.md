@@ -32,7 +32,7 @@ Goal: Establish consistent structured logging with correlation IDs and device/te
 2. **Correlation IDs**
    - Add `correlation_id: String` to all RPC requests
    - Thread through client → daemon → sync
-   - Generate UUID v4 if not provided
+   - Generate from team_id and device_id: `<team_id>-<device_id>`
    - Files: `crates/aranya-daemon-api/`, `crates/aranya-daemon/src/api.rs`, `crates/aranya-client/src/client.rs`
 
 3. **Error chains**
