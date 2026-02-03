@@ -78,7 +78,7 @@ Principles:
 
 ## Security Considerations
 
-- Logs may contain sensitive data (device IDs, team IDs, addresses)
+- Logs may contain sensitive data
 - Debug endpoints should be disabled in production or protected by authentication
 - Avoid logging cryptographic material (keys, passphrases)
 

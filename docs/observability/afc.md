@@ -16,271 +16,155 @@ AFC provides high‑performance encrypted communication over shared memory. Comm
 - Channel creation or connection issues
 - Seal/open operation failures (encryption/decryption)
 
-## Client-Side Logging
+### Architecture Note
 
-AFC operations occur in the client application, not the daemon. The `aranya-client` library emits tracing events that the application must capture.
+AFC operations are split between client and daemon:
 
-See [Logging Configuration](logging.md#client-application-logging) for how to set up logging in your application.
+**Client operations:**
+- **Seal/open** - Encryption and decryption of data
+- **Loading keys** - Reading keys from SHM for seal/open operations
+
+**Daemon operations:**
+- **Adding/removing keys** - Managing keys in SHM
+- **Generating encapsulated keys** - Creating keys from ephemeral session data
 
 ## What to Log
 
-### Channel Lifecycle Events
+Note: Avoid placing logging in the hot path.
 
-Log channel creation, reception, and deletion at INFO level:
+### Channel Lifecycle Events (INFO level)
 
-```rust
-// On channel creation
-info!(
-    channel_id = %channel.id(),
-    peer_device_id = %peer_id,
-    label_id = %label_id,
-    direction = "send",
-    "afc_channel_created"
-);
+**Channel creation:**
+- `channel_id` - Unique channel identifier
+- `peer_device_id` - Peer device for the channel
+- `label_id` - Label used for the channel
+- `direction` - "send" or "receive"
 
-// On channel reception
-info!(
-    channel_id = %channel.id(),
-    peer_device_id = %peer_id,
-    label_id = %label_id,
-    direction = "receive",
-  "afc_channel_received"
-);
-
-// On channel deletion
-info!(
-    channel_id = %channel.id(),
-    total_messages_sent,
-    total_bytes_sent,
-    total_seal_failures,
-  "afc_channel_deleted"
-);
-```
+**Channel deletion:**
+- `channel_id`
+- `total_messages_sent`
+- `total_bytes_sent`
+- `total_seal_failures`
 
 ### SHM Key Operations
 
-Log SHM key add/remove at DEBUG level (frequent operations):
+**Key add (DEBUG level):**
+- `channel_id`
+- `label_id`
+- `peer_device_id`
+- `shm_path` - Shared memory path
+- `key_index` - Index where key was added
+- `current_key_count` - Total keys in SHM
 
-```rust
-// On successful key add
-debug!(
-    channel_id = %channel_id,
-    label_id = %label_id,
-    peer_device_id = %peer_device_id,
-    shm_path = %shm_path,
-    key_index = key_idx,
-    current_key_count,
-    "afc_shm_key_add"
-);
+**Key remove (DEBUG level):**
+- `channel_id`
+- `key_index` - Index of removed key
+- `remaining_key_count` - Keys remaining in SHM
 
-// On successful key remove
-debug!(
-    channel_id = %channel_id,
-    key_index = key_idx,
-    remaining_key_count,
-    "afc_shm_key_remove"
-);
-```
+**Key add failure (ERROR level):**
+- `channel_id`
+- `label_id`
+- `peer_device_id`
+- `shm_path`
+- `error` - Error description from SHM library
+- `current_keys` - Current key count
+- `max_keys` - Maximum allowed keys
+- `total_add_failures` - Cumulative failures
+- `retry_count` - Number of retries attempted
 
-### SHM Failures
-
-Log SHM operation failures at ERROR level:
-
-```rust
-// On key add failure
-error!(
-    channel_id = %channel_id,
-    label_id = %label_id,
-    peer_device_id = %peer_device_id,
-    shm_path = %shm_path,
-    error_code = ?error.raw_os_error(),
-    error_message = %error,
-    current_keys = stats.keys_added - stats.keys_removed,
-    max_keys = MAX_KEYS,
-    total_add_failures = stats.add_failures,
-    retry_count,
-    "afc_shm_key_add_failed"
-);
-
-// On key remove failure
-error!(
-    channel_id = %channel_id,
-    key_index = key_idx,
-    error_code = ?error.raw_os_error(),
-    error_message = %error,
-    "afc_shm_key_remove_failed"
-);
-```
+**Key remove failure (ERROR level):**
+- `channel_id`
+- `key_index`
+- `error` - Error description from SHM library
 
 ### Seal/Open Operations
 
-Log seal/open operations at **TRACE** level with timing information (very frequent), failures at ERROR:
+**Seal (encrypt) - TRACE level:**
+- `channel_id`
+- `plaintext_len` - Size of plaintext data
+- `ciphertext_len` - Size of encrypted data
+- `seq_num` - Sequence number
+- `duration_us` - Operation duration in microseconds
 
-```rust
-// Seal (encrypt) - TRACE level
-trace!(
-    channel_id = %channel_id,
-    plaintext_len = plaintext.len(),
-    ciphertext_len = ciphertext.len(),
-    seq_num = seq.0,
-    duration_us = duration_us,
-    "afc_seal"
-);
+**Open (decrypt) - TRACE level:**
+- `channel_id`
+- `ciphertext_len` - Size of encrypted data
+- `plaintext_len` - Size of decrypted data
+- `seq_num` - Sequence number
+- `duration_us` - Operation duration in microseconds
 
-// Open (decrypt) - TRACE level
-trace!(
-    channel_id = %channel_id,
-    ciphertext_len = ciphertext.len(),
-    plaintext_len = plaintext.len(),
-    seq_num = seq.0,
-    duration_us = duration_us,
-    "afc_open"
-);
+**Seal/Open failures (ERROR level):**
+- `channel_id`
+- `error` - Error description
+- `plaintext_len` or `ciphertext_len` - Data size
+- `seq_num`
+- `duration_us` - Duration before failure
 
-// Seal failure - ERROR
-error!(
-    channel_id = %channel_id,
-    error = %err,
-    plaintext_len = plaintext.len(),
-    seq_num = seq.0,
-    duration_us = duration_us,
-    "afc_seal_failed"
-);
+**Note:** TRACE logging for seal/open can generate huge volumes in high-throughput scenarios. Use sparingly and only for targeted debugging.
 
-// Open failure - ERROR
-error!(
-    channel_id = %channel_id,
-    error = %err,
-    ciphertext_len = ciphertext.len(),
-    seq_num = seq.0,
-    duration_us = duration_us,
-    "afc_open_failed"
-);
-```
+### Channel Statistics (INFO level)
 
-**Timing:** Duration is recorded in microseconds for both successful and failed operations, enabling performance analysis and detection of crypto operation delays.
-**Note:** TRACE logging for seal/open can generate huge volumes in high-throughput scenarios. Use sparingly.
+Channel statistics should be logged on channel lifecycle events.
 
-### Channel Statistics
+**Fields for channel creation:**
+- `channel_id`
+- `peer_device_id`
+- `label_id`
+- `direction` - "send" or "receive"
 
-Log per-channel statistics periodically or on close at INFO level:
+**Fields for channel close:**
+- `channel_id`
+- `messages_sent` - Total messages sealed
+- `messages_received` - Total messages opened
+- `bytes_sent` - Total plaintext bytes sent
+- `bytes_received` - Total plaintext bytes received
+- `seal_failures` - Count of failed seal operations
+- `open_failures` - Count of failed open operations
+- `keys_added` - Total keys added to SHM
+- `keys_removed` - Total keys removed from SHM
+- `shm_add_failures` - Count of SHM key add failures
 
-## JSON Log Examples
+## Output Format
 
-### Channel Creation
+The JSON format is configured via the tracing subscriber. See [Logging Configuration](logging.md) for setup details.
 
+Example log entry:
 ```json
 {
-  "timestamp": "2026-01-28T10:15:23.456789Z",
-  "level": "INFO",
-  "target": "aranya_client::afc",
-  "fields": {
-    "message": "AFC channel created",
-    "channel_id": "K8lM0nO3pQ5rS7tU9vW1xY3zA5bC9dE2fG4hI6jK8lM",
-    "peer_device_id": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "label_id": "L9mN1oP4qR6sT8uV0wX2yZ4aB6cD8eF0gH2iJ4kL6mN",
-    "direction": "send"
-  }
+   "timestamp":"2026-02-03T16:35:28.139545Z",
+   "level":"INFO",
+   "fields":{
+      "message":"afc channel deleted"
+   },
+   "target":"aranya_daemon::api",
+   "span":{
+      "chan":"LocalChannelId(0)",
+      "component":"daemon_api",
+      "name":"delete_afc_channel"
+   },
+   "spans":[
+      {
+         "component":"daemon",
+         "name":"member_a",
+         "name":"daemon"
+      },
+      {
+         "component":"daemon_api",
+         "name":"api-server"
+      },
+      {
+         "otel.kind":"server",
+         "otel.name":"DaemonApi.delete_afc_channel",
+         "rpc.deadline":"2026-02-03T16:35:38.139432834Z",
+         "rpc.trace_id":"a1b2c3d4e5f6789012345678abcdef01",
+         "name":"RPC"
+      },
+      {
+         "chan":"LocalChannelId(0)",
+         "component":"daemon_api",
+         "name":"delete_afc_channel"
+      }
+   ]
 }
 ```
 
-### SHM Key Add Success
-
-```json
-{
-  "timestamp": "2026-01-28T10:15:23.500000Z",
-  "level": "DEBUG",
-  "target": "aranya_client::afc",
-  "fields": {
-    "message": "SHM key added",
-    "channel_id": "K8lM0nO3pQ5rS7tU9vW1xY3zA5bC9dE2fG4hI6jK8lM",
-    "label_id": "L9mN1oP4qR6sT8uV0wX2yZ4aB6cD8eF0gH2iJ4kL6mN",
-    "peer_device_id": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "shm_path": "/dev/shm/aranya_ch_123",
-    "key_index": 42,
-    "current_key_count": 43
-  }
-}
-```
-
-### SHM Key Add Failure
-
-```json
-{
-  "timestamp": "2026-01-28T10:20:30.789012Z",
-  "level": "ERROR",
-  "target": "aranya_client::afc",
-  "fields": {
-    "message": "Failed to add key to SHM",
-    "channel_id": "K8lM0nO3pQ5rS7tU9vW1xY3zA5bC9dE2fG4hI6jK8lM",
-    "label_id": "L9mN1oP4qR6sT8uV0wX2yZ4aB6cD8eF0gH2iJ4kL6mN",
-    "peer_device_id": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "shm_path": "/dev/shm/aranya_ch_123",
-    "error_code": 13,
-    "error_message": "Permission denied",
-    "current_keys": 45,
-    "max_keys": 1000,
-    "total_add_failures": 1,
-    "retry_count": 3
-  }
-}
-```
-
-### Seal Failure
-
-```json
-{
-  "timestamp": "2026-01-28T10:25:45.123456Z",
-  "level": "ERROR",
-  "target": "aranya_client::afc",
-  "fields": {
-    "message": "Seal operation failed",
-    "channel_id": "K8lM0nO3pQ5rS7tU9vW1xY3zA5bC9dE2fG4hI6jK8lM",
-    "error": "encryption failed: key not found",
-    "plaintext_len": 1024,
-    "seq_num": 42
-  }
-}
-```
-
-### Channel Statistics
-
-```json
-{
-  "timestamp": "2026-01-28T10:30:00.000000Z",
-  "level": "INFO",
-  "target": "aranya_client::afc",
-  "fields": {
-    "message": "AFC channel statistics",
-    "channel_id": "K8lM0nO3pQ5rS7tU9vW1xY3zA5bC9dE2fG4hI6jK8lM",
-    "messages_sent": 1234,
-    "messages_received": 1180,
-    "bytes_sent": 1572864,
-    "bytes_received": 1507328,
-    "seal_failures": 0,
-    "open_failures": 2,
-    "keys_added": 45,
-    "keys_removed": 43,
-    "shm_add_failures": 0
-  }
-}
-```
-
-## Implementation Checklist
-
-- [ ] Add `afc_channel_created` log event with channel_id, peer, label
-- [ ] Add `afc_channel_accepted` log event  
-- [ ] Add `afc_channel_closed` log event with statistics
-- [ ] Add `afc_shm_key_add` log event (DEBUG level)
-- [ ] Add `afc_shm_key_remove` log event (DEBUG level)
-- [ ] Add `afc_shm_key_add_failed` log event with error details
-- [ ] Add `afc_shm_key_remove_failed` log event
-- [ ] Add `afc_seal_failed` log event
-- [ ] Add `afc_open_failed` log event
-- [ ] Implement per-channel statistics tracking
-- [ ] Log channel statistics periodically (every 1000 messages or 60s)
-- [ ] Log channel statistics on close
-- [ ] Add optional seal/open logging at TRACE level
-- [ ] Test SHM permission error scenarios
-- [ ] Test SHM full scenario (max_keys reached)
-- [ ] Test seal/open failure scenarios

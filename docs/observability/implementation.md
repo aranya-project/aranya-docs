@@ -8,6 +8,20 @@ permalink: "/observability/implementation"
 
 This document outlines the phased implementation plan for Aranya observability.
 
+## Logging vs. Metrics Boundary
+
+The roadmap includes two kinds of work:
+
+**Logging existing data** (low effort)
+- Add tracing fields that already exist in scope (IDs, counts, sizes, timestamps).
+- Example: logging `peer_device_id`, `effects_count`, or `bytes_transferred` that are already computed.
+
+**Implementing new metrics** (higher effort)
+- Requires new measurement, tracking, or state that does not exist yet.
+- Example: calculating bandwidth, tracking per-channel success rates, or adding new counters that persist across calls.
+
+If a field is not already available at the logging call site, it is a **new metric** and requires additional code to compute, store, or pass through the call chain.
+
 ## Phase Overview
 
 | Phase | Goal | Status |
@@ -30,8 +44,9 @@ Goal: Establish consistent structured logging with correlation IDs and device/te
 2. **Correlation IDs**
    - Add `correlation_id: String` to all RPC requests
    - Thread through client → daemon → sync
-   - Generate from team_id and device_id: `<team_id>-<device_id>`
-   - Files: `crates/aranya-daemon-api/`, `crates/aranya-daemon/src/api.rs`, `crates/aranya-client/src/client.rs`
+   - Derive from tarpc `rpc.trace_id` for cross-process correlation
+   - Edit Files: `crates/aranya-daemon-api/`, `crates/aranya-daemon/src/api.rs`, `crates/aranya-client/src/client.rs`, `crates/aranya-client/src/util.rs`, `crates/aranya-client/src/team.rs`, `crates/aranya-client/src/device.rs`
+   - New File: `crates/aranya-daemon/src/observability.rs` (to contain the correlation_id handlers)
 
 3. **Error chains**
    - Wrap errors with `.context()` for full causal chain
@@ -40,26 +55,28 @@ Goal: Establish consistent structured logging with correlation IDs and device/te
 
 ## Phase 2: Enhanced Sync Debugging
 
-Goal: Provide comprehensive sync visibility: first command tracking, stall detection, network metrics, topology.
+Goal: Provide comprehensive sync visibility: first command tracking, stall detection, network metrics
 
 ### What Gets Done
 
 1. **First command tracking**
    - Log hash + max_cts of first command sent in each sync
    - Compare on next sync to detect stalls
-   - Files: `crates/aranya-daemon/src/sync/mod.rs`
+   - Edit File: `crates/aranya-daemon/src/sync/mod.rs`
 
 2. **Stall detection**
    - Track per-peer: `last_first_cmd_hash`, `last_first_cmd_max_cts`, `stall_count`
    - Only flag as stall when first command repeats AND new data expected
    - Threshold: 3 consecutive identical first commands → WARNING
-   - Files: `crates/aranya-daemon/src/sync/mod.rs`
+   - Edit File: `crates/aranya-daemon/src/sync/mod.rs`
 
 3. **Network quality metrics**
-   - Measure RTT (round-trip time)
-   - Calculate bandwidth from bytes transferred
-   - Track packet loss (if using QUIC)
-   - Files: `crates/aranya-daemon/src/sync/mod.rs`, `crates/aranya-util/`
+   - Measure RTT (round-trip time) **[new metric]**
+   - Calculate bandwidth from bytes transferred **[new metric]**
+   - Track packet loss (if using QUIC) **[new metric]**
+   - Edit Files: `crates/aranya-daemon/src/sync/mod.rs`, `crates/aranya-util/`
+
+Note: These metrics are on a per-transport basis, some metrics aren't applicable to particular transport types.
 
 ## Phase 3: Policy & AFC
 
@@ -77,12 +94,12 @@ Goal: Enhanced policy and AFC observability with detailed error reporting.
 2. **AFC SHM operation logging**
    - Log all key add/remove operations at DEBUG level
    - Log failures with error codes and context
-   - Track per-channel statistics
+   - Track per-channel statistics **[new metrics]**
    - Files: `crates/aranya-client/src/afc.rs`
 
 3. **AFC failure tracking**
    - Detect SHM permission errors
    - Detect SHM full conditions (max_keys reached)
    - Log seal/open failures with crypto context
-   - Track failure patterns
+   - Track failure patterns **[new metrics]**
    - Files: `crates/aranya-client/src/afc.rs`

@@ -90,6 +90,8 @@ ARANYA_DAEMON=off ./aranya-daemon --config daemon.toml
 
 The `aranya-client` library does not configure logging itself. Applications embedding the client must initialize `tracing_subscriber`.
 
+**C applications:** Only Rust applications can configure `tracing_subscriber` directly. C clients require a C API wrapper to set up logging. The current C API exposes an initialization helper, but it is not as flexible as this spec’s configuration goals.
+
 ### Application Setup
 
 Initialize logging in the application:
@@ -98,7 +100,6 @@ Initialize logging in the application:
 use tracing_subscriber::{prelude::*, EnvFilter};
 use std::io;
 
-fn main() {
     // Initialize tracing subscriber
     tracing_subscriber::registry()
         .with(
@@ -107,12 +108,6 @@ fn main() {
                 .with_filter(EnvFilter::from_env("APP_LOG")),
         )
         .init();
-    
-    // Client library logs are now captured
-    let client = aranya_client::Client::connect(...).await?;
-    let afc = client.afc();
-    // AFC seal/open operations will log
-}
 ```
 
 ### Client Log Filters
@@ -141,6 +136,9 @@ APP_LOG=info,aranya_client::afc=debug ./application
 ```
 
 Option 2: Use RUST_LOG (standard Rust convention)
+
+NOTE: this applies to Rust applications only; C clients need a dedicated logging init API.
+
 ```bash
 # Works well if you follow standard Rust logging conventions
 RUST_LOG=info,aranya_client=debug ./my-application
@@ -216,85 +214,179 @@ tracing_subscriber::registry()
     .init();
 ```
 
-## Log Fields to Include
+## Component-Level Tracing
 
-When adding logging to Aranya code, include these fields where applicable:
+To distinguish where failures occur, use component-level spans organized by architectural layer:
 
-### Common Fields
-```rust
-use tracing::{info, error, instrument};
+```
+API Layer → Component Layer → Sub-component Layer
+```
 
-#[instrument(skip_all, fields(
-    device_id = %device_id,
-    team_id = %team_id,
-))]
-async fn my_operation(...) {
-    info!(
-        duration_ms = start.elapsed().as_millis(),
-        "Operation completed"
-    );
+**Architecture:**
+- **API Layer** - Request validation, authentication (client/daemon IPC APIs)
+- **Component Layer** - Core logic (sync, policy, keystore, AFC)
+- **Sub-component Layer** - Dependencies (SHM, storage, crypto)
+
+### Span Structure
+
+Each span should include a `component` field to identify which architectural layer or subsystem is active. This enables filtering logs by component and quickly identifying where errors occur.
+
+### RPC Trace Correlation
+
+Tarpc provides an `rpc.trace_id` for each request. You can include this value in spans on **both** the caller and receiver to correlate client and daemon logs.
+
+**Recommended field:**
+- `rpc_trace_id` - Use the tarpc `context::current().trace_id` value
+
+**Outcome:**
+- Logs on both sides share the same `rpc_trace_id`
+- Easy cross-process correlation for a single request
+- Use `rpc_trace_id` as the `correlation_id`/`request_id` when logging RPC activity
+
+**Common components:**
+- `daemon` - Top-level daemon
+- `daemon_api` - API request handlers
+- `policy` - Policy evaluation
+- `quic_sync` - QUIC sync operations
+- `sync_manager` - Sync coordination
+- `keystore` - Key management
+- `afc` - Aranya Fast Channels
+
+### Error Attribution in Span Hierarchies
+
+When errors are logged, they occur in the **innermost (active) span**. The singular `span` field at the top level shows exactly which span originated the error:
+
+```json
+{
+  "timestamp": "2026-02-03T16:35:25.142225Z",
+  "level": "ERROR",
+  "fields": {
+    "message": "server unable to respond to sync request from peer",
+    "error": "The connection was closed by the remote endpoint"
+  },
+  "span": {
+    "component": "quic_sync",
+    "name": "serve_connection",
+    "conn_source": "127.0.0.1:50159"
+  },
+  "spans": [
+    {"component": "daemon", "name": "daemon"},
+    {"component": "quic_sync", "name": "sync-server"},
+    {"component": "quic_sync", "name": "serve"},
+    {"component": "quic_sync", "name": "serve_connection"}
+  ]
 }
 ```
 
-### Sync Operations
-```rust
-info!(
-    peer_device_id = %peer.device_id,
-    peer_addr = %peer.addr,
-    duration_ms = elapsed.as_millis(),
-    cmd_count,
-    effects_count,
-    bytes_transferred,
-    ?network_stats,  // Debug format for complex types
-    "Sync completed successfully"
-);
+**Interpreting the error:**
+
+The `span` field identifies where the error originated:
+- **`component: "quic_sync"`** - Network/connection subsystem failed (not API validation or policy evaluation)
+- **`name: "serve_connection"`** - Specific function handling the peer connection
+- **`conn_source: "127.0.0.1:50159"`** - Context showing which peer was involved
+
+The `spans` array shows the complete call path leading to the error:
+```
+daemon → sync-server → serve → serve_connection (error occurred here)
 ```
 
+This makes it immediately clear the error is an infrastructure issue (connection failure) rather than an application-level problem (API validation or policy denial).
+
+## Log Fields to Include
+
+When adding logging to Aranya code, include these structured fields where applicable:
+
+### Event Type (Recommended)
+
+Define a `event_type` field for key observability events. This enables filtering and test assertions without relying on message strings. Could be something like (`sync_timeout`, `policy_denied`, or `afc_shm_add_failed`)
+
+**Benefits:**
+- Log filters can match `event_type` reliably
+- Integration tests can assert on `event_type` without having to use string matches for a string that may change
+
+### Common Fields (All Operations)
+
+- **`component`** - The architectural component (daemon_api, policy, quic_sync, etc.)
+- **`device_id`** - The device performing the operation
+- **`team_id`** / **`graph_id`** - The team/graph being operated on
+- **`duration_ms`** - Operation duration in milliseconds
+- **`message`** - Human-readable operation description
+
+### Sync Operations
+
+- **`peer_device_id`** - Device ID of sync peer
+- **`peer_addr`** - Network address of peer
+- **`cmd_count`** / **`cmd_count_received`** - Number of commands synced
+- **`effects_count`** - Number of effects generated
+- **`bytes_transferred`** - Total bytes sent/received
+- **`first_cmd_hash`** - Hash of first command (for stall detection)
+- **`first_cmd_max_cts`** - Max CTS of first command
+- **`network_stats`** - Optional object containing network quality metrics:
+  - **`rtt_ms`** - Round-trip time in milliseconds
+  - **`bandwidth_mbps`** - Measured bandwidth in megabits per second
+  - **`packet_loss_percent`** - Packet loss percentage (if using QUIC)
+
+### API Operations
+
+- **`operation`** - API method name (create_team, add_member, etc.)
+- **`request_id`** / **`correlation_id`** - For tracing requests across components
+- **`validation_error`** - Specific validation failure (if applicable)
+
+### AFC Operations
+
+- **`channel_id`** - AFC channel identifier
+- **`label_id`** - Label used for the channel
+- **`peer_device_id`** - Peer device for the channel
+- **`plaintext_len`** / **`ciphertext_len`** - Data sizes
+- **`seq_num`** - Sequence number for seal/open operations
+- **`shm_path`** - Shared memory path (for SHM operations)
+- **`key_index`** - Key index in SHM
+- **`current_key_count`** - Number of keys in SHM
+
+### Policy Operations
+
+- **`role_id`** - Role being created/modified
+- **`label_id`** - Label being created/modified
+- **`managing_role_id`** - Role managing the operation
+- **`perm`** - Permission being granted/revoked
+- **`target_role_id`** - Target role for permission operations
+
 ### Error Context
-```rust
-error!(
-    error = %err,
-    device_id = %device_id,
-    operation = "create_channel",
-    retry_count,
-    "Operation failed"
-);
-```
+
+- **`error`** - Error message or description
+- **`error_code`** - Specific error code (if applicable)
+- **`operation`** - Operation that failed
+- **`retry_count`** - Number of retry attempts
+- **`last_successful_sync`** - Timestamp of last success (for recurring failures)
+- **`psk_id`** - PSK identifier (for authentication failures)
+
+### Network/Connection Operations
+
+- **`local_addr`** - Local network address
+- **`remote_addr`** / **`conn_source`** - Remote network address
+- **`timeout_ms`** - Timeout value
+- **`rtt_ms`** - Round-trip time in milliseconds
+- **`bandwidth_mbps`** - Measured bandwidth
 
 ## Best Practices
 
-1. Debug on demand: Use env var to enable debug logging temporarily
-2. Avoid TRACE in production: TRACE can impact performance significantly
-3. Use structured fields: Add `device_id`, `team_id`, `duration_ms` to log entries
-4. Include error context: Log full error chains with `.report()` or `.context()`
+### General Guidelines
 
-## Implementation Checklist
+1. **Debug on demand** - Use environment variables to enable debug logging temporarily without changing config files
+2. **Avoid TRACE in production** - TRACE can significantly impact performance; use only for targeted debugging
+3. **Use structured fields** - Always use typed fields (`device_id = %id`) instead of string formatting
+4. **Include error context** - Log full error chains to show root causes
+5. **Add correlation IDs** - Include request/correlation IDs in RPC calls for distributed tracing
 
-### For Daemon Developers
+### When Adding Logging to Features
 
-- [ ] Add `#[instrument]` macro to key functions (sync, policy evaluation, AFC operations)
-- [ ] Include `device_id` and `team_id` in span fields
-- [ ] Log operation start/end with duration at INFO level
-- [ ] Log failures at ERROR level with full error context
-- [ ] Add correlation_id to RPC request context
-- [ ] Use structured fields (not string formatting)
-- [ ] Test logging with: `ARANYA_DAEMON=info,aranya_daemon::sync=debug ./aranya-daemon`
-- [ ] Verify logs appear in expected format (JSON or text based on config)
-
-### For Client Application Developers
-
-- [ ] Initialize `tracing_subscriber` in main()
-- [ ] Use `EnvFilter::from_env("MY_APP_LOG")` for configuration
-- [ ] Test with: `MY_APP_LOG=aranya_client=debug ./application`
-- [ ] Include correlation_id in RPC calls to daemon
-- [ ] Log AFC operations at appropriate levels (TRACE for seal/open, DEBUG for create/close)
-- [ ] Verify client logs appear (check stderr if not redirected)
-
-### For New Features
-
-- [ ] Add logging at key decision points (success, failure, retries)
-- [ ] Use appropriate log level: ERROR (failures), WARN (degradation), INFO (operations), DEBUG (flow), TRACE (details)
-- [ ] Include timing for operations that matter (duration_ms)
-- [ ] Include context fields: device_id, team_id, peer_id, channel_id, etc.
-- [ ] Document what logs a feature produces
-- [ ] Test with `--enable-debug-logging` or environment variable
+- Log at key decision points: successes, failures, retries
+- Choose appropriate levels:
+  - **ERROR** - Failures requiring attention
+  - **WARN** - Degraded performance or potential issues
+  - **INFO** - Key operations and state changes
+  - **DEBUG** - Detailed operation flow
+  - **TRACE** - Verbose details (avoid in hot paths)
+- Include timing for operations (`duration`) to identify bottlenecks
+- Include relevant context fields (`device_id`, `team_id`, `peer_id`, `channel_id`)
+- Document what logs your feature produces

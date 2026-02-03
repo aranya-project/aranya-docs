@@ -18,22 +18,9 @@ Policy enforcement issues often show up as:
 
 ## What to Log
 
-### Policy Authorization Failures
+### Policy Authorization Failures (ERROR level)
 
-Log all policy denials at ERROR level with full context:
-
-```rust
-error!(
-    action = "create_label",
-    check_failed = "CanCreateLabels",
-    policy_file = "src/policy.md",
-    policy_line = 456,
-    policy_context = "action create_label requires permission CanCreateLabels",
-    device_permissions = ?device_permissions,
-    required_permissions = ["CanCreateLabels"],
-    "Policy authorization failed"
-);
-```
+Log all policy denials with full context:
 
 **Required fields:**
 - `action` - What operation was attempted (e.g., `create_label`, `manage_role`)
@@ -44,89 +31,59 @@ error!(
 - `device_permissions` - Permissions device actually has
 - `required_permissions` - Permissions action requires
 
-### Role Assignment Events
+**Note:** The `policy_line` field requires generating source maps during policy compilation to map runtime checks back to the original policy.md source.
 
-Log role changes at INFO level:
+### Role Assignment Events (INFO level)
 
-```rust
-// On role assignment
-info!(
-    target_device = %target_device_id,
-    role_id = %role_id,
-    assigned_by = %assigning_device_id,
-    permissions = ?role_permissions,
-    "Role assigned to device"
-);
+**Role assignment:**
+- `target_device` - Device receiving the role
+- `role_id` - Role being assigned
+- `assigned_by` - Device performing the assignment
+- `permissions` - Permissions granted by this role
 
-// On role revocation
-info!(
-    target_device = %target_device_id,
-    role_id = %role_id,
-    revoked_by = %revoking_device_id,
-    "Role revoked from device"
-);
-```
+**Role revocation:**
+- `target_device` - Device losing the role
+- `role_id` - Role being revoked
+- `revoked_by` - Device performing the revocation
 
-### Role and Permission Inspection
+### Role and Permission Inspection (DEBUG level)
 
-Log role and permission state at DEBUG level:
+**Role creation:**
+- `role_id` - New role identifier
+- `permissions` - Permissions included in role
+- `owner` - Device creating the role
 
-```rust
-// On role creation
-debug!(
-    role_id = %role_id,
-    permissions = ?permissions,
-    owner = %owner_device_id,
-    "Role created"
-);
+**Device join:**
+- `device_id` - Device joining the team
+- `team_id` - Team being joined
+- `assigned_role` - Initial role assigned
+- `role_permissions` - Permissions from assigned role
 
-// On device join
-debug!(
-    device_id = %device_id,
-    team_id = %team_id,
-    assigned_role = %role_id,
-    role_permissions = ?role_permissions,
-    "Device joined team with role"
-);
+**Role query:**
+- `device_id` - Device being queried
+- `roles` - All roles assigned to device
+- `aggregate_permissions` - Combined permissions from all roles
 
-// On role query
-debug!(
-    device_id = %device_id,
-    roles = ?device_roles,
-    aggregate_permissions = ?all_permissions,
-    "Device role query"
-);
-```
+### Crypto Failures with Policy Context (ERROR level)
 
-### Crypto Failures with Policy Context
+**Signature validation failure:**
+- `device_id` - Local device
+- `team_id` - Team context
+- `command_id` - Command that failed validation
+- `signer_device` - Device that signed the command
+- `error` - Error description
 
-Log cryptographic failures related to policy at ERROR level:
+**Key exchange failure:**
+- `device_id` - Local device
+- `peer_device` - Remote peer
+- `label_id` - Label for the channel
+- `error` - Error description
 
-```rust
-// Signature validation failure
-error!(
-    device_id = %device_id,
-    team_id = %team_id,
-    command_id = %command_id,
-    signer_device = %signer_id,
-    error = "signature validation failed",
-    "Crypto verification failed - command rejected"
-);
+## Output Format
 
-// Key exchange failure
-error!(
-    device_id = %device_id,
-    peer_device = %peer_id,
-    label_id = %label_id,
-    error = "PSK derivation failed",
-    "AFC PSK exchange failed - channels may not work"
-);
-```
+The JSON format is configured via the tracing subscriber. See [Logging Configuration](logging.md) for setup details.
 
-## JSON Log Examples
-
-### Authorization Denied
-
+Example log entry for policy authorization failure:
 ```json
 {
   "timestamp": "2026-01-28T10:20:00.123456Z",
@@ -147,71 +104,3 @@ error!(
 }
 ```
 
-### Role Assignment
-
-```json
-{
-  "timestamp": "2026-01-28T10:15:30.456789Z",
-  "level": "INFO",
-  "target": "aranya_daemon::actions",
-  "fields": {
-    "message": "Role assigned to device",
-    "device_id": "6fKz8vR2yN4mHpXqWtLcE9jD3uBaG1sV7iO5kY0wZxM",
-    "team_id": "A7bC9dE2fG4hI6jK8lM0nO3pQ5rS7tU9vW1xY3zA5bC",
-    "target_device": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "role_id": "R2nO5pQ8sT1uV4wX7yZ0aB3cD6eF9gH2iJ5kL8mN1o",
-    "assigned_by": "6fKz8vR2yN4mHpXqWtLcE9jD3uBaG1sV7iO5kY0wZxM",
-    "permissions": ["CanSync", "CanUseAfc"]
-  }
-}
-```
-
-### Device Roles Query
-
-```json
-{
-  "timestamp": "2026-01-28T10:10:00.789012Z",
-  "level": "DEBUG",
-  "target": "aranya_daemon::actions",
-  "fields": {
-    "message": "Device role query",
-    "device_id": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "roles": [
-      "R2nO5pQ8sT1uV4wX7yZ0aB3cD6eF9gH2iJ5kL8mN1o"
-    ],
-    "aggregate_permissions": [
-      "CanSync",
-      "CanUseAfc"
-    ]
-  }
-}
-```
-
-### Crypto Verification Failure
-
-```json
-{
-  "timestamp": "2026-01-28T10:25:15.123456Z",
-  "level": "ERROR",
-  "target": "aranya_daemon::sync",
-  "fields": {
-    "message": "Command signature verification failed",
-    "device_id": "6fKz8vR2yN4mHpXqWtLcE9jD3uBaG1sV7iO5kY0wZxM",
-    "team_id": "A7bC9dE2fG4hI6jK8lM0nO3pQ5rS7tU9vW1xY3zA5bC",
-    "command_id": "C4dE7fG0hI3jK6lM9nO2pQ5rS8tU1vW4xY7zA0bC3d",
-    "signer_device": "8gH4jK9mL2nP5qR7sT0uV3wX6yZ1aB4cD7eF0gH3iJ6",
-    "error": "signature validation failed"
-  }
-}
-```
-
-## Implementation Checklist
-
-- [ ] Add policy evaluation logging for all authorization failures
-- [ ] Include `check_failed`, `policy_line`, and permission details
-- [ ] Log role assignment/revocation with full context
-- [ ] Add device role query logging
-- [ ] Generate policy.md source maps during compilation
-- [ ] Log policy_line numbers in all policy-related errors
-- [ ] Add crypto verification logging with policy context
-- [ ] Create integration test for policy error logging
