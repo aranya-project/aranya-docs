@@ -25,15 +25,6 @@ This test suite addresses these gaps by providing a framework for large-scale co
 
 ## Definitions
 
-### Terms
-
-- **Node**: A single Aranya daemon instance with its associated client
-- **Label**: A named marker that can be assigned to a node's graph state, used to track convergence
-- **Convergence**: The state where all nodes in the network have received a specific label
-- **Ring Topology**: A network topology where each node connects to exactly two neighbors, forming a circular structure
-- **Bidirectional Ring**: A ring topology where sync can occur in both directions (clockwise and counter-clockwise)
-- **Convergence Time**: The elapsed time from when a label is assigned until all nodes have received it
-
 ### Graph State
 
 Each node maintains an Aranya command graph. Convergence is tracked using labels: a label is assigned to the source node's graph, and convergence is achieved when all nodes have received that label (accounting for merge commands created during synchronization).
