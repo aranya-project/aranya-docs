@@ -10,19 +10,12 @@ permalink: "/vet/"
 
 [Cargo Vet](https://mozilla.github.io/cargo-vet/) is a tool for verifying that third-party Rust dependencies have been audited by trusted entities. This document describes our internal development process for auditing dependencies using cargo-vet.
 
-### Why We Use Cargo Vet
+### Defending Against Supply Chain Attacks
 
-- Defense against [supply chain attacks](#supply-chain-attack) ([typosquatting](#typosquatting), compromised updates, account takeovers)
-- Prevents dependencies from silently changing without review
-- Forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency)
-- Each dependency increases attack surface, audit burden, and potential for forced patch releases
-
-### How We Defend Against Supply Chain Attacks
-
-Our audit process uses multiple layers of defense:
+[Supply chain attacks](#supply-chain-attack) target the software development process through [typosquatting](#typosquatting), compromised updates, and account takeovers. Each dependency increases attack surface, audit burden, and potential for forced patch releases. Our audit process defends against these threats through multiple layers:
 
 - **Version pinning** - All dependencies are pinned to specific versions in `Cargo.lock`, preventing automatic updates. Any version change requires an explicit commit and must pass cargo-vet checks.
-- **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged.
+- **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged. This forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency).
 - **Human review** - Audits require manual code inspection, not just automated checks. Reviewers verify audit quality and can request re-audits.
 - **Trusted imports** - We import audits from other trusted organizations, leveraging community review efforts while maintaining our own verification standards.
 
