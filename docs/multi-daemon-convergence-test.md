@@ -28,14 +28,15 @@ This test suite addresses these gaps by providing a framework for large-scale co
 ### Terms
 
 - **Node**: A single Aranya daemon instance with its associated client
-- **Convergence**: The state where all nodes in the network have received and processed the same set of commands
+- **Label**: A named marker that can be assigned to a node's graph state, used to track convergence
+- **Convergence**: The state where all nodes in the network have received a specific label
 - **Ring Topology**: A network topology where each node connects to exactly two neighbors, forming a circular structure
 - **Bidirectional Ring**: A ring topology where sync can occur in both directions (clockwise and counter-clockwise)
-- **Convergence Time**: The elapsed time from when a command is issued until all nodes have received it
+- **Convergence Time**: The elapsed time from when a label is assigned until all nodes have received it
 
 ### Graph State
 
-Each node maintains an Aranya command graph. Convergence is achieved when all nodes have identical graph heads (accounting for merge commands created during synchronization).
+Each node maintains an Aranya command graph. Convergence is tracked using labels: a label is assigned to the source node's graph, and convergence is achieved when all nodes have received that label (accounting for merge commands created during synchronization).
 
 ## Test Architecture
 
@@ -81,8 +82,8 @@ Tracks convergence state across all nodes.
 
 ```rust
 struct ConvergenceTracker {
-    /// Expected graph state (set of command addresses)
-    expected_commands: HashSet<Address>,
+    /// The label used to track convergence
+    convergence_label: Label,
     /// Per-node convergence status
     node_status: Vec<ConvergenceStatus>,
     /// Timestamps for convergence measurements
@@ -90,11 +91,9 @@ struct ConvergenceTracker {
 }
 
 struct ConvergenceStatus {
-    /// Commands received by this node
-    received_commands: HashSet<Address>,
-    /// Whether this node has converged
-    converged: bool,
-    /// Time when convergence was achieved
+    /// Whether this node has received the convergence label
+    has_label: bool,
+    /// Time when the label was received
     convergence_time: Option<Instant>,
 }
 ```
@@ -223,23 +222,23 @@ Sync peer configuration MUST complete before the convergence test phase.
 
 #### CONV-001
 
-The test MUST issue a command from a designated source node.
+The test MUST assign a label to the source node's graph to mark the start of convergence testing.
 
 #### CONV-002
 
-The default source node for command issuance MUST be node 0.
+The default source node for label assignment MUST be node 0.
 
 #### CONV-003
 
-The test MUST track when each node receives the issued command.
+The test MUST track when each node receives the convergence label.
 
 #### CONV-004
 
-Convergence MUST be defined as all nodes having received all expected commands.
+Convergence MUST be defined as all nodes having received the convergence label.
 
 #### CONV-005
 
-The test MUST measure the total convergence time from command issuance to full convergence.
+The test MUST measure the total convergence time from label assignment to full convergence.
 
 #### CONV-006
 
@@ -253,7 +252,7 @@ The test MUST report which nodes failed to converge if the timeout is reached.
 
 #### VERIFY-001
 
-Each node's graph state MUST be queryable to determine received commands.
+Each node's graph state MUST be queryable to determine whether it has received the convergence label.
 
 #### VERIFY-002
 
@@ -265,13 +264,13 @@ The polling interval MUST be configurable (default: 250 milliseconds).
 
 #### VERIFY-004
 
-A node MUST be considered converged when it has received all expected commands.
+A node MUST be considered converged when it has received the convergence label.
 
 ### Performance Measurement Requirements
 
 #### PERF-001
 
-The test MUST record the timestamp when the command is issued.
+The test MUST record the timestamp when the convergence label is assigned.
 
 #### PERF-002
 
@@ -356,11 +355,11 @@ async fn test_ring_convergence() -> Result<()> {
     ring.configure_ring_topology(team_id).await?;
 
     //= multi-daemon-convergence-test.md#CONV-001
-    //# The test MUST issue a command from a designated source node.
-    ring.issue_test_command(0, team_id).await?;
+    //# The test MUST assign a label to the source node's graph to mark the start of convergence testing.
+    ring.assign_convergence_label(0, team_id).await?;
 
     //= multi-daemon-convergence-test.md#CONV-004
-    //# Convergence MUST be defined as all nodes having received all expected commands.
+    //# Convergence MUST be defined as all nodes having received the convergence label.
     ring.wait_for_convergence().await?;
 
     //= multi-daemon-convergence-test.md#PERF-003
@@ -455,7 +454,7 @@ impl RingCtx {
 ```rust
 impl RingCtx {
     //= multi-daemon-convergence-test.md#CONV-003
-    //# The test MUST track when each node receives the issued command.
+    //# The test MUST track when each node receives the convergence label.
     async fn wait_for_convergence(&mut self) -> Result<()> {
         let start = Instant::now();
 
@@ -480,7 +479,7 @@ impl RingCtx {
             self.check_all_nodes_convergence().await?;
 
             //= multi-daemon-convergence-test.md#VERIFY-004
-            //# A node MUST be considered converged when it has received all expected commands.
+            //# A node MUST be considered converged when it has received the convergence label.
             if self.tracker.all_converged() {
                 break;
             }
@@ -502,20 +501,14 @@ impl RingCtx {
             }
 
             //= multi-daemon-convergence-test.md#VERIFY-001
-            //# Each node's graph state MUST be queryable to determine received commands.
-            let commands = node.client
+            //# Each node's graph state MUST be queryable to determine whether it has received the convergence label.
+            let has_label = node.client
                 .team(self.team_id)
-                .query_commands()
+                .has_label(&self.tracker.convergence_label)
                 .await?;
 
-            let received: HashSet<_> = commands.iter()
-                .map(|c| c.address)
-                .collect();
-
-            self.tracker.node_status[i].received_commands = received.clone();
-
-            if received.is_superset(&self.tracker.expected_commands) {
-                self.tracker.node_status[i].converged = true;
+            if has_label {
+                self.tracker.node_status[i].has_label = true;
                 self.tracker.node_status[i].convergence_time = Some(Instant::now());
             }
         }
@@ -535,7 +528,7 @@ impl RingCtx {
         let times: Vec<_> = self.tracker.node_status
             .iter()
             .filter_map(|s| s.convergence_time)
-            .map(|t| t.duration_since(self.tracker.timestamps.command_issued))
+            .map(|t| t.duration_since(self.tracker.timestamps.label_assigned))
             .collect();
 
         if times.is_empty() {
@@ -579,9 +572,9 @@ impl RingCtx {
 
 In a bidirectional ring of N nodes:
 
-1. Node 0 issues a command at time T0
-2. The command propagates in both directions (clockwise and counter-clockwise)
-3. The antipode node receives the command last from both directions
+1. Node 0 assigns the convergence label at time T0
+2. The label propagates in both directions (clockwise and counter-clockwise)
+3. The antipode node receives the label last from both directions
 4. Merge commands are created when paths converge
 
 ### Theoretical Convergence Time
@@ -592,7 +585,7 @@ For a ring of N nodes with sync interval S:
 
 Actual convergence time will be higher due to:
 - Sync timing variability
-- Command processing time
+- Label processing time
 - Merge command creation and propagation
 
 ### Success Criteria
@@ -601,7 +594,7 @@ The test passes when:
 1. All nodes successfully initialize
 2. Team configuration propagates to all nodes
 3. Ring topology is correctly configured
-4. Test command reaches all nodes
+4. Convergence label reaches all nodes
 5. Convergence is achieved within the timeout
 6. No errors are reported during synchronization
 
