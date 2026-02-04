@@ -10,14 +10,24 @@ permalink: "/vet/"
 
 [Cargo Vet](https://mozilla.github.io/cargo-vet/) is a tool for verifying that third-party Rust dependencies have been audited by trusted entities. This document describes our internal development process for auditing dependencies using cargo-vet.
 
-Install cargo-vet with `cargo install cargo-vet`. For commands and detailed usage, run `cargo vet --help` or see the [official documentation](https://mozilla.github.io/cargo-vet/).
-
 ### Why We Use Cargo Vet
 
 - Defense against [supply chain attacks](#supply-chain-attack) ([typosquatting](#typosquatting), compromised updates, account takeovers)
 - Prevents dependencies from silently changing without review
 - Forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency)
 - Each dependency increases attack surface, audit burden, and potential for forced patch releases
+
+## Getting Started
+
+Install cargo-vet with `cargo install cargo-vet`. For commands and detailed usage, run `cargo vet --help` or see the [official documentation](https://mozilla.github.io/cargo-vet/).
+
+### Repository Setup
+
+New repositories should be initialized with `cargo vet init`. After initialization:
+
+1. Configure third-party audit imports (see [aranya config.toml](https://github.com/aranya-project/aranya/blob/main/supply-chain/config.toml) for an example, and the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml) for additional sources)
+2. Run `cargo vet` to fetch imported audits
+3. Audit or exempt remaining dependencies not covered by imports
 
 ## When Audits Are Required
 
@@ -28,25 +38,7 @@ Install cargo-vet with `cargo install cargo-vet`. For commands and detailed usag
 
 When patching a vulnerability, consider whether a patch release of our own crates is needed. Even if our code is not directly impacted, downstream dependencies of our crates may be affected.
 
-### Exemptions and Trust
-
-For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—track them and work to reduce the list over time.
-
-You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
-- Well-known external maintainers (e.g., Microsoft for Windows crates)
-- Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
-
-For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
-
-## Repository Setup
-
-New repositories should be initialized with `cargo vet init`. After initialization:
-
-1. Configure third-party audit imports (see [aranya config.toml](https://github.com/aranya-project/aranya/blob/main/supply-chain/config.toml) for an example, and the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml) for additional sources)
-2. Run `cargo vet` to fetch imported audits
-3. Audit or exempt remaining dependencies not covered by imports
-
-## Workflow Example
+## Workflow
 
 This example shows the typical commands used when auditing dependencies:
 
@@ -91,6 +83,16 @@ interface allows caller to manage file I/O.
 ### Using AI Tools
 
 AI tools can help summarize crates and search for patterns, but they are **not a substitute for manual review**. Audit notes should reflect your manual review, not AI-generated summaries. The responsibility remains with the human reviewer.
+
+## Exemptions and Trust
+
+For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—track them and work to reduce the list over time.
+
+You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
+- Well-known external maintainers (e.g., Microsoft for Windows crates)
+- Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
+
+For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
 
 ## Pull Request Responsibilities
 
