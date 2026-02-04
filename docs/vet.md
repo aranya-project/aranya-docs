@@ -10,27 +10,38 @@ permalink: "/vet/"
 
 [Cargo Vet](https://mozilla.github.io/cargo-vet/) is a tool for verifying that third-party Rust dependencies have been audited by trusted entities. It helps ensure supply chain security by tracking which crates have been reviewed and by whom.
 
-This document describes our process for auditing dependencies, recording findings, and leveraging third-party audits from trusted organizations.
+This document describes our process for auditing dependencies, documenting audit results, and leveraging third-party audits from trusted organizations.
 
 ### Why We Use Cargo Vet
 
-**Defense against supply chain attacks.** Third-party dependencies are a significant attack vector. Malicious code can be introduced through compromised crate updates, typosquatting, or maintainer account takeovers. By auditing dependencies, we verify that the code we're pulling into our projects is safe and does what it claims to do.
+**Defense against [supply chain attacks](#supply-chain-attack).** Third-party dependencies are a significant attack vector. Malicious code can be introduced through compromised crate updates, [typosquatting](#typosquatting), or maintainer account takeovers. By auditing dependencies, we verify that the code we're pulling into our projects is safe and does what it claims to do.
 
-**Awareness of our dependency footprint.** Cargo vet forces us to be conscious of what dependencies we're using and when they're being updated. Every new dependency or version change requires explicit action—either an audit, an exemption, or importing a trusted third-party audit. This prevents dependencies from silently changing without review.
+**Awareness of our dependency footprint.** Cargo vet forces us to be conscious of what dependencies we're using and when they're being updated. Every new dependency or version change requires explicit action: either an audit, an exemption, or importing a trusted third-party audit. This prevents dependencies from silently changing without review.
 
 **High bar for adding new dependencies.** We should only add new dependencies if they are truly needed. Each dependency:
 - Increases our attack surface
+- Increases the chance that a reported vulnerability may force a patch release
 - Adds audit burden for the team
-- May introduce transitive dependencies we also need to audit
+- May introduce [transitive dependencies](#transitive-dependency) we also need to audit
 - Creates ongoing maintenance work as versions update
 
 Before adding a new dependency, consider:
 - Can this functionality be implemented reasonably in-house?
 - Is the dependency well-maintained and from a trusted source?
-- How many transitive dependencies does it bring in?
+- How many [transitive dependencies](#transitive-dependency) does it bring in?
 - Is the crate widely used and already audited by organizations we trust?
 
 The goal is not to avoid all dependencies, but to make deliberate, informed decisions about what code we trust to run in our systems.
+
+## Installation
+
+Install cargo-vet via cargo:
+
+```bash
+cargo install cargo-vet
+```
+
+Run `cargo vet --help` for a full list of available commands. This spec is not intended to fully document cargo-vet. The spec is intended to document our internal development process that utilizes cargo-vet.
 
 ## When Audits Are Required
 
@@ -38,40 +49,21 @@ You will need to audit dependencies in the following scenarios:
 
 ### Adding a New Dependency
 
-When you add a new crate to `Cargo.toml`, CI will fail until the dependency is audited or exempted. For new dependencies:
-
-1. Check if a third-party audit already exists (cargo-vet will suggest imports)
-2. If not, perform a full audit using `cargo vet inspect`
-3. Certify with `cargo vet certify <crate> <version>`
+When you add a new crate to `Cargo.toml`, CI will fail until the dependency is audited or exempted. Follow the [Audit Workflow](#audit-workflow) to review and certify the new crate.
 
 **Alternative: Exemption for trusted publishers**
 
-For dependencies from widely-known, trusted publishers (e.g., `serde`, `tokio`, `rand`) that release frequently, you may add an exemption instead of auditing each version:
-
-```bash
-cargo vet add-exemption some-crate 1.0.0
-```
-
-This is appropriate when:
-- The crate is from a well-established maintainer or organization
+For dependencies from well-established maintainers or organizations, you may add an exemption instead of auditing each version. This is appropriate when:
 - The crate is widely used in the Rust ecosystem
 - Auditing every release would be impractical due to release frequency
 - The crate is already trusted by organizations whose audits we import
-
-You can later replace exemptions with trusted publisher entries for ongoing trust:
-
-```bash
-cargo vet trust some-crate some-publisher
-```
+- The crate is developed internally and goes through our own peer review process
 
 ### Updating a Dependency Version
 
-When you update an existing dependency to a new version, you need a delta audit covering the version change:
+When you update an existing dependency to a new version, you need a [relative audit](#relative-audit) covering the version change. Follow the [Audit Workflow](#audit-workflow) using `cargo vet diff` to review only the changes between versions.
 
-1. Review the changes using `cargo vet diff <crate> <old-version> <new-version>`
-2. Certify the delta with `cargo vet certify <crate> <old-version> <new-version>`
-
-If there's no existing audit chain to the new version, you may need multiple delta audits or a full audit of the new version.
+If there's no existing audit chain to the new version, you may need multiple [relative audits](#relative-audit) or a full audit of the new version.
 
 ### Patching a Reported Vulnerability
 
@@ -97,7 +89,7 @@ To resolve:
 3. Run `cargo vet check` to see what audits are needed for the new version
 4. Prioritize the audit since this is a security-critical update
 5. Review the diff carefully, paying attention to the security fix and any other changes
-6. Certify the delta and reference the advisory in the audit notes:
+6. Certify the diff and reference the advisory in the audit notes:
    ```toml
    [[audits.some-crate]]
    who = "Developer <dev@example.com>"
@@ -116,29 +108,15 @@ cargo audit
 cargo make security
 ```
 
-**Consider a patch release:** When patching a vulnerability in a dependency, consider whether a patch release of our own crates is needed. Downstream users of our crates may be affected by the same vulnerability and should be notified or provided with an updated version that includes the fix.
+**Consider a patch release:** When patching a vulnerability in a dependency, consider whether a patch release of our own crates is needed. Even if our code is not directly impacted by the vulnerability, downstream dependencies of our crates may use the vulnerable dependency in a way that is affected.
 
 ### Transitive Dependency Updates
 
-When a direct dependency updates its own dependencies, you may need to audit those transitive updates. Run `cargo vet check` after any `Cargo.lock` changes to identify gaps.
+When a direct dependency updates its own dependencies, you may need to audit those [transitive](#transitive-dependency) updates. Run `cargo vet check` after any `Cargo.lock` changes to identify gaps.
 
 ### Removing a Dependency
 
-When you remove a dependency from the project, run `cargo vet prune` to clean up stale audit entries and exemptions:
-
-```bash
-cargo vet prune
-```
-
-This keeps the `supply-chain/` files clean and removes entries for crates no longer in use.
-
-## Installation
-
-Install cargo-vet via cargo:
-
-```bash
-cargo install cargo-vet
-```
+When you remove a dependency from the project, run `cargo vet prune` to clean up stale audit entries and exemptions. See [Pruning Unused Entries](#pruning-unused-entries) for more details on when to run this command.
 
 ## Repository Setup
 
@@ -158,9 +136,19 @@ This creates the `supply-chain/` directory with the following files:
 
 The `init` command automatically adds all current dependencies to the exemptions list, allowing teams to address the backlog incrementally rather than blocking on a full audit.
 
+After initialization:
+
+1. **Configure third-party audit imports** - Add imports from trusted organizations to `config.toml` (see [Configuring Third-Party Imports](#configuring-third-party-imports)). This reduces the number of crates you need to audit yourself.
+
+2. **Run `cargo vet`** - This fetches the imported audits and shows which dependencies still need to be audited or exempted.
+
+3. **Audit or exempt remaining dependencies** - Since no audits exist yet for the repository, you must [certify](#certifying-a-crate) or exempt every dependency not covered by imports. This is a significant initial effort, but subsequent audits will only cover new or updated dependencies.
+
 ### File Management: Generated vs Manual
 
 **Developers typically do not need to manually edit these files.** The cargo-vet commands handle file modifications automatically. However, understanding what each file contains helps when reviewing changes.
+
+All files in the `supply-chain/` directory are TOML format. Run `cargo vet fmt` to ensure consistent formatting after any manual edits.
 
 | File | Generated By | Manual Editing |
 |------|--------------|----------------|
@@ -182,56 +170,12 @@ You may manually edit `config.toml` to add imports or adjust policy settings, bu
 
 **imports.lock** - Cache of fetched third-party audits. Automatically generated and updated when you run `cargo vet`. Never edit this file manually; it will be regenerated.
 
-**Typical workflow:**
-```bash
-# These commands modify the files for you
-cargo vet certify some-crate 1.0.0      # Updates audits.toml
-cargo vet add-exemption other-crate 2.0.0  # Updates config.toml
-cargo vet trust crate-name publisher    # Updates audits.toml
-cargo vet prune                         # Cleans up both files
-cargo vet fmt                           # Formats all files consistently
-```
+See the [Audit Workflow](#audit-workflow) for the complete process. All changes to `supply-chain/` files should be committed to version control along with the code changes that triggered them, so they can be reviewed together in a PR.
 
-All changes to `supply-chain/` files should be committed to version control along with the code changes that triggered them.
-
+<a id="configuring-third-party-imports"></a>
 ### Configuring Third-Party Imports
 
-We leverage audits from trusted third parties to reduce duplication of effort. The aranya repository imports audits from the following trusted organizations:
-
-```toml
-[imports.actix]
-url = "https://raw.githubusercontent.com/actix/supply-chain/main/audits.toml"
-
-[imports.aranya-core]
-url = "https://raw.githubusercontent.com/aranya-project/aranya-core/refs/heads/main/supply-chain/audits.toml"
-
-[imports.bytecode-alliance]
-url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
-
-[imports.cargo-vet]
-url = "https://raw.githubusercontent.com/mozilla/cargo-vet/refs/heads/main/supply-chain/audits.toml"
-
-[imports.embark]
-url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
-
-[imports.fermyon]
-url = "https://raw.githubusercontent.com/fermyon/spin/main/supply-chain/audits.toml"
-
-[imports.google]
-url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
-
-[imports.google-rust-crate-audits]
-url = "https://raw.githubusercontent.com/google/rust-crate-audits/main/audits.toml"
-
-[imports.isrg]
-url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
-
-[imports.mozilla]
-url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
-
-[imports.zcash]
-url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
-```
+We leverage audits from trusted third parties to reduce duplication of effort. See the [aranya config.toml](https://github.com/aranya-project/aranya/blob/main/supply-chain/config.toml) for an example of how we configure imports from trusted organizations like Mozilla, Google, and others.
 
 You can discover additional trusted audit sources in the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml).
 
@@ -243,7 +187,7 @@ Run `cargo vet` after adding imports to fetch and cache the audit data.
 
 For crates published by your organization, you can trust all versions from a specific publisher rather than auditing each release individually. This is appropriate when:
 
-- The crates are developed and reviewed internally
+- The crates are developed and reviewed internally, with security controls preventing unreviewed code from being merged into protected branches that are released to crates.io
 - Publishing is done through a trusted CI/CD pipeline
 - The publisher account is secured (e.g., a bot account with restricted access)
 
@@ -260,32 +204,12 @@ cargo vet trust --all aranya-project-bot
 This adds `[[trusted.*]]` entries to `audits.toml` for each crate:
 
 ```toml
-[[trusted.aranya-crypto]]
+[[trusted.some-crate]]
 criteria = "safe-to-deploy"
 user-id = 293722 # aranya-project-bot
 start = "2024-10-16"
 end = "2030-12-19"
-
-[[trusted.aranya-runtime]]
-criteria = "safe-to-deploy"
-user-id = 293722 # aranya-project-bot
-start = "2024-10-16"
-end = "2030-12-19"
-
-[[trusted.spideroak-crypto]]
-criteria = "safe-to-deploy"
-user-id = 293722 # aranya-project-bot
-start = "2025-01-23"
-end = "2026-06-13"
 ```
-
-The trusted crates include:
-- `aranya-crypto`, `aranya-crypto-derive`, `aranya-crypto-ffi`
-- `aranya-runtime`, `aranya-client`, `aranya-daemon`, `aranya-daemon-api`
-- `aranya-policy-*` (ast, compiler, derive, lang, module, vm, etc.)
-- `aranya-fast-channels`, `aranya-buggy`, `aranya-trouble`
-- `spideroak-crypto`, `spideroak-crypto-derive`, `spideroak-base58`
-- And other internal crates
 
 #### Trust Entry Fields
 
@@ -333,20 +257,14 @@ To see which dependencies need to be audited:
 cargo vet check
 ```
 
-If all dependencies are covered by audits or exemptions, the check passes. If there are gaps, cargo-vet provides detailed output showing:
+If all dependencies are covered by audits or exemptions, the check passes. If there are gaps, cargo-vet provides detailed output showing which crates need auditing and suggested actions to resolve gaps.
 
-- Which crates need auditing
-- Suggested actions to resolve gaps (marked as "Certain" or "Speculative")
-- Available third-party audits that could fill gaps
+Suggestions are categorized as:
 
-### Understanding Check Output
+- **Certain** - Actions that will definitely resolve the audit gap (e.g., a specific crate version needs to be audited)
+- **Speculative** - Actions that may help but cargo-vet cannot guarantee they will fully resolve the gap (e.g., importing audits from a third party that might cover the crate)
 
-When `cargo vet check` fails, the output categorizes suggestions:
-
-- **Certain** - Actions that will definitely resolve the issue
-- **Speculative** - Actions that may help but aren't guaranteed
-
-Address issues top-down, starting with the first suggestion.
+Address issues starting with the "Certain" suggestions first.
 
 ### Checking for Backlog Items
 
@@ -373,7 +291,7 @@ Cargo-vet uses two built-in criteria:
 **safe-to-deploy** - The crate is safe for production use handling untrusted input. This implies safe-to-run and additionally requires:
 - Reviewers must fully reason about the behavior of all unsafe blocks and powerful imports
 - Attackers must not be able to manipulate runtime behavior in exploitable or surprising ways
-- For code-generating crates (build dependencies, proc macros), reasonable usage must output code meeting the above criteria
+- For code-generating crates ([build dependencies](#build-script), [proc macros](#proc-macro)), reasonable usage must output code meeting the above criteria
 
 For most dependencies, use `safe-to-deploy`.
 
@@ -400,20 +318,11 @@ For incremental reviews when updating a dependency:
 cargo vet diff <crate> <old-version> <new-version>
 ```
 
-This shows only the changes between versions, which is much faster than reviewing the entire crate when updating from a previously-audited version.
-
-Example workflow when updating a dependency:
-
-```bash
-# See what changed
-cargo vet diff serde 1.0.193 1.0.195
-
-# After review, certify the delta
-cargo vet certify serde 1.0.193 1.0.195
-```
+This opens a web browser to [Sourcegraph](https://sourcegraph.com/) showing only the changes between versions, which is much faster than reviewing the entire crate when updating from a previously-audited version.
 
 ## Recording Audits
 
+<a id="certifying-a-crate"></a>
 ### Certifying a Crate
 
 After reviewing a crate, record the audit:
@@ -422,11 +331,17 @@ After reviewing a crate, record the audit:
 # Full audit of a specific version
 cargo vet certify <crate> <version>
 
-# Delta audit between versions
+# [Relative audit](#relative-audit) between versions
 cargo vet certify <crate> <old-version> <new-version>
 ```
 
-The command prompts for criteria and notes. Always provide meaningful notes explaining the rationale.
+When you run `cargo vet certify`, it will interactively:
+- Suggest the appropriate criteria based on how the crate is used
+- Display the criteria definition as a reminder of what to verify
+- Prompt you to enter notes documenting your review
+- Automatically remove any exemption that's no longer needed
+
+Always provide meaningful notes explaining the rationale.
 
 ### Audit Entry Format
 
@@ -442,15 +357,6 @@ Reviewed serialization logic. No unsafe code in public API paths.
 All unsafe blocks are well-documented and handle edge cases correctly.
 No network access or filesystem operations outside of user-provided writers.
 """
-
-[[audits.tokio]]
-who = "Bob Reviewer <bob@example.com>"
-criteria = "safe-to-deploy"
-delta = "1.35.0 -> 1.36.0"
-notes = """
-Minor release with bug fixes. Reviewed changes to task scheduler.
-No new unsafe code. Memory ordering changes are correct.
-"""
 ```
 
 ### Writing Effective Audit Notes
@@ -461,88 +367,21 @@ Notes should document the following key aspects:
 2. **Network access** - Any networking code present
 3. **File I/O** - Any filesystem operations and their scope
 4. **Key findings** - Notable patterns or areas of concern
+5. **Relevance to our usage** - Whether areas of concern (e.g., specific APIs or features) are actually used by our code
 
 When certifying, cargo-vet will prompt you with the criteria definition reminding you what to verify. For `safe-to-deploy`, you must "review enough to fully reason about the behavior of all unsafe blocks and usage of powerful imports."
 
-Example notes from real audits:
+Example audit note:
 
 ```toml
-# Parser/encoder crate - document unsafe, network, and file I/O status
-[[audits.asn1-rs]]
+[[audits.some-crate]]
 who = "Developer <dev@example.com>"
 criteria = "safe-to-deploy"
-version = "0.7.1"
+version = "1.0.0"
 notes = """
-Parser/encoder for ASN.1 BER/DER data. Unsafe code is forbidden.
-No networking code. Reader/writer interface provided for
-serializing/deserializing types to/from files.
-"""
-
-# Proc macro crate - note compile-time execution
-[[audits.asn1-rs-derive]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-version = "0.6.0"
-notes = "Derive macros for asn1-rs. No unsafe, networking, or file I/O code."
-
-# Crate with documented unsafe
-[[audits.deranged]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-delta = "0.4.0 -> 0.5.5"
-notes = """
-Improvements to API ergonomics. Adds a DefaultOutput trait.
-Documented use of unsafe code. No network or file I/O code.
-"""
-
-# Data encoding crate - note where unsafe is used
-[[audits.data-encoding]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-version = "2.9.0"
-notes = """
-Data encoding such as base64. No network or file I/O code.
-Unsafe is used for direct buffer manipulation when encoding.
-"""
-
-# Certificate/crypto related crate
-[[audits.x509-parser]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-version = "0.18.0"
-notes = """
-X.509 parser. Unsafe code forbidden. We rely on PEM parsing for
-the certgen tool. No networking or file I/O code.
-"""
-
-# System interface crate - more thorough notes needed
-[[audits.sysinfo]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-version = "0.36.1"
-notes = """
-This crate does what it says, using a lot of system API calls
-(some unofficially documented; for example, Windows doesn't publicly
-provide a way to get info from other processes so it has to use ntapi).
-It's segmented well so only the code for the platform being compiled
-for gets added. This does use a lot of unsafe for the above reason of
-needing to make a bunch of system API calls, some of which are calling
-into other languages like Objective-C, but I didn't see anything
-obviously malicious or incorrect.
-"""
-
-# Serialization crate with unsafe for performance
-[[audits.postcard]]
-who = "Developer <dev@example.com>"
-criteria = "safe-to-deploy"
-version = "1.1.3"
-notes = """
-I have audited both the 1.1.1 codebase, as well as the 1.1.3 delta.
-Most changes were nominal, this crate does what it says on the tin.
-There is a handful of unsafe, but to my knowledge it's both commented
-to explain the rationale and seems safe on first glance, mostly used
-to remove bounds checks to make it run faster since it's basically
-a compression library.
+Parser/encoder library. Contains documented unsafe code for buffer
+manipulation during encoding. No networking code. Reader/writer
+interface allows caller to manage file I/O.
 """
 ```
 
@@ -610,7 +449,7 @@ Use `suggest = false` for exemptions you're not ready to address.
 
 ### Recording Violations
 
-If you discover a crate version that fails criteria:
+If you discover a crate version that fails criteria, communicate with the team so it can be evaluated before recording a violation.
 
 ```bash
 cargo vet record-violation <crate> <version>
@@ -626,14 +465,11 @@ When auditing a crate, systematically check each of these areas and document you
 
 #### 1. Unsafe Code
 
-Search for `unsafe` blocks and evaluate each one:
+**Searching for patterns:** When reviewing via Sourcegraph (opened by `cargo vet diff`), use Sourcegraph's search bar or your browser's find function (Ctrl+F/Cmd+F). For local inspection with `cargo vet inspect`, you can use grep commands in the downloaded source directory.
 
-```bash
-# In the crate source directory
-grep -rn "unsafe" --include="*.rs" .
-```
+First, check if the crate has forbidden unsafe code by searching for `forbid(unsafe_code)` or `deny(unsafe_code)`. If unsafe is forbidden, you can skip detailed unsafe review since it won't compile.
 
-For each unsafe block, verify:
+Otherwise, search for `unsafe` blocks and evaluate each one. For each unsafe block, verify:
 - Is the safety invariant documented in a `// SAFETY:` comment?
 - Are the preconditions actually guaranteed by the calling code?
 - Could the unsafe code be triggered by malicious input?
@@ -642,27 +478,21 @@ Document in notes: "Unsafe code is forbidden" or "Documented use of unsafe for [
 
 #### 2. Network Access
 
-Search for networking code:
-
-```bash
-grep -rn "TcpStream\|UdpSocket\|reqwest\|hyper\|http::\|https::\|connect\|bind" --include="*.rs" .
-```
+Search for networking patterns: `TcpStream`, `UdpSocket`, `reqwest`, `hyper`, `http::`, `quinn`, `quic`, `connect`, `bind`, `accept`, `lookup`, `resolve`, `ping`, `icmp`.
 
 Check for:
 - HTTP/HTTPS clients
+- QUIC connections
 - Socket operations
 - DNS lookups
-- Any outbound connections
+- ICMP/ping
+- Any inbound or outbound connections
 
 Document in notes: "No networking code" or "Makes requests to [destination] for [purpose]"
 
 #### 3. File I/O
 
-Search for filesystem operations:
-
-```bash
-grep -rn "std::fs\|File::\|read_to_string\|write_all\|OpenOptions\|create_dir\|remove" --include="*.rs" .
-```
+Search for filesystem patterns: `std::fs`, `File::`, `read_to_string`, `write_all`, `OpenOptions`, `create_dir`, `remove`.
 
 Check for:
 - File reads/writes
@@ -672,14 +502,9 @@ Check for:
 
 Document in notes: "No file I/O code" or "Reader/writer interface for caller to manage I/O" or "Reads [what] from [where]"
 
-#### 4. Build Scripts (`build.rs`)
+#### 4. [Build Scripts](#build-script) (`build.rs`)
 
-Build scripts run during compilation with full system access:
-
-```bash
-# Check if build.rs exists
-ls build.rs 2>/dev/null && echo "Has build script"
-```
+Check if `build.rs` exists. [Build scripts](#build-script) run during compilation with full system access.
 
 If present, examine for:
 - Network downloads (downloading code at build time)
@@ -687,28 +512,18 @@ If present, examine for:
 - Writing outside of `OUT_DIR`
 - Environment variable manipulation
 
-#### 5. Proc Macros
+#### 5. [Proc Macros](#proc-macro)
 
-Procedural macros run at compile time. Check `Cargo.toml`:
-
-```bash
-grep "proc-macro" Cargo.toml
-```
-
-Proc macros warrant thorough review because they:
+Check `Cargo.toml` for `proc-macro = true`. [Proc macros](#proc-macro) warrant thorough review because they:
 - Execute arbitrary code during compilation
 - Can access the filesystem and network
 - Have access to the full compilation environment
 
-#### 6. FFI and External Dependencies
+#### 6. [FFI](#ffi) and External Dependencies
 
-Check for foreign function interfaces:
+Search for [foreign function interface](#ffi) patterns: `extern "C"`, `#[link]`, `bindgen`, `cc::Build`.
 
-```bash
-grep -rn "extern \"C\"\|#\[link\]\|bindgen\|cc::Build" --include="*.rs" .
-```
-
-FFI code needs review of:
+[FFI](#ffi) code needs review of:
 - Memory safety at language boundaries
 - Correct handling of null pointers
 - Buffer size validation
@@ -730,23 +545,24 @@ Be cautious of:
 - Network requests to hardcoded addresses
 - Filesystem access outside expected paths
 - Unused dependencies that seem unrelated to functionality
-- Build scripts that download or execute code
+- [Build scripts](#build-script) that download or execute code
 - Suspiciously complex code for simple functionality
 
 ### Review Depth by Crate Type
 
 **High scrutiny:**
-- Proc macros and build scripts (compile-time code execution)
+- [Proc macros](#proc-macro) and [build scripts](#build-script) (compile-time code execution)
 - Crypto crates
 - Network/async runtime crates
 - Crates with significant unsafe code
+- Crates with checked-in binary files
 
 **Standard review:**
 - Application logic crates
 - Data structure implementations
 - Serialization libraries
 
-**Light review (for delta audits):**
+**Light review (for [relative audits](#relative-audit)):**
 - Patch version updates with minimal changes
 - Dependency-only updates
 
@@ -771,15 +587,18 @@ AI tools (such as LLMs) can be helpful for reviewing dependencies, but they are 
 1. **Manual review first** - Form your own assessment of the crate before using AI tools. This ensures your judgment is not biased by AI-generated summaries or conclusions.
 2. **Use AI to verify and supplement** - After your manual review, use AI to check for things you might have missed or to get a second perspective.
 3. **Verify AI claims** - If AI identifies potential issues, manually verify them. If AI says code is safe, don't take that as authoritative.
-4. **Document your own findings** - Audit notes should reflect your manual review, not just AI-generated summaries.
+4. **Document your own findings** - Audit notes should reflect your manual review, not AI-generated summaries.
 
 The responsibility for the audit remains with the human reviewer. AI is a tool to help you be more thorough, not a way to delegate the review.
 
+**Note:** These recommendations cannot be easily enforced. A reviewer may choose to rely on AI assistance exclusively, and PR reviewers may not notice unless something suspicious appears in the audit notes. Ultimately, this comes down to individual integrity and professional responsibility.
+
 ## Maintenance
 
+<a id="pruning-unused-entries"></a>
 ### Pruning Unused Entries
 
-When dependencies are removed from the project, their audits and exemptions become stale. Use `cargo vet prune` to clean up entries for dependencies no longer in use:
+Use `cargo vet prune` to clean up stale audit entries and exemptions:
 
 ```bash
 cargo vet prune
@@ -811,59 +630,76 @@ Keep configuration files consistently formatted:
 cargo vet fmt
 ```
 
-## Typical Audit Workflow
+<a id="audit-workflow"></a>
+## Audit Workflow
 
-### Full Audit of a New Crate
+This section provides a consolidated workflow for auditing dependencies. See [Certifying a Crate](#certifying-a-crate) for details on the interactive certification process.
+
+### 1. Check What Needs Auditing
+
+Always start by running:
 
 ```bash
-# 1. Check what needs auditing
 cargo vet check
+```
 
-# 2. Inspect the crate source
+This shows which crates need audits and suggests actions to resolve gaps.
+
+### 2. Review the Crate
+
+**For a new crate** (no prior audit exists):
+
+```bash
 cargo vet inspect some-crate 1.0.0
+```
 
-# 3. Review using the checklist above, then certify
+This opens the crate source for review. Alternative viewing modes:
+- `--mode local` - Download and open locally (default)
+- `--mode sourcegraph` - View on Sourcegraph
+- `--mode diff.rs` - View on diff.rs
+
+**For an updated crate** (prior version was audited):
+
+```bash
+cargo vet diff some-crate 1.0.0 1.1.0
+```
+
+This opens a diff in Sourcegraph showing only the changes between versions.
+
+### 3. Perform the Review
+
+Use the [Audit Checklist](#audit-checklist) to guide your review. Focus on:
+- Unsafe code
+- Network access
+- File I/O
+- Build scripts and proc macros
+- FFI boundaries
+
+For [relative audits](#relative-audit), verify that changes preserve security properties. Don't just check that the diff "looks okay."
+
+### 4. Record the Audit
+
+**For a new crate:**
+
+```bash
 cargo vet certify some-crate 1.0.0
 ```
 
-When you run `cargo vet certify`, it will:
-1. Guess the appropriate criteria based on your current `check` or `suggest` status
-2. Display the criteria definition (reminding you what to verify)
-3. Prompt for notes
-4. Automatically remove any exemption that's no longer needed
-
-### Delta Audit When Updating
+**For an updated crate:**
 
 ```bash
-# 1. See the diff between versions
-cargo vet diff some-crate 1.0.0 1.1.0
-
-# 2. Review changes, focusing on:
-#    - New unsafe code
-#    - New dependencies
-#    - Changes to network/file I/O
-#    - Changes to build.rs or proc macros
-
-# 3. Certify the delta
 cargo vet certify some-crate 1.0.0 1.1.0
 ```
 
-For delta audits, verify that the changes preserve the criteria properties. Don't just check that the diff "looks okay" - confirm that security-relevant properties are maintained.
-
-### Viewing Crate Source
-
-Multiple viewing modes are available:
+**Alternative: Add an exemption** for trusted publishers or internal crates:
 
 ```bash
-# Download and open locally (default)
-cargo vet inspect some-crate 1.0.0 --mode local
-
-# View on Sourcegraph
-cargo vet inspect some-crate 1.0.0 --mode sourcegraph
-
-# View on diff.rs
-cargo vet inspect some-crate 1.0.0 --mode diff.rs
+cargo vet add-exemption some-crate 1.0.0
 ```
+
+### 5. Commit Changes
+
+Commit all changes to `supply-chain/` files along with your code changes so they can be reviewed together in the PR.
 
 ## Pull Request Responsibilities
 
@@ -875,7 +711,7 @@ The PR author who adds or updates a dependency is responsible for the audit:
 
 2. **Run `cargo vet check` locally** - Verify all dependencies pass before pushing.
 
-3. **Certify or exempt dependencies** - Use `cargo vet certify` after reviewing, or `cargo vet add-exemption` for trusted publishers.
+3. **Certify or exempt dependencies** - [Certify](#certifying-a-crate) with `cargo vet certify` after reviewing, or use `cargo vet add-exemption` for trusted publishers.
 
 4. **Write meaningful audit notes** - Document what you reviewed: unsafe code status, network access, file I/O, and any concerns. Notes should reflect your manual review findings.
 
@@ -922,142 +758,41 @@ Reviewers should consider independently reviewing the dependency diff when:
 
 ## CI Integration
 
-We run cargo-vet as part of our security checks in CI. This blocks PRs that introduce unaudited dependencies.
+We run cargo-vet as part of our security checks in CI via `cargo make security`. This blocks PRs that introduce unaudited dependencies.
 
-### GitHub Actions Workflow
-
-The security checks are defined in `.github/workflows/security.yml`:
-
-```yaml
-name: "Security Checks"
-
-permissions:
-  contents: read
-
-on:
-  push:
-    branches: ["main"]
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-jobs:
-  security-checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup
-
-      - name: Run cargo security checks
-        run: cargo make security
-```
-
-### Cargo Make Tasks
-
-We use [cargo-make](https://github.com/sagiegurari/cargo-make) to define our build tasks. The security task runs three checks in sequence:
-
-In `Makefile.toml`:
-
-```toml
-[tasks.security]
-category = "security"
-description = "Run security checks"
-run_task = { name = [
-    "cargo-audit",
-    "cargo-deny",
-    "cargo-vet",
-] }
-
-[tasks.cargo-vet]
-category = "security"
-toolchain = "stable"
-install_crate = { crate_name = "cargo-vet", version = "0.10.1", binary = "cargo-vet", test_arg = "-V" }
-command = "cargo"
-args = ["vet", "check"]
-```
-
-This configuration:
-- Installs cargo-vet 0.10.1 automatically if not present
-- Runs `cargo vet check` to verify all dependencies are audited
-- Fails the CI job if any unaudited dependencies are found
+The security task runs `cargo vet check` along with other security checks (`cargo-audit`, `cargo-deny`). If any unaudited dependencies are found, the CI job fails.
 
 ### Running Security Checks Locally
 
-Before pushing changes, run the security checks locally:
+Before pushing changes, run cargo-vet locally:
 
 ```bash
-# Run all security checks (audit, deny, vet)
-cargo make security
-
-# Or run just cargo-vet
 cargo make cargo-vet
-
-# Or run cargo-vet directly
-cargo vet check
 ```
 
 ### When CI Fails Due to Unaudited Dependencies
 
-If the security check fails because of a new or updated dependency:
+Run `cargo vet check` locally to see what's needed, then follow the [Audit Workflow](#audit-workflow) to resolve the gaps.
 
-1. **Check what's needed locally:**
-   ```bash
-   cargo vet check
-   ```
+## Definitions
 
-2. **Review the crate** using inspect (for new crates) or diff (for updates):
-   ```bash
-   # For a new dependency
-   cargo vet inspect some-crate 1.0.0
+<a id="build-script"></a>
+**Build script** - A Rust file (`build.rs`) that runs at compile time before the crate is built. Build scripts have full system access and can download files, run commands, and modify the build environment.
 
-   # For an updated dependency
-   cargo vet diff some-crate 1.0.0 1.1.0
-   ```
+<a id="relative-audit"></a>
+**Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase. More efficient than a full audit when updating from a previously-audited version.
 
-3. **Certify or exempt** the dependency:
-   ```bash
-   # After reviewing, certify
-   cargo vet certify some-crate 1.0.0
+<a id="ffi"></a>
+**FFI (Foreign Function Interface)** - A mechanism that allows Rust code to call functions written in other languages (typically C) and vice versa. FFI code requires careful review because it bypasses Rust's safety guarantees.
 
-   # Or add a temporary exemption if you can't audit immediately
-   cargo vet add-exemption some-crate 1.0.0
-   ```
+<a id="proc-macro"></a>
+**Proc macro (procedural macro)** - A Rust macro that runs arbitrary code at compile time to generate or transform source code. Proc macros have full system access during compilation, similar to build scripts.
 
-4. **Commit the supply-chain changes** with your PR:
-   ```bash
-   git add supply-chain/
-   git commit -m "chore: audit some-crate 1.0.0"
-   ```
+<a id="supply-chain-attack"></a>
+**Supply chain attack** - An attack that targets the software development or distribution process rather than the final application directly. In the context of dependencies, this includes compromising upstream packages, injecting malicious code into updates, or publishing malicious packages that masquerade as legitimate ones.
 
-### Other Security Checks
+<a id="transitive-dependency"></a>
+**Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and crate A depends on crate B, then B is a transitive dependency of your project. Transitive dependencies must also be audited.
 
-The `cargo make security` task also runs:
-
-- **cargo-audit** - Checks for known security vulnerabilities in dependencies
-- **cargo-deny** - Checks licenses, bans specific crates, and detects duplicate dependencies
-
-## Quick Reference
-
-| Task | Command |
-|------|---------|
-| Check audit status | `cargo vet check` |
-| See backlog items | `cargo vet suggest` |
-| Inspect a crate | `cargo vet inspect <crate> <version>` |
-| View diff between versions | `cargo vet diff <crate> <v1> <v2>` |
-| Certify a full audit | `cargo vet certify <crate> <version>` |
-| Certify a delta audit | `cargo vet certify <crate> <v1> <v2>` |
-| Add exemption | `cargo vet add-exemption <crate> <version>` |
-| Trust a publisher | `cargo vet trust <crate> <publisher>` |
-| Clean up unused entries | `cargo vet prune` |
-| Format config files | `cargo vet fmt` |
-
-## Summary
-
-1. **Run `cargo vet check`** to identify audit gaps
-2. **Use `cargo vet diff`** for incremental reviews when updating dependencies
-3. **Document findings thoroughly** - note unsafe code, network access, and file I/O status
-4. **Import audits** from trusted third parties to reduce duplication
-5. **Trust internal publishers** (e.g., `aranya-project-bot`) for your own crates
-6. **Use `cargo vet add-exemption`** for trusted publishers; use exemptions sparingly and work to reduce them over time
-7. **Focus review effort** on high-risk crates (proc macros, build scripts, unsafe, crypto)
-8. **Verify delta audits** preserve security properties, don't just check the diff looks okay
+<a id="typosquatting"></a>
+**Typosquatting** - A [supply chain attack](#supply-chain-attack) where an attacker publishes a malicious package with a name very similar to a popular package (e.g., `serdes` instead of `serde`), hoping developers will install it by mistake due to a typo.
