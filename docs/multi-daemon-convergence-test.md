@@ -394,7 +394,7 @@ This specification is designed for use with duvet. Requirements are marked with 
 
 ```rust
 //= https://github.com/aranya-project/aranya-docs/docs/multi-daemon-convergence-test.md#CONF-002
-//# The test MUST support at least 70 nodes in the ring.
+//# The test MUST support at least 70 nodes.
 const MIN_SUPPORTED_NODE_COUNT: usize = 70;
 ```
 
