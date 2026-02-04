@@ -46,7 +46,7 @@ You can also trust publishers directly using `cargo vet trust`. This is appropri
 - Well-known external maintainers (e.g., tokio-rs for async runtime crates)
 - Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
 
-For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
+For crates in your workspace that aren't published to crates.io, set `audit-as-crates-io = false` in the crate's `Cargo.toml` `[package]` section to skip auditing.
 
 ## Audit Requirements
 
