@@ -77,29 +77,11 @@ cargo vet prune
 cargo vet fmt
 ```
 
-## Review Requirements
+## Audit Requirements
 
-### What to Look For
+Focus on unsafe code, network access, file I/O, [build scripts](#build-script), [proc macros](#proc-macro), and [FFI](#ffi). Watch for red flags like obfuscated code, hardcoded network addresses, or build scripts that download code. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for detailed guidance.
 
-When auditing a crate, check for:
-
-- Unsafe code - Is it forbidden, documented, or concerning?
-- Network access - Any connections, DNS lookups, or socket operations?
-- File I/O - Any filesystem operations outside expected scope?
-- [Build scripts](#build-script) and [proc macros](#proc-macro) - Run at compile time with full system access
-- [FFI](#ffi) - Bypasses Rust's safety guarantees
-- Cryptography - Should use established libraries, not hand-rolled
-- Red flags - Obfuscated code, hardcoded network addresses, build scripts that download code, checked-in binary files
-
-### Writing Audit Notes
-
-Audit notes should document:
-- Unsafe code status (forbidden, documented, or present)
-- Network access (none, or what/where)
-- File I/O (none, or what/where)
-- Whether areas of concern are actually used by our code
-
-Example:
+Example audit note:
 ```
 Parser/encoder library. Contains documented unsafe code for buffer
 manipulation during encoding. No networking code. Reader/writer
@@ -136,9 +118,7 @@ If you discover a crate version that fails criteria, communicate with the team s
 
 ## CI Integration
 
-We run `cargo vet check` as part of CI via `cargo make cargo-vet`. PRs with unaudited dependencies will fail.
-
-If CI fails, run `cargo vet check` locally to see what's needed, then audit or exempt the dependencies.
+PRs with unaudited dependencies will fail CI.
 
 ## Definitions
 
