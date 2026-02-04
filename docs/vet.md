@@ -38,6 +38,16 @@ New repositories should be initialized with `cargo vet init`. After initializati
 
 When patching a vulnerability, consider whether a patch release of our own crates is needed. Even if our code is not directly impacted, downstream dependencies of our crates may be affected.
 
+## Exemptions and Trust
+
+For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—track them and work to reduce the list over time.
+
+You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
+- Well-known external maintainers (e.g., Microsoft for Windows crates)
+- Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
+
+For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
+
 ## Audit Requirements
 
 Focus on unsafe code, network access, file I/O, [build scripts](#build-script), [proc macros](#proc-macro), and [FFI](#ffi). Watch for red flags like obfuscated code, hardcoded network addresses, or build scripts that download code. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for detailed guidance.
@@ -52,16 +62,6 @@ interface allows caller to manage file I/O.
 ### Using AI Tools
 
 AI tools can help summarize crates and search for patterns, but they are **not a substitute for manual review**. Audit notes should reflect your manual review, not AI-generated summaries. The responsibility remains with the human reviewer.
-
-## Exemptions and Trust
-
-For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—track them and work to reduce the list over time.
-
-You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
-- Well-known external maintainers (e.g., Microsoft for Windows crates)
-- Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
-
-For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
 
 ## Workflow
 
