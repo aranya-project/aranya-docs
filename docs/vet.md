@@ -103,7 +103,7 @@ cargo make cargo-vet
 
 ### PR Author
 
-1. Manually review all dependency changes using `cargo vet inspect` or `cargo vet diff`
+1. Manually review dependency changes using `cargo vet inspect` or `cargo vet diff`. Reviewing every line is not required, especially for large changes—use your judgement to focus on code that is likely to be problematic.
 2. Certify, exempt, or trust dependencies with meaningful audit notes
 3. Run `cargo make cargo-vet` locally to verify CI will pass
 4. Commit `supply-chain/` changes with your PR
