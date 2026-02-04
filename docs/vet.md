@@ -10,21 +10,14 @@ permalink: "/vet/"
 
 [Cargo Vet](https://mozilla.github.io/cargo-vet/) is a tool for verifying that third-party Rust dependencies have been audited by trusted entities. This document describes our internal development process for auditing dependencies using cargo-vet.
 
-For cargo-vet installation, commands, and detailed usage, run `cargo vet --help` or see the [official documentation](https://mozilla.github.io/cargo-vet/).
+Install cargo-vet with `cargo install cargo-vet`. For commands and detailed usage, run `cargo vet --help` or see the [official documentation](https://mozilla.github.io/cargo-vet/).
 
 ### Why We Use Cargo Vet
 
-**Defense against [supply chain attacks](#supply-chain-attack).** Third-party dependencies are a significant attack vector. Malicious code can be introduced through compromised crate updates, [typosquatting](#typosquatting), or maintainer account takeovers. By auditing dependencies, we verify that the code we're pulling into our projects is safe and does what it claims to do.
-
-**Awareness of our dependency footprint.** Every new dependency or version change requires explicit action: either an audit, an exemption, or importing a trusted third-party audit. This prevents dependencies from silently changing without review.
-
-**High bar for adding new dependencies.** Each dependency:
-- Increases our attack surface
-- Increases the chance that a reported vulnerability may force a patch release
-- Adds audit burden for the team
-- May introduce [transitive dependencies](#transitive-dependency) we also need to audit
-
-Before adding a new dependency, consider whether it is truly necessary and how many transitive dependencies it brings in.
+- Defense against [supply chain attacks](#supply-chain-attack) ([typosquatting](#typosquatting), compromised updates, account takeovers)
+- Prevents dependencies from silently changing without review
+- Forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency)
+- Each dependency increases attack surface, audit burden, and potential for forced patch releases
 
 ## When Audits Are Required
 
@@ -35,30 +28,23 @@ Before adding a new dependency, consider whether it is truly necessary and how m
 
 When patching a vulnerability, consider whether a patch release of our own crates is needed. Even if our code is not directly impacted, downstream dependencies of our crates may be affected.
 
-### Exemptions
+### Exemptions and Trust
 
-For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. This is also appropriate for crates developed internally that go through our own peer review process.
+For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—track them and work to reduce the list over time.
 
-Exemptions should be temporary. Track them and work to reduce the exemption list over time.
+You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
+- Well-known external maintainers (e.g., Microsoft for Windows crates)
+- Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
+
+For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
 
 ## Repository Setup
 
 New repositories should be initialized with `cargo vet init`. After initialization:
 
-1. Configure third-party audit imports from trusted organizations (see [aranya config.toml](https://github.com/aranya-project/aranya/blob/main/supply-chain/config.toml) for an example)
+1. Configure third-party audit imports (see [aranya config.toml](https://github.com/aranya-project/aranya/blob/main/supply-chain/config.toml) for an example, and the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml) for additional sources)
 2. Run `cargo vet` to fetch imported audits
 3. Audit or exempt remaining dependencies not covered by imports
-
-Additional trusted audit sources can be found in the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml).
-
-### Trusting Internal Publishers
-
-We trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot`. This is appropriate because:
-- The crates are developed and reviewed internally
-- Security controls prevent unreviewed code from being merged into protected branches
-- Publishing is done through a trusted CI/CD pipeline
-
-For crates in your workspace that aren't published to crates.io, configure them with `audit-as-crates-io = false` to skip auditing.
 
 ## Workflow Example
 
@@ -97,16 +83,13 @@ cargo vet fmt
 
 When auditing a crate, check for:
 
-1. **Unsafe code** - Is it forbidden, documented, or concerning?
-2. **Network access** - Any connections, DNS lookups, or socket operations?
-3. **File I/O** - Any filesystem operations outside expected scope?
-4. **[Build scripts](#build-script) and [proc macros](#proc-macro)** - These run at compile time with full system access
-5. **[FFI](#ffi)** - Foreign function interfaces bypass Rust's safety guarantees
-6. **Cryptography** - Should use established libraries, not hand-rolled implementations
-
-**High scrutiny crates:** Proc macros, build scripts, crypto crates, network/async runtimes, crates with significant unsafe code, crates with checked-in binary files.
-
-**Red flags:** Obfuscated code, hardcoded network addresses, filesystem access outside expected paths, build scripts that download code.
+- Unsafe code - Is it forbidden, documented, or concerning?
+- Network access - Any connections, DNS lookups, or socket operations?
+- File I/O - Any filesystem operations outside expected scope?
+- [Build scripts](#build-script) and [proc macros](#proc-macro) - Run at compile time with full system access
+- [FFI](#ffi) - Bypasses Rust's safety guarantees
+- Cryptography - Should use established libraries, not hand-rolled
+- Red flags - Obfuscated code, hardcoded network addresses, build scripts that download code, checked-in binary files
 
 ### Writing Audit Notes
 
@@ -139,11 +122,11 @@ AI tools can help summarize crates and search for patterns, but they are **not a
 
 ### PR Reviewer
 
-1. Verify audit notes are present and meaningful (reject empty or superficial notes)
-2. Review exemption justifications
-3. Spot-check high-risk changes (crypto, unsafe, network/filesystem)
-4. Question whether new dependencies are truly necessary
-5. Ensure CI passes
+- Verify audit notes are present and meaningful (reject empty or superficial notes)
+- Review exemption justifications
+- Spot-check high-risk changes (crypto, unsafe, network/filesystem)
+- Question whether new dependencies are truly necessary
+- Ensure CI passes
 
 Reviewers should consider re-auditing when the dependency handles security-sensitive operations, the notes seem incomplete, or the author is new to the process.
 
@@ -159,23 +142,10 @@ If CI fails, run `cargo vet check` locally to see what's needed, then audit or e
 
 ## Definitions
 
-<a id="build-script"></a>
-**Build script** - A Rust file (`build.rs`) that runs at compile time with full system access.
-
-<a id="relative-audit"></a>
-**Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase.
-
-<a id="ffi"></a>
-**FFI (Foreign Function Interface)** - A mechanism allowing Rust to call functions in other languages, bypassing Rust's safety guarantees.
-
-<a id="proc-macro"></a>
-**Proc macro** - A Rust macro that runs arbitrary code at compile time with full system access.
-
-<a id="supply-chain-attack"></a>
-**Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages.
-
-<a id="transitive-dependency"></a>
-**Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and A depends on B, then B is a transitive dependency.
-
-<a id="typosquatting"></a>
-**Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`).
+<a id="build-script"></a>**Build script** - A Rust file (`build.rs`) that runs at compile time with full system access.
+<a id="ffi"></a>**FFI (Foreign Function Interface)** - A mechanism allowing Rust to call functions in other languages, bypassing Rust's safety guarantees.
+<a id="proc-macro"></a>**Proc macro** - A Rust macro that runs arbitrary code at compile time with full system access.
+<a id="relative-audit"></a>**Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase.
+<a id="supply-chain-attack"></a>**Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages.
+<a id="transitive-dependency"></a>**Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and A depends on B, then B is a transitive dependency.
+<a id="typosquatting"></a>**Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`).
