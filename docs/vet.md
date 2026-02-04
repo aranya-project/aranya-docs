@@ -17,6 +17,15 @@ permalink: "/vet/"
 - Forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency)
 - Each dependency increases attack surface, audit burden, and potential for forced patch releases
 
+### How We Defend Against Supply Chain Attacks
+
+Our audit process uses multiple layers of defense:
+
+- **Version pinning** - All dependencies are pinned to specific versions in `Cargo.lock`, preventing automatic updates. Any version change requires an explicit commit and must pass cargo-vet checks.
+- **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged.
+- **Human review** - Audits require manual code inspection, not just automated checks. Reviewers verify audit quality and can request re-audits.
+- **Trusted imports** - We import audits from other trusted organizations, leveraging community review efforts while maintaining our own verification standards.
+
 ## Getting Started
 
 Install cargo-vet with `cargo install cargo-vet`. For commands and detailed usage, run `cargo vet --help` or see the [official documentation](https://mozilla.github.io/cargo-vet/).
@@ -31,9 +40,9 @@ New repositories should be initialized with `cargo vet init`. After initializati
 
 ## When Audits Are Required
 
-- **Adding a new dependency** - CI will fail until the dependency is audited or exempted
+- **Adding a new dependency** - CI will fail until the dependency is audited, exempted, or trusted
 - **Updating a dependency version** - A [relative audit](#relative-audit) is needed covering the version change
-- **Patching a vulnerability** - Prioritize the audit and reference the advisory in your notes
+- **Patching a vulnerability** - Prioritize the audit and reference the [advisory](https://rustsec.org/advisories/) in your notes
 - **Transitive dependency updates** - Run `cargo vet check` after any `Cargo.lock` changes
 
 When patching a vulnerability, consider whether a patch release of our own crates is needed. Even if our code is not directly impacted, downstream dependencies of our crates may be affected.
@@ -50,7 +59,7 @@ For crates in your workspace that aren't published to crates.io, manually set `a
 
 ## Audit Requirements
 
-Focus on unsafe code, network access, file I/O, [build scripts](#build-script), [proc macros](#proc-macro), and [FFI](#ffi). Watch for red flags like obfuscated code, hardcoded network addresses, or build scripts that download code. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for detailed guidance.
+Focus on unsafe code, network access, file I/O, [build scripts](#build-script), [proc macros](#proc-macro), and [FFI](#ffi). Watch for red flags like obfuscated code, hardcoded network addresses, checked-in binaries, or build scripts that download code. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for detailed guidance.
 
 Example audit note:
 ```
@@ -92,6 +101,9 @@ cargo vet prune
 
 # Format supply-chain files
 cargo vet fmt
+
+# Verify CI check will pass before pushing
+cargo make cargo-vet
 ```
 
 ## Pull Request Responsibilities
@@ -99,20 +111,20 @@ cargo vet fmt
 ### PR Author
 
 1. Manually review all dependency changes using `cargo vet inspect` or `cargo vet diff`
-2. Run `cargo vet check` locally before pushing
-3. Certify or exempt dependencies with meaningful audit notes
+2. Certify, exempt, or trust dependencies with meaningful audit notes
+3. Run `cargo make cargo-vet` locally to verify CI will pass
 4. Commit `supply-chain/` changes with your PR
 5. Be prepared to justify new dependencies
 
 ### PR Reviewer
 
-- Verify audit notes are present and meaningful (reject empty or superficial notes)
+- Verify audit notes are present and meaningful (reject empty or superficial notes, notes reused across multiple crates in the same PR, or wording that suggests AI-generated or copy-pasted content)
 - Review exemption justifications
 - Spot-check high-risk changes (crypto, unsafe, network/filesystem)
 - Question whether new dependencies are truly necessary
 - Ensure CI passes
 
-Reviewers should consider re-auditing when the dependency handles security-sensitive operations, the notes seem incomplete, or the author is new to the process.
+Reviewers should consider re-auditing when the dependency handles security-sensitive operations, the notes seem incomplete, the author is new to the process, or anything was flagged during review of the dependency or audit notes.
 
 ### Recording Violations
 
@@ -120,7 +132,7 @@ If you discover a crate version that fails criteria, communicate with the team s
 
 ## CI Integration
 
-PRs with unaudited dependencies will fail CI.
+PRs with unaudited dependencies will fail CI checks and cannot be merged into protected branches.
 
 ## Definitions
 
@@ -128,6 +140,6 @@ PRs with unaudited dependencies will fail CI.
 <a id="ffi"></a>**FFI (Foreign Function Interface)** - A mechanism allowing Rust to call functions in other languages, bypassing Rust's safety guarantees.
 <a id="proc-macro"></a>**Proc macro** - A Rust macro that runs arbitrary code at compile time with full system access.
 <a id="relative-audit"></a>**Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase.
-<a id="supply-chain-attack"></a>**Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages.
+<a id="supply-chain-attack"></a>**Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages. We pin all dependencies to specific versions so they are not updated automatically; any version change must go through our cargo-vet audit process.
 <a id="transitive-dependency"></a>**Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and A depends on B, then B is a transitive dependency.
-<a id="typosquatting"></a>**Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`).
+<a id="typosquatting"></a>**Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`). This attack relies on a developer mistyping a dependency name when adding it to their project.
