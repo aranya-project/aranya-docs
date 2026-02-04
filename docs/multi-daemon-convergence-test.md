@@ -61,12 +61,12 @@ struct NodeCtx {
 }
 ```
 
-### Ring Context
+### Test Context
 
-The ring context manages all nodes in the ring topology.
+The test context manages all nodes and can be configured with different topologies.
 
 ```rust
-struct RingCtx {
+struct TestCtx {
     /// All nodes in the ring
     nodes: Vec<NodeCtx>,
     /// Team ID for the test
@@ -104,11 +104,11 @@ struct ConvergenceStatus {
 
 #### CONF-001
 
-The test MUST support configuring the number of nodes in the ring.
+The test MUST support configuring the number of nodes.
 
 #### CONF-002
 
-The test MUST support at least 70 nodes in the ring.
+The test MUST support at least 70 nodes.
 
 #### CONF-003
 
@@ -130,23 +130,23 @@ The test MUST support configuring a maximum test duration timeout.
 
 The default maximum test duration MUST be 600 seconds (10 minutes).
 
-### Topology Requirements
+### Ring Topology Requirements
 
 #### TOPO-001
 
-Each node MUST connect to exactly two other nodes: its clockwise neighbor and its counter-clockwise neighbor.
+In the ring topology, each node MUST connect to exactly two other nodes: its clockwise neighbor and its counter-clockwise neighbor.
 
 #### TOPO-002
 
-Sync peers MUST be configured bidirectionally, meaning if node A syncs with node B, node B MUST also sync with node A.
+In the ring topology, sync peers MUST be configured bidirectionally, meaning if node A syncs with node B, node B MUST also sync with node A.
 
 #### TOPO-003
 
-The topology MUST form a single connected ring with no partitions.
+The ring topology MUST form a single connected ring with no partitions.
 
 #### TOPO-004
 
-No node MUST have more than 2 sync peers in the ring topology.
+In the ring topology, no node MUST have more than 2 sync peers.
 
 ### Node Initialization Requirements
 
@@ -340,7 +340,7 @@ async fn test_ring_convergence() -> Result<()> {
 
     //= multi-daemon-convergence-test.md#INIT-001
     //# Each node MUST be initialized with a unique daemon instance.
-    let mut ring = RingCtx::new(config).await?;
+    let mut ring = TestCtx::new(config).await?;
 
     //= multi-daemon-convergence-test.md#TEAM-001
     //# A single team MUST be created by node 0 (the designated owner).
@@ -352,7 +352,7 @@ async fn test_ring_convergence() -> Result<()> {
 
     //= multi-daemon-convergence-test.md#SYNC-001
     //# Each node MUST add its two ring neighbors as sync peers.
-    ring.configure_ring_topology(team_id).await?;
+    ring.build_ring_topology(team_id).await?;
 
     //= multi-daemon-convergence-test.md#CONV-001
     //# The test MUST assign a label to the source node's graph to mark the start of convergence testing.
@@ -414,10 +414,10 @@ impl Default for RingTestConfig {
 ### Topology Configuration
 
 ```rust
-impl RingCtx {
+impl TestCtx {
     //= multi-daemon-convergence-test.md#TOPO-001
     //# Each node MUST connect to exactly two other nodes.
-    async fn configure_ring_topology(&mut self, team_id: TeamId) -> Result<()> {
+    async fn build_ring_topology(&mut self, team_id: TeamId) -> Result<()> {
         let n = self.nodes.len();
 
         for i in 0..n {
@@ -452,7 +452,7 @@ impl RingCtx {
 ### Convergence Tracking
 
 ```rust
-impl RingCtx {
+impl TestCtx {
     //= multi-daemon-convergence-test.md#CONV-003
     //# The test MUST track when each node receives the convergence label.
     async fn wait_for_convergence(&mut self) -> Result<()> {
@@ -521,7 +521,7 @@ impl RingCtx {
 ### Metrics Reporting
 
 ```rust
-impl RingCtx {
+impl TestCtx {
     //= multi-daemon-convergence-test.md#PERF-003
     //# The test MUST calculate and report the following metrics.
     fn report_metrics(&self) {
