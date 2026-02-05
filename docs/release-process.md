@@ -206,4 +206,4 @@ AI is not recommended for aranya-core release PRs. Determining what version to b
 
 The release lead remains responsible for reviewing AI-generated content and ensuring the release process is followed correctly.
 
-TODO: Create a SKILL.md skill for releases so developers can leverage AI assistance more easily to automate the release process.
+**Note:** When updating this document, also update `skills/release/SKILL.md` to keep the AI skill in sync with the release process.
