@@ -8,7 +8,7 @@ permalink: "/multi-daemon-convergence-test/"
 
 ## Overview
 
-This specification defines a test suite for validating Aranya daemon convergence behavior with a large number of nodes on a single device. The primary goal is to verify that all nodes in a network eventually reach a consistent state after commands are issued and synchronized across a defined network topology.
+This specification defines a test suite for validating Aranya daemon convergence behavior with a large number of nodes on a single device. The primary goal is to verify that all nodes in a network eventually reach a consistent state after commands are issued and synchronized across a defined network topology. We use a label command to easily track which nodes are up to date.
 
 This specification is designed for use with [duvet](https://github.com/awslabs/duvet) for requirements traceability.
 
@@ -23,11 +23,6 @@ Existing Aranya integration tests typically use 5 nodes (`DevicesCtx` with owner
 
 This test suite addresses these gaps by providing a framework for large-scale convergence testing with configurable topologies.
 
-## Definitions
-
-### Graph State
-
-Each node maintains an Aranya command graph. Convergence is tracked using labels: a label is assigned to the source node's graph, and convergence is achieved when all nodes have received that label (accounting for merge commands created during synchronization).
 
 ## Test Architecture
 
@@ -351,10 +346,9 @@ Actual convergence time will be higher due to:
 The test passes when:
 1. All nodes successfully initialize
 2. Team configuration propagates to all nodes
-3. Ring topology is correctly configured
-4. Convergence label reaches all nodes
-5. Convergence is achieved within the timeout
-6. No errors are reported during synchronization
+3. Convergence label reaches all nodes
+4. Convergence is achieved within the timeout
+5. No unrecoverable errors are reported during synchronization
 
 ## Future Extensions
 
