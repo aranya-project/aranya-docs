@@ -45,7 +45,7 @@ When patching a vulnerability, consider whether a patch release of our own crate
 For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—reduce them over time by auditing or adding trust entries.
 
 You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
-- External maintainers whose review processes we believe meet our standards (e.g., tokio-rs for async runtime crates)
+- External maintainers whose review processes we believe meet our standards. The team evaluates this on a case-by-case basis (e.g., tokio-rs for async runtime crates).
 - Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
 
 For crates in your workspace that aren't published to crates.io, manually set `audit-as-crates-io = false` in the crate's `Cargo.toml` `[package]` section to skip auditing.
