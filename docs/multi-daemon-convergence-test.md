@@ -54,18 +54,26 @@ struct NodeCtx {
 
 ### Test Context
 
-The test context manages all nodes and can be configured with different topologies.
+The test context manages all nodes and the configured topology.
 
 ```rust
 struct TestCtx {
-    /// All nodes in the ring
+    /// All nodes in the test
     nodes: Vec<NodeCtx>,
+    /// The topology used to connect nodes
+    topology: Topology,
     /// Team ID for the test
     team_id: TeamId,
     /// Convergence tracker
     tracker: ConvergenceTracker,
 }
+
+enum Topology {
+    Ring,
+}
 ```
+
+The `Topology` enum is expected to grow as additional topologies (star, mesh, etc.) are added in future extensions.
 
 ### Convergence Tracker
 
@@ -99,11 +107,11 @@ The test MUST support configuring the number of nodes.
 
 #### CONF-002
 
-The test MUST support at least 70 nodes.
+The test MUST scale to at least 70 nodes without failure.
 
 #### CONF-003
 
-The test MUST support a minimum of 3 nodes (the minimum for a valid ring).
+The test MUST reject configurations with fewer than 3 nodes (the minimum for a valid ring).
 
 #### CONF-004
 
@@ -296,10 +304,6 @@ The test MUST handle sync failures between nodes.
 
 #### ERR-004
 
-Failed sync attempts MUST be retried up to 25 times before causing test failure.
-
-#### ERR-005
-
 The test MUST log all errors with sufficient context for debugging.
 
 ### Cleanup Requirements
@@ -385,7 +389,7 @@ This specification is designed for use with duvet. Requirements are marked with 
 
 ```rust
 //= https://github.com/aranya-project/aranya-docs/docs/multi-daemon-convergence-test.md#CONF-002
-//# The test MUST support at least 70 nodes.
+//# The test MUST scale to at least 70 nodes without failure.
 const MIN_SUPPORTED_NODE_COUNT: usize = 70;
 ```
 
