@@ -17,7 +17,7 @@ permalink: "/vet/"
 - **Version pinning** - All dependencies are pinned to specific versions in `Cargo.lock`, preventing automatic updates. Any version change requires an explicit commit and must pass cargo-vet checks.
 - **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged. This forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency).
 - **Human review** - Audits require manual code inspection, not just automated checks. Reviewers verify audit quality and can request re-audits.
-- **Trusted imports** - We import audits from other trusted organizations, leveraging community review efforts while maintaining our own verification standards.
+- **Trusted imports** - We import audits from organizations in the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml) and select others (like AWS) based on reviewer judgment, leveraging community review efforts while maintaining our own verification standards.
 
 ## Getting Started
 
@@ -45,7 +45,7 @@ When patching a vulnerability, consider whether a patch release of our own crate
 For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—reduce them over time by auditing or adding trust entries.
 
 You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
-- Well-known external maintainers (e.g., tokio-rs for async runtime crates)
+- External maintainers whose review processes we believe meet our standards (e.g., tokio-rs for async runtime crates)
 - Internal crates—we trust all `aranya-*` and `spideroak-*` crates published by `aranya-project-bot` because they go through our internal review process and are published via a secured CI/CD pipeline
 
 For crates in your workspace that aren't published to crates.io, manually set `audit-as-crates-io = false` in the crate's `Cargo.toml` `[package]` section to skip auditing.
@@ -63,7 +63,7 @@ interface allows caller to manage file I/O.
 
 ### Using AI Tools
 
-AI tools can help summarize crates and search for patterns, but they are **not a substitute for manual review**. Audit notes should reflect your manual review, not AI-generated summaries. The responsibility remains with the human reviewer.
+AI tools can help summarize crates and search for patterns, but they are **not a substitute for manual review**. Use them as a second set of eyes after you've already reviewed the code yourself. Audit notes should reflect your manual review, not AI-generated summaries. The responsibility remains with the human reviewer.
 
 ## Workflow
 
