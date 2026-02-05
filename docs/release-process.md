@@ -207,3 +207,31 @@ AI is not recommended for aranya-core release PRs. Determining what version to b
 The release lead remains responsible for reviewing AI-generated content and ensuring the release process is followed correctly.
 
 **Note:** When updating this document, also update `skills/release/SKILL.md` to keep the AI skill in sync with the release process.
+
+## Future Improvements
+
+The following improvements have been identified but not yet implemented:
+
+### Process Gaps
+
+- **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
+- **Communication templates** - Add templates for release start announcements, completion announcements, and internal release notes format.
+- **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
+- **Version freeze period** - Document a code freeze window before release day to stabilize the main branch.
+
+### Automation Opportunities
+
+- **Automate verification tasks** - Steps 5-7 (verifying workflows succeeded, crates published, artifacts attached) could have a script or AI assistance to check automatically.
+- **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
+- **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
+
+### Clarity Improvements
+
+- **Distinguish aranya vs aranya-core releases** - Add a diagram or clearer section headers to clarify the relationship between "Aranya-Core Release Process (Dependency)" and "Aranya Release Process (Main Product)".
+- **QA Process** - Define testing, regression, process, and communication procedures (currently TODO).
+- **Timeline for post-release tasks** - Specify when key rotation and other post-release tasks should happen (e.g., within 24 hours, within a week).
+
+### Risk Mitigation
+
+- **Credential expiration monitoring** - Add recurring reminders or automated alerts for credential expiration instead of relying on manual calendar entries.
+- **Release checklist sign-off** - Add a sign-off step where the release lead confirms all items are complete before announcing.
