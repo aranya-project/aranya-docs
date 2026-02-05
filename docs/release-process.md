@@ -105,7 +105,7 @@ Tasks to complete on the day of the release:
 ### Manual Tasks
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
-   - See [announcement templates](../skills/release/templates/announcement.md) for format.
+   - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
 
 2. **(partially-automated)** Open a PR to bump crate versions for the release. Can do this a day before release or on day of release. (release lead)
 
@@ -136,7 +136,8 @@ Once the release PR is merged, CI/CD workflows automatically:
 
 10. **(partially-automated)** Update the website and support docs. (product manager)
 
-11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. See [announcement templates](../skills/release/templates/announcement.md) for format. (release lead)
+11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
+    - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
 
 12. **(manual)** Schedule a product release retrospective for release process improvements.
 
