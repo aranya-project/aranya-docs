@@ -70,10 +70,18 @@ When creating release PRs, reference these examples:
 - **Always require human review** - The release lead must review all AI-generated content
 - **Never skip verification steps** - All automated workflows must be verified by a human
 
+## Templates
+
+Announcement templates are available at `skills/release/templates/announcement.md`:
+- Release start announcement
+- Release completion announcement
+- Patch release announcement
+
 ## Workflow
 
 1. Confirm the release type and version with the user
 2. Read the relevant sections of `docs/release-process.md`
 3. For the requested release type, assist with the **(partially-automated)** tasks
-4. Provide clear summaries of changes for human review
-5. Do not merge PRs or create releases without explicit human approval
+4. Use the announcement templates when drafting communications
+5. Provide clear summaries of changes for human review
+6. Do not merge PRs or create releases without explicit human approval

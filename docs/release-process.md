@@ -53,6 +53,17 @@ There will be tickets and meetings created during a release cycle to coordinate 
 
 - **(manual)** Hold a go/no-go meeting with leadership and relevant developers to decide when/what to release. (release lead)
 
+### Code Freeze (3 days before release)
+
+A code freeze on aranya-core and aranya begins 3 work days before the scheduled release. This ensures adequate time to:
+- Release aranya-core one day before the aranya release
+- Have a full day to release aranya without other code changes needing to land
+
+During the code freeze:
+- **(manual)** Communicate the code freeze to the team. Only release-critical fixes should be merged. (release lead)
+- **(manual)** Release aranya-core crates to crates.io. This is often delegated to engineers who have been closely involved in the aranya-core code changes. (release lead)
+- **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
+
 ## Aranya-Core Release Process
 
 Crates in the aranya-core repo should be published to crates.io regularly as changes are available on the main branch. Crates in the aranya repo can be released less frequently depending on which feature sets need to be released.
@@ -94,7 +105,7 @@ Tasks to complete on the day of the release:
 ### Manual Tasks
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
-   - Example: "Starting product release v0.1.0"
+   - See [announcement templates](../skills/release/templates/announcement.md) for format.
 
 2. **(partially-automated)** Open a PR to bump crate versions for the release. Can do this a day before release or on day of release. (release lead)
 
@@ -125,7 +136,7 @@ Once the release PR is merged, CI/CD workflows automatically:
 
 10. **(partially-automated)** Update the website and support docs. (product manager)
 
-11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
+11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. See [announcement templates](../skills/release/templates/announcement.md) for format. (release lead)
 
 12. **(manual)** Schedule a product release retrospective for release process improvements.
 
@@ -134,6 +145,53 @@ Once the release PR is merged, CI/CD workflows automatically:
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key.
 - **(partially-automated)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct): https://aranya-project.github.io/aranya-docs/capi/
 - **(manual)** Check the published docs.rs website for each Aranya crate (sometimes CI builds the docs but the official website fails to build the docs correctly): https://docs.rs/aranya-client/latest/aranya_client/
+
+## Release Issue Template
+
+Copy the template below into a new GitHub issue to track release progress. Replace `[VERSION]` and `[DATE]` with the appropriate values.
+
+````markdown
+# Aranya v[VERSION] Release Checklist
+
+**Target Release Date:** [DATE]
+**Release Lead:** @[USERNAME]
+
+## Code Freeze (3 days before release)
+
+- [ ] Communicate code freeze to the team
+- [ ] Release aranya-core crates to crates.io
+- [ ] Verify aranya builds with newly released aranya-core crates
+
+## Release Day
+
+### Pre-Merge
+
+- [ ] Announce release process starting to leadership, team leads, and DevOps
+- [ ] Open PR to bump crate versions
+- [ ] Verify all CI/CD jobs pass on `main` branch
+- [ ] Merge the release PR
+
+### Post-Merge Verification
+
+- [ ] Verify publish.yml workflow succeeded
+- [ ] Verify release.yml workflow succeeded
+- [ ] Verify aranya-* crates released on [crates.io](https://crates.io/search?q=aranya)
+- [ ] Verify release artifacts attached to GitHub release
+- [ ] Add release notes to GitHub release
+- [ ] Have product owner/team lead review the release
+
+### Announcements
+
+- [ ] Update website and support docs
+- [ ] Announce release internally to company and leadership
+- [ ] Schedule release retrospective
+
+## Post-Release
+
+- [ ] Rotate crates.io API key
+- [ ] Update C API docs landing page URLs
+- [ ] Verify docs.rs pages built correctly
+````
 
 ## Patch Releases
 
@@ -215,12 +273,11 @@ The following improvements have been identified but not yet implemented:
 ### Process Gaps
 
 - **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
-- **Communication templates** - Add templates for release start announcements, completion announcements, and internal release notes format.
 - **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
-- **Version freeze period** - Document a code freeze window before release day to stabilize the main branch.
 
 ### Automation Opportunities
 
+- **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo so issues can be created directly from the template without copying from this document.
 - **Automate verification tasks** - Steps 5-7 (verifying workflows succeeded, crates published, artifacts attached) could have a script or AI assistance to check automatically.
 - **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
 - **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
