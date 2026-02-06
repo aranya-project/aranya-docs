@@ -350,9 +350,6 @@ If a node fails to initialize, the test MUST report which node failed and the ca
 
 The test MUST handle sync failures between nodes.
 
-#### ERR-004
-
-The test MUST log all errors with sufficient context for debugging.
 
 ### Cleanup Requirements
 
