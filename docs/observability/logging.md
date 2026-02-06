@@ -90,11 +90,9 @@ ARANYA_DAEMON=off ./aranya-daemon --config daemon.toml
 
 The `aranya-client` library does not configure logging itself. Applications embedding the client must initialize `tracing_subscriber`.
 
-**C applications:** Only Rust applications can configure `tracing_subscriber` directly. C clients require a C API wrapper to set up logging. The current C API exposes an initialization helper, but it is not as flexible as this spec’s configuration goals.
+### Rust Applications
 
-### Application Setup
-
-Initialize logging in the application:
+Initialize logging in your Rust application:
 
 ```rust
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -110,9 +108,54 @@ use std::io;
         .init();
 ```
 
+### C Applications
+
+C applications using the `aranya-client-capi` library must call `aranya_init_logging()` to initialize the client library's logging system. The function supports file output and format configuration through environment variables.
+
+To enable daemon logging for C applications, configure the daemon using the `daemon.toml` configuration files that your application provides to each daemon instance. For development and testing, you can also temporarily override logging using the `ARANYA_DAEMON` environment variable. See the [Configuration File](#configuration-file) section for the complete list of logging configuration options and the [Environment Variable Override](#environment-variable-override) section for temporary overrides.
+
+**Function Signature:**
+
+```c
+#include "aranya-client.h"
+
+AranyaError aranya_init_logging(void);
+```
+
+**Environment Variables:**
+
+- **`ARANYA_CAPI`** - Log filter using EnvFilter syntax (required to enable logging)
+  - Examples: `"info"`, `"debug"`, `"debug,aranya_client::afc=trace"`
+  - Set to `"off"` to disable logging
+- **`ARANYA_CAPI_LOG`** - Log file path (optional)
+  - If not set, logs go to stderr
+  - Directory is created automatically if it doesn't exist
+  - Example: `"./logs/client.log"`
+- **`ARANYA_CAPI_FORMAT`** - Log format: `"json"` or `"text"` (optional, defaults to `"json"`)
+
+**Shell Configuration:**
+
+```bash
+# Basic debug logging to stderr
+ARANYA_CAPI="debug" ./my-c-app
+
+# Detailed AFC tracing to file
+ARANYA_CAPI="info,aranya_client::afc=trace" \
+ARANYA_CAPI_LOG="./client.log" \
+ARANYA_CAPI_FORMAT="json" \
+  ./my-c-app
+
+# Multiple component filtering with file output
+ARANYA_CAPI="info,aranya_client=debug,aranya_client::afc=trace" \
+ARANYA_CAPI_LOG="/var/log/myapp/client.log" \
+  ./my-c-app
+```
+
+Note: If `ARANYA_CAPI` is not set or set to `"off"`, no logs will be emitted
+
 ### Client Log Filters
 
-**Common client/AFC filters:**
+**For Rust applications using `APP_LOG`:**
 ```bash
 # All client library logs at debug level
 APP_LOG=aranya_client=debug ./application
@@ -127,7 +170,24 @@ APP_LOG=aranya_client::afc=trace ./application
 APP_LOG=info,aranya_client::afc=debug,aranya_client::client=debug ./application
 ```
 
+**For C applications using `ARANYA_CAPI`:**
+```bash
+# All client library logs at debug level
+ARANYA_CAPI=aranya_client=debug ./my-c-app
+
+# AFC operations only
+ARANYA_CAPI=aranya_client::afc=debug ./my-c-app
+
+# Detailed AFC seal/open tracing
+ARANYA_CAPI=aranya_client::afc=trace ./my-c-app
+
+# Multiple modules
+ARANYA_CAPI=info,aranya_client::afc=debug,aranya_client::client=debug ./my-c-app
+```
+
 ### Recommended Options
+
+**For Rust applications:**
 
 Option 1: Application-specific env var
 ```bash
@@ -135,13 +195,17 @@ Option 1: Application-specific env var
 APP_LOG=info,aranya_client::afc=debug ./application
 ```
 
-Option 2: Use RUST_LOG (standard Rust convention)
+**For C applications:**
 
-NOTE: this applies to Rust applications only; C clients need a dedicated logging init API.
-
+Use `ARANYA_CAPI` with `aranya_init_logging()`:
 ```bash
-# Works well if you follow standard Rust logging conventions
-RUST_LOG=info,aranya_client=debug ./my-application
+# Clear separation from daemon logging
+ARANYA_CAPI=info,aranya_client::afc=debug ./my-c-app
+
+# With file output
+ARANYA_CAPI=debug \
+ARANYA_CAPI_LOG="./client.log" \
+  ./my-c-app
 ```
 
 ## Daemon + Client Logging
@@ -150,6 +214,7 @@ For deployments where you run both daemon and client application:
 
 ### Separate Env Vars
 
+**Rust application with daemon:**
 ```bash
 # Clear separation of concerns
 ARANYA_DAEMON=info,aranya_daemon::sync=debug \
@@ -157,17 +222,14 @@ APP_LOG=info,aranya_client::afc=debug \
   ./application
 ```
 
-### Shared RUST_LOG
-
+**C application with daemon:**
 ```bash
-# Daemon
-RUST_LOG=info,aranya=debug ./aranya-daemon --config daemon.toml
-
-# Client application
-RUST_LOG=info,aranya=debug ./application
+# Separate environment variables for daemon and client
+ARANYA_DAEMON=info,aranya_daemon::sync=debug \
+ARANYA_CAPI=info,aranya_client::afc=debug \
+ARANYA_CAPI_LOG="./client.log" \
+  ./my-c-app
 ```
-
-Trade-off: Shared RUST_LOG is simpler but gives less granular control.
 
 ## Structured Logging Format
 
@@ -200,18 +262,6 @@ For log aggregation and analysis:
     "effects_count": 3
   }
 }
-```
-
-To enable JSON format, modify the logging setup:
-
-```rust
-tracing_subscriber::registry()
-    .with(
-        tracing_subscriber::fmt::layer()
-            .json()  // Enable JSON output
-            .with_filter(env_filter),
-    )
-    .init();
 ```
 
 ## Component-Level Tracing

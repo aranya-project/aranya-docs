@@ -117,39 +117,27 @@ The JSON format is configured via the tracing subscriber. See [Logging Configura
 Example log entry for successful sync:
 ```json
 {
-    "timestamp":"2026-02-03T16:35:25.128361Z",
-    "level":"INFO",
-    "fields":
-    {
-        "message":"Sync completed successfully",
-        "peer_device_id":"127.0.0.1:51047","peer_graph_id":"3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2",
-        "duration_ms":"0",
-        "cmd_count_received":0,
-        "effects_count":0
-    },
-    "target":"aranya_daemon::sync::manager",
-    "span":
-    {
-        "graph":"3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2",
-        "peer":"127.0.0.1:51047",
-        "name":"sync"
-    },
-    "spans":
-    [
-        {
-            "component":"daemon",
-            "name":"admin",
-            "name":"daemon"
-        },
-        {
-            "component":"sync_manager",
-            "name":"syncer"
-        },
-        {
-            "graph":"3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2",
-            "peer":"127.0.0.1:51047",'
-            "name":"sync"
-        }
-    ]
+  "timestamp": "2026-02-03T16:35:25.128361Z",
+  "level": "INFO",
+  "target": "aranya_daemon::sync::manager",
+  "fields": {
+    "event_type": "sync_complete",
+    "message": "Sync completed successfully",
+    "peer_device_id": "127.0.0.1:51047",
+    "peer_graph_id": "3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2",
+    "duration_ms": 0,
+    "cmd_count_received": 0,
+    "effects_count": 0
+  },
+  "span": {
+    "graph": "3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2",
+    "peer": "127.0.0.1:51047",
+    "name": "sync"
+  },
+  "spans": [
+    {"component": "daemon", "name": "daemon"},
+    {"component": "sync_manager", "name": "syncer"},
+    {"graph": "3rK8CzrjzEyP3bL9kjkEj28bCCJ2opuCAidtzKu6bBM2", "peer": "127.0.0.1:51047", "name": "sync"}
+  ]
 }
 ```
