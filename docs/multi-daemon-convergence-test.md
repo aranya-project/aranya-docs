@@ -320,6 +320,7 @@ The test MUST calculate and report the following metrics:
 - Maximum convergence time (slowest node)
 - Mean convergence time
 - Median convergence time
+- Mode convergence time (convergence times SHOULD be bucketed to produce a meaningful mode)
 - 95th percentile convergence time (p95)
 - 99th percentile convergence time (p99)
 - Standard deviation of convergence times
