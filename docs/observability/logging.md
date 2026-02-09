@@ -48,11 +48,13 @@ level = "info"
 # Format: "component1=level1,component2=level2"
 # Example: "sync=debug,afc=trace,policy=info"
 # log_filter = ""
-# Log path
-path = "/var/log/aranya/daemon.log"
-# Log to standard out
-stdout = true
+# Log file path (optional, defaults to stdout only)
+# path = "/var/log/aranya/daemon.log"
+# Log to standard out (enabled by default)
+# stdout = true
 ```
+
+**Default behavior:** Logs go to stdout by default (ideal for systemd, containers, and log aggregators). Optionally add `path` to also write to a file.
 
 **Common log filter configurations:**
 [Subscriber filter doc] (https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#filter-directives)
