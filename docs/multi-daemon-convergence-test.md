@@ -149,7 +149,7 @@ The test MUST support configuring the sync mode (poll or hello).
 
 #### CONF-009
 
-The default sync mode MUST be poll.
+The default sync mode MUST be hello.
 
 #### CONF-010
 
