@@ -198,21 +198,13 @@ In hello sync mode, the test MUST support configuring the hello subscription dur
 
 ### Ring Topology Requirements
 
-#### TOPO-001
+#### RING-001
 
 In the ring topology, each node MUST connect to exactly two other nodes: its clockwise neighbor and its counter-clockwise neighbor.
 
-#### TOPO-002
+#### RING-002
 
-In the ring topology, sync peers MUST be configured bidirectionally, meaning if node A syncs with node B, node B MUST also sync with node A.
-
-#### TOPO-003
-
-The ring topology MUST form a single connected ring with no partitions.
-
-#### TOPO-004
-
-In the ring topology, no node MUST have more than 2 sync peers.
+The ring topology MUST form a single connected ring (each node's two peers link to form one cycle covering all nodes).
 
 ### Node Initialization Requirements
 
@@ -270,7 +262,7 @@ The test MUST verify that all nodes have received the team configuration.
 
 #### SYNC-001
 
-Each node MUST add its two ring neighbors as sync peers.
+Each node MUST add sync peers according to the configured topology.
 
 #### SYNC-002
 
@@ -489,7 +481,7 @@ The test passes when:
 
 ### Duvet Integration
 
-This specification is designed for use with duvet. Requirements are marked with unique identifiers (e.g., `CONF-001`, `TOPO-002`) that can be referenced in implementation code using duvet annotations:
+This specification is designed for use with duvet. Requirements are marked with unique identifiers (e.g., `CONF-001`, `RING-001`) that can be referenced in implementation code using duvet annotations:
 
 ```rust
 //= https://github.com/aranya-project/aranya-docs/docs/multi-daemon-convergence-test.md#CONF-002
