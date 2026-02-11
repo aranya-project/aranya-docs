@@ -31,9 +31,13 @@ This test suite addresses these gaps by providing a framework for large-scale co
 The test uses a scalable node context that extends the patterns from `DeviceCtx` in the existing test infrastructure.
 
 ```rust
+/// Type-safe index into the node list (0 to N-1).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct NodeIndex(usize);
+
 struct NodeCtx {
     /// Unique node identifier (0 to N-1)
-    index: usize,
+    index: NodeIndex,
     /// Aranya client connection
     client: Client,
     /// Device's public key bundle
@@ -43,7 +47,7 @@ struct NodeCtx {
     /// Daemon handle
     daemon: DaemonHandle,
     /// Sync peers (indices of connected nodes)
-    peers: Vec<usize>,
+    peers: Vec<NodeIndex>,
 }
 ```
 
@@ -55,8 +59,9 @@ The test context manages all nodes and the configured topology.
 struct TestCtx {
     /// All nodes in the test
     nodes: Vec<NodeCtx>,
-    /// The topology used to connect nodes
-    topology: Topology,
+    /// The topology used to connect nodes. `None` when using
+    /// `add_sync_peer` exclusively to wire peers manually.
+    topology: Option<Topology>,
     /// The sync mode used for this test run
     sync_mode: SyncMode,
     /// Team ID for the test
@@ -65,9 +70,41 @@ struct TestCtx {
     tracker: ConvergenceTracker,
 }
 
+impl TestCtx {
+    /// Manually add a sync peer relationship between two nodes.
+    /// Used with the Custom topology to build arbitrary network graphs.
+    fn add_sync_peer(&mut self, from: NodeIndex, to: NodeIndex) { ... }
+}
+
+/// A function that takes the total node count and returns
+/// the peer list for each node. `peers[i]` contains the
+/// `NodeIndex`s of node `i`'s sync peers.
+type TopologyConnectFn = fn(usize) -> Vec<Vec<NodeIndex>>;
+
 enum Topology {
     Ring,
+    Custom {
+        connect: TopologyConnectFn,
+    },
 }
+
+// Example: a star topology where node 0 is the hub
+fn star_topology(node_count: usize) -> Vec<Vec<NodeIndex>> {
+    (0..node_count)
+        .map(|i| {
+            if i == 0 {
+                // Hub connects to all other nodes
+                (1..node_count).map(NodeIndex).collect()
+            } else {
+                // Spokes connect only to the hub
+                vec![NodeIndex(0)]
+            }
+        })
+        .collect()
+}
+
+// Usage:
+let topology = Topology::Custom { connect: star_topology };
 
 enum SyncMode {
     /// All nodes use interval-based polling to discover new commands
@@ -85,7 +122,7 @@ enum SyncMode {
 }
 ```
 
-The `Topology` enum is expected to grow as additional topologies (star, mesh, etc.) are added in future extensions.
+The `Topology` enum is expected to grow as additional topologies (star, mesh, etc.) are added in future extensions. The `Custom` variant accepts a closure that generates the full peer adjacency list from the node count, allowing declarative topology definitions. For cases requiring dynamic or incremental wiring, callers can also use `TestCtx::add_sync_peer` to add individual peer relationships after setup.
 
 The `SyncMode` enum is expected to grow (e.g., `Mixed` mode) as additional sync strategies are validated.
 
@@ -427,6 +464,7 @@ The test passes when:
    - Mesh topology
    - Random graph topology
    - Hierarchical topology
+   - Custom topology (user-defined graphs via `add_sync_peer`)
 
 2. **Failure Injection**
    - Node failure simulation
