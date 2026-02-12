@@ -8,7 +8,7 @@ permalink: "/multi-daemon-convergence-test/"
 
 ## Overview
 
-This specification defines a test suite for validating Aranya daemon convergence behavior with a large number of nodes on a single device. The primary goal is to verify that all nodes in a network eventually reach a consistent state after commands are issued and synchronized across a defined network topology. We use a label command to easily track which nodes are up to date.
+This specification defines a test suite for validating Aranya daemon convergence behavior with a large number of nodes on a single device. The primary goal is to test larger number of daemons on a team and verify that all nodes in a network eventually reach a consistent state after commands are issued and synchronized across a defined network topology. We use a label command to easily track which nodes are up to date.
 
 This specification is designed for use with [duvet](https://github.com/awslabs/duvet) for requirements traceability.
 
@@ -74,6 +74,9 @@ impl TestCtx {
     /// Manually add a sync peer relationship between two nodes.
     /// Used with the Custom topology to build arbitrary network graphs.
     fn add_sync_peer(&mut self, from: NodeIndex, to: NodeIndex) { ... }
+
+    /// Remove a sync peer relationship between two nodes.
+    fn remove_sync_peer(&mut self, from: NodeIndex, to: NodeIndex) { ... }
 }
 
 /// A function that takes the total node count and returns
@@ -196,6 +199,20 @@ In hello sync mode, the test MUST support configuring the hello notification deb
 
 In hello sync mode, the test MUST support configuring the hello subscription duration (how long a subscription remains valid).
 
+### Topology Requirements
+
+#### TOPO-001
+
+The test MUST support the Ring topology.
+
+#### TOPO-002
+
+The test MUST support the Custom topology.
+
+#### TOPO-003
+
+The initial implementation MUST include at least the Ring and Custom topologies.
+
 ### Ring Topology Requirements
 
 #### RING-001
@@ -205,6 +222,28 @@ In the ring topology, each node MUST connect to exactly two other nodes: its clo
 #### RING-002
 
 The ring topology MUST form a single connected ring (each node's two peers link to form one cycle covering all nodes).
+
+### Custom Topology Requirements
+
+#### CUST-001
+
+The Custom topology MUST accept a topology connect function (`TopologyConnectFn`) that takes the total node count and returns the peer list for each node.
+
+#### CUST-002
+
+The topology connect function MUST return a peer list of length equal to the node count, where each entry contains the `NodeIndex`s of that node's sync peers.
+
+#### CUST-003
+
+The Custom topology MUST allow defining arbitrary peer relationships between nodes, including topologies such as star, mesh, and hierarchical.
+
+#### CUST-004
+
+`TestCtx` MUST provide an `add_sync_peer` method that adds a sync peer relationship between two nodes identified by `NodeIndex`.
+
+#### CUST-005
+
+`TestCtx` MUST provide a `remove_sync_peer` method that removes a sync peer relationship between two nodes identified by `NodeIndex`.
 
 ### Node Initialization Requirements
 
