@@ -59,9 +59,11 @@ The test context manages all nodes and the configured topology.
 struct TestCtx {
     /// All nodes in the test
     nodes: Vec<NodeCtx>,
-    /// The topology used to connect nodes. `None` when using
-    /// `add_sync_peer` exclusively to wire peers manually.
-    topology: Option<Topology>,
+    /// The topologies used to connect nodes. When multiple topologies
+    /// are provided they are applied sequentially, each one adding
+    /// its peers on top of any previously configured peers. `None`
+    /// when using `add_sync_peer` exclusively to wire peers manually.
+    topology: Option<Vec<Topology>>,
     /// The sync mode used for this test run
     sync_mode: SyncMode,
     /// Team ID for the test
@@ -125,7 +127,7 @@ enum SyncMode {
 }
 ```
 
-The `Topology` enum is expected to grow as additional topologies (star, mesh, etc.) are added in future extensions. The `Custom` variant accepts a closure that generates the full peer adjacency list from the node count, allowing declarative topology definitions. For cases requiring dynamic or incremental wiring, callers can also use `TestCtx::add_sync_peer` to add individual peer relationships after setup.
+The `Topology` enum is expected to grow as additional topologies (star, mesh, etc.) are added in future extensions. The `Custom` variant accepts a closure that generates the full peer adjacency list from the node count, allowing declarative topology definitions. When multiple topologies are provided, they are applied sequentially, each one adding its peers on top of any previously configured peers. For example, combining a `Ring` with a `Custom` star topology produces a ring where the hub node additionally peers with every other node. For cases requiring dynamic or incremental wiring, callers can also use `TestCtx::add_sync_peer` to add individual peer relationships after setup.
 
 The `SyncMode` enum is expected to grow (e.g., `Mixed` mode) as additional sync strategies are validated.
 
@@ -212,6 +214,10 @@ The test MUST support the Custom topology.
 #### TOPO-003
 
 The initial implementation MUST include at least the Ring and Custom topologies.
+
+#### TOPO-004
+
+When multiple topologies are configured, the test MUST apply them sequentially, each topology adding its peers on top of any previously configured peers.
 
 ### Ring Topology Requirements
 
