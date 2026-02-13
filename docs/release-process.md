@@ -25,7 +25,7 @@ Throughout this document, tasks are marked to indicate their level of automation
 - CI/CD runners are only available to users within our GitHub organization, with proper repo permissions assigned to them. External users require manual approval to run CI/CD jobs on our runners. This prevents unwanted accumulation of cost on ephemeral cloud runners and potential exploitation of self-hosted runners.
 - CI/CD must be run on the main branch and all feature branches.
 - Before merging PRs, review is required from at least one code owner and at least one other engineer. Significantly large, important, or security-critical features will require review from multiple code owners and stakeholders.
-- CI/CD will include checks such as security vulnerability scans, linting, unit tests, integration tests, formatting, etc.
+- CI/CD will include checks such as security vulnerability scans, cargo vet, linting, unit tests, integration tests, formatting, etc.
 - Before merging PRs, all branch protections must be checked. These should only be bypassed by team members with elevated permissions under special documented circumstances (e.g. by team leads or admin with a documented paper trail explaining the rationale).
 
 ## Pre-Release Checklist
