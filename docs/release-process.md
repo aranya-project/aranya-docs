@@ -221,7 +221,7 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 3. **(partially-automated)** Create a patch release branch targeting the base branch:
    ```bash
-   git checkout -b release-X.Y.Z release-X.Y.0-base
+   git checkout -b release-X.Y.<Z+1> release-X.Y.Z-base
    ```
 
 4. **(partially-automated)** Cherry-pick the fix from main:
