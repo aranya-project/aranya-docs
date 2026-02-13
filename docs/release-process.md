@@ -203,15 +203,15 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 1. **(manual)** Create a base branch from the release tag being patched:
    ```bash
-   git checkout -b release-X.Y.Z-base vX.Y.Z
-   git push origin release-X.Y.Z-base
+   git checkout -b patch/X.Y.Z vX.Y.Z
+   git push origin patch/X.Y.Z
    ```
 
-2. **(manual)** Update CI configuration to allow releases from the base branch. Modify the release workflow to permit releases from `release-X.Y.Z-base`. See [this example PR](https://github.com/aranya-project/aranya/pull/706) for the specific workflow changes required.
+2. **(manual)** Update CI configuration to allow releases from the base branch. Modify the release workflow to permit releases from `patch/X.Y.Z`. See [this example PR](https://github.com/aranya-project/aranya/pull/706) for the specific workflow changes required.
 
 3. **(partially-automated)** Create a patch release branch targeting the base branch:
    ```bash
-   git checkout -b release-X.Y.<Z+1> release-X.Y.Z-base
+   git checkout -b release-X.Y.<Z+1> patch/X.Y.Z
    ```
 
 4. **(partially-automated)** Cherry-pick the fix from main:
@@ -278,3 +278,4 @@ The following improvements have been identified but not yet implemented:
 
 - **Credential expiration monitoring** - Add recurring reminders or automated alerts for credential expiration instead of relying on manual calendar entries.
 - **Release checklist sign-off** - Add a sign-off step where the release lead confirms all items are complete before announcing.
+- **Restrict releases to protected branches** - Release workflows can be modified on any unprotected branch to trigger releases without approval. Use GitHub Environment protections to restrict which branches can access release secrets (e.g., `CARGO_REGISTRY_TOKEN`) and require manual approval before release workflows proceed. This ensures releases can only occur from protected branches regardless of workflow file changes.
