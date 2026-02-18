@@ -164,7 +164,7 @@ Tasks to complete on the day of the release:
 
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key.
 - **(partially-automated)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct): https://aranya-project.github.io/aranya-docs/capi/
-- **(manual)** Check the published docs.rs website for all Aranya crates (sometimes CI builds the docs but the official website fails to build the docs correctly). See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify.
+- **(manual)** Check the published docs.rs website for all Aranya crates (sometimes CI builds the docs but the official website fails to build the docs correctly). See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
 
 ## Release Issue Template
 
