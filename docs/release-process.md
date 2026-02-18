@@ -275,7 +275,7 @@ AI can assist with:
 - Generating changelogs and release notes
 - Creating version bump PRs
 - Cherry-picking fixes for patch releases
-- Updating the website docs with a link to the latest Doxygen docs for the C API
+- Updating the website docs in [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) with a link to the latest Doxygen docs for the C API
 - Updating the website docs to reflect changes in Aranya's design, feature set, or application-facing APIs
 
 AI is not recommended for aranya-core release PRs. Determining what version to bump crates to is complex, as transitive dependencies can cause breaking changes in non-obvious ways.
