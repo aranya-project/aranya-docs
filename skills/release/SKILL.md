@@ -1,6 +1,6 @@
 <!--
   Auto-generated from: docs/release-process.md
-  Last updated: 2026-02-05
+  Last updated: 2026-02-18
 
   This skill provides AI assistance for the Aranya release process.
   For the full release process documentation, see the source spec.
@@ -25,7 +25,7 @@ You are assisting with the Aranya release process. Before proceeding, read the f
 ## Arguments
 
 - `$0` - Release type: `major`, `minor`, `patch`, or `docs`
-- `$1` - Version number (e.g., `4.2.0`) or vulnerability ID for patches (e.g., `RUSTSEC-2026-0007`)
+- `$1` - Version number (e.g., `5.1.0`) or vulnerability ID for patches (e.g., `RUSTSEC-2026-0007`)
 
 ## Release Types
 
@@ -34,7 +34,7 @@ You are assisting with the Aranya release process. Before proceeding, read the f
 For regular releases, you can assist with:
 - Creating version bump PRs using `release-plz update`
 - Generating changelogs and release notes
-- Updating website docs to reflect changes in Aranya's design, feature set, or APIs
+- Updating website docs in [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) to reflect changes in Aranya's design, feature set, or APIs
 
 ### Patch Release (`/release patch [vulnerability-id]`)
 
@@ -52,17 +52,18 @@ Reference PRs for patch releases:
 ### Documentation Update (`/release docs`)
 
 For post-release documentation tasks:
-- Update C API docs landing page URLs with newly released Doxygen docs
+- Update C API docs landing page URLs with newly released Doxygen docs in [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io)
 - Update website docs to reflect changes in Aranya's design, feature set, or APIs
 - Verify existing documentation links are correct
+- Check the published docs.rs website for all Aranya crates. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
 
 ## Reference PRs
 
 When creating release PRs, reference these examples:
-- Major releases: [4.0.0](https://github.com/aranya-project/aranya/pull/618), [3.0.0](https://github.com/aranya-project/aranya/pull/512), [2.0.0](https://github.com/aranya-project/aranya/pull/465), [1.0.0](https://github.com/aranya-project/aranya/pull/389)
+- Major releases: [5.0.0](https://github.com/aranya-project/aranya/pull/728), [4.0.0](https://github.com/aranya-project/aranya/pull/618), [3.0.0](https://github.com/aranya-project/aranya/pull/512), [2.0.0](https://github.com/aranya-project/aranya/pull/465), [1.0.0](https://github.com/aranya-project/aranya/pull/389)
 - Minor releases: [4.1.0](https://github.com/aranya-project/aranya/pull/679), [0.6.0](https://github.com/aranya-project/aranya/pull/276)
 - Patch releases: [4.1.1](https://github.com/aranya-project/aranya/pull/705), [0.6.1](https://github.com/aranya-project/aranya/pull/284)
-- CI/workflow fixes: [allow release from patch branch](https://github.com/aranya-project/aranya/pull/706)
+- CI/workflow fixes: [allow release from patch branch](https://github.com/aranya-project/aranya/pull/706), [don't publish examples](https://github.com/aranya-project/aranya/pull/623)
 
 ## Important Restrictions
 
