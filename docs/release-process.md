@@ -41,6 +41,7 @@ This section documents the security controls that protect the release pipeline.
 - Checks include security vulnerability scans, [cargo vet](https://mozilla.github.io/cargo-vet/) <!-- TODO: link to internal cargo vet spec when available -->, linting, unit tests, integration tests, formatting, etc.
 - `main` and `patch/**/*` branches run additional publish/release workflows that create tags, publish crates to crates.io, and upload release artifacts. These workflows are not triggered on other branches.
 - CI/CD runners are only available to users within our GitHub organization, with proper repo permissions assigned to them. External users require manual approval to run CI/CD jobs on our runners. This prevents unwanted accumulation of cost on ephemeral cloud runners and potential exploitation of self-hosted runners.
+- Each repo must configure a set of required status checks (CI/CD jobs) that must pass before a PR can be merged.
 - All branch protection checks must pass before merging.
 
 ### Release Environment Protections
