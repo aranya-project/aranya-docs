@@ -25,7 +25,7 @@ This section documents the security controls that protect the release pipeline.
 ### Branch Protections
 
 - `main` is a protected branch used for normal product releases (major and minor versions).
-- `patch/**/*` branches are used for patch releases and must be protected with a wildcard branch protection rule. — **TODO** ([aranya#721](https://github.com/aranya-project/aranya/issues/721))
+- `patch/**/*` branches are used for patch releases and must be protected with a wildcard branch protection rule. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
 - Release PRs (targeting `main` or `patch/**/*`) require at least 2 internal approvals.
 - Branch protections should only be bypassed by team members with elevated permissions under special documented circumstances (e.g. by team leads or admin with a documented paper trail explaining the rationale).
 
@@ -46,13 +46,13 @@ This section documents the security controls that protect the release pipeline.
 
 ### Release Environment Protections
 
-- Release workflows should use a GitHub Environment with deployment branch restrictions limiting access to `main` and `patch/**/*`. — **TODO** ([aranya#722](https://github.com/aranya-project/aranya/issues/722))
-- Required reviewers on the environment provide an additional approval gate before release workflows proceed. — **TODO** ([aranya#722](https://github.com/aranya-project/aranya/issues/722))
+- Release workflows should use a GitHub Environment with deployment branch restrictions limiting access to `main` and `patch/**/*`. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
+- Required reviewers on the environment provide an additional approval gate before release workflows proceed. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
 - This prevents an attacker from modifying a workflow on an unprotected branch to trigger an unauthorized release, since the environment will block execution and deny access to secrets.
 
 ### Secrets Management
 
-- Release credentials (e.g., `CARGO_REGISTRY_TOKEN`) should be scoped to the release environment rather than stored as repo-level secrets, so unprotected branches cannot access them. — **TODO** ([aranya#722](https://github.com/aranya-project/aranya/issues/722))
+- Release credentials (e.g., `CARGO_REGISTRY_TOKEN`) should be scoped to the release environment rather than stored as repo-level secrets, so unprotected branches cannot access them. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
 - The crates.io API key is rotated after each release to limit the window of exposure if a key is compromised (see [Post-Release Checklist](#post-release-checklist)).
 
 ## Pre-Release Checklist
