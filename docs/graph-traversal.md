@@ -140,7 +140,7 @@ fn push_queue(queue: &mut TraversalQueue, loc: Location) -> Result<(), StorageEr
 }
 ```
 
-`push_queue` prevents the same segment from appearing in the queue twice, which is the primary mechanism for avoiding exponential blowup. Combined with max-heap ordering, once a segment is popped and processed, any later attempts to enqueue it are caught by the uniqueness check (for items still in the queue) or simply never reached (the traversal has moved past that `max_cut` level).
+`push_queue` prevents the same segment from appearing in the queue twice, which is the primary mechanism for avoiding exponential blowup. Note that deduplication only applies to items currently in the queue: once a segment is popped and processed, a later path could re-enqueue it. In practice this is rare, especially with skip lists, and revisits produce redundant work but not incorrect results.
 
 ### Traversal Buffers
 
@@ -302,9 +302,9 @@ Processing the highest `max_cut` first has two critical properties:
 
 1. **Bounded queue size**: At any point during traversal, the queue contains at most one entry per concurrent branch at the current `max_cut` frontier. A FIFO queue would accumulate entries across many `max_cut` levels, growing proportionally to graph depth rather than width.
 
-2. **Effective deduplication**: When a segment is popped from the heap, it has the highest `max_cut` of anything in the queue. Any future attempt to enqueue the same segment (via a different path) is caught by `push_queue`. Since the traversal moves strictly from high to low `max_cut`, a segment that has already been processed will not be encountered again at a higher `max_cut`.
+2. **Effective deduplication**: While a segment is in the queue, `push_queue` prevents it from being enqueued again. Once a segment is popped and processed, a different path could re-enqueue it, but this is rare in practice — skip lists cause most backward jumps to converge on the same segments before they are popped, and the max-heap ordering means a segment is unlikely to be reached again at a lower `max_cut` via a substantially different path.
 
-Together, these properties mean the queue itself serves as the deduplication mechanism, with no additional data structures required.
+Together, these properties mean the queue serves as the primary deduplication mechanism, with no additional data structures required. Occasional revisits may occur but produce redundant work, not incorrect results.
 
 ### Capacity Sizing
 
@@ -321,7 +321,7 @@ Two buffers (`TraversalBuffers`) use approximately 16 KB total.
 ### Correctness
 
 The algorithm remains correct because:
-- `push_queue` prevents redundant processing, not necessary processing. A segment is only skipped if it is already in the queue (and will be processed when popped).
+- `push_queue` prevents redundant processing, not necessary processing. A segment is only skipped if it is already in the queue (and will be processed when popped). If a segment has already been popped and is later re-enqueued via a different path, it will be processed again — this is redundant but not incorrect.
 - Queue overflow produces a clear error (`TraversalQueueOverflow`) rather than silent data loss.
 - The `max_cut` filtering invariant ensures only relevant segments are visited: all enqueued locations have `max_cut >= target`, so the search space is bounded.
 
