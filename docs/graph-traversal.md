@@ -65,7 +65,7 @@ Finds a command by its address, searching backward from a starting location. The
 1. Initialize a max-heap queue with `start`
 2. Pop the highest `max_cut` location from the queue
 3. Scan commands in the current segment for matching address
-4. If not found, add either a skip list target or the prior location(s) to the queue, skipping any with `max_cut` below the target address (too old to contain it) and deduplicating by segment
+4. If not found, add the first valid skip list target to the queue if one exists, otherwise add the prior location(s); skip any with `max_cut` below the target address (too old to contain it) and deduplicate by segment
 5. Repeat until found or queue exhausted
 
 #### `is_ancestor(candidate: Location, head: Segment) -> bool`
@@ -172,9 +172,11 @@ pub struct TraversalBuffers {
 }
 ```
 
-### Integration with Traversal
+### Reference Implementation
 
-#### is_ancestor traversal
+The following Rust snippets illustrate how the data structures above are used in each traversal operation. The normative algorithm descriptions are in [Affected Operations](#affected-operations); these snippets show one concrete realization.
+
+#### is_ancestor
 
 ```rust
 fn is_ancestor(
@@ -225,7 +227,7 @@ Key properties:
 - **Skip list selection**: Uses the first skip entry with sufficient `max_cut` (which, because the list is sorted ascending, is the lowest valid `max_cut` and therefore jumps furthest back).
 - **Deduplication via `push_queue`**: Prevents the same segment from appearing in the queue twice.
 
-#### get_location_from traversal
+#### get_location_from
 
 ```rust
 fn get_location_from(
@@ -269,7 +271,7 @@ fn get_location_from(
 }
 ```
 
-#### find_needed_segments traversal
+#### find_needed_segments
 
 This operation uses the dual-buffer pattern: `primary` for its own queue, `secondary` passed to `is_ancestor` calls:
 
@@ -302,7 +304,7 @@ Processing the highest `max_cut` first has two critical properties:
 
 2. **Effective deduplication**: When a segment is popped from the heap, it has the highest `max_cut` of anything in the queue. Any future attempt to enqueue the same segment (via a different path) is caught by `push_queue`. Since the traversal moves strictly from high to low `max_cut`, a segment that has already been processed will not be encountered again at a higher `max_cut`.
 
-Together, these properties eliminate the need for a separate visited set. The queue itself serves as the deduplication mechanism.
+Together, these properties mean the queue itself serves as the deduplication mechanism, with no additional data structures required.
 
 ### Capacity Sizing
 
@@ -344,12 +346,12 @@ The algorithm remains correct because:
 **Advantages:**
 - Fixed memory regardless of graph size
 - No dynamic allocation
-- No separate visited set needed
+- Queue handles deduplication without additional data structures
 - Queue size bounded by graph width, not depth
 - Correct results guaranteed
 - Early `max_cut` pruning avoids loading irrelevant segments
 
 **Disadvantages:**
 - O(CAP) uniqueness check per enqueue
-- Hard error on queue overflow (unlike a visited set which degrades gracefully)
+- Hard error on queue overflow rather than graceful degradation
 - Requires capacity sized to maximum expected graph width
