@@ -8,7 +8,7 @@ permalink: "/graph-traversal/"
 
 ## Overview
 
-Graph traversal in Aranya can exhibit exponential time complexity when visiting ancestor segments during operations like `is_ancestor` and `get_location_from`. This document specifies a bounded-memory solution using a capped visited set with max_cut-based eviction, suitable for no-alloc embedded environments.
+Graph traversal in Aranya can exhibit exponential time complexity when visiting ancestor segments during operations like `is_ancestor` and `get_location_from`. This document specifies a bounded-memory solution using a max-heap priority queue with in-queue deduplication, suitable for no-alloc embedded environments.
 
 ## Problem Statement
 
@@ -17,13 +17,13 @@ Graph traversal in Aranya can exhibit exponential time complexity when visiting 
 Commands in Aranya are organized into segments within a DAG. Each segment contains:
 - A sequence of commands
 - A `prior` field: `Prior::None`, `Prior::Single(Location)`, or `Prior::Merge(Location, Location)`
-- A skip list for fast backward traversal: `Vec<(Location, MaxCut)>`
+- A skip list for fast backward traversal, sorted by `max_cut` ascending: `Vec<Location>`
 
-A `Location` identifies a command by segment index and command index within that segment.
+A `Location` identifies a command by its segment index and `max_cut`.
 
 ### Exponential Blowup
 
-When multiple clients make concurrent changes, the graph develops merge points. Each merge acts as a "multiplication point" for traversal paths. Without tracking visited segments, the same segment can be queued multiple times through different paths.
+When multiple clients make concurrent changes, the graph develops merge points. Each merge acts as a "multiplication point" for traversal paths. Without deduplication, the same segment can be queued multiple times through different paths.
 
 Consider a sequence of merges forming a ladder pattern:
 
@@ -49,10 +49,10 @@ When traversing backward from the head:
 
 For `n` merge levels, this produces up to `2^n` segment visits:
 
-| Merge Levels | Without Tracking | With Tracking |
-|:------------:|:----------------:|:-------------:|
-| 10           | 1,024            | ~20           |
-| 20           | 1,048,576        | ~40           |
+| Merge Levels | Without Deduplication | With Deduplication |
+|:------------:|:---------------------:|:------------------:|
+| 10           | 1,024                 | ~20                |
+| 20           | 1,048,576             | ~40                |
 
 Skip lists help mitigate this by allowing larger backward jumps. When a valid skip list entry exists, it is used *instead of* the prior locations, reducing the number of segments visited.
 
@@ -62,28 +62,22 @@ Skip lists help mitigate this by allowing larger backward jumps. When a valid sk
 
 Finds a command by its address, searching backward from a starting location. The algorithm:
 
-1. Initialize a queue with `start`
-2. Pop a location from the queue
+1. Initialize a max-heap queue with `start`
+2. Pop the highest `max_cut` location from the queue
 3. Scan commands in the current segment for matching address
-4. If not found, add either a skip list target or the prior location(s) to the queue
+4. If not found, add the first valid skip list target to the queue if one exists, otherwise add the prior location(s); skip any with `max_cut` below the target address (too old to contain it) and deduplicate by segment
 5. Repeat until found or queue exhausted
-
-The exponential blowup occurs at step 4: each merge segment adds two parents to the queue. Without visited tracking, the same segment can be reached and queued through multiple paths.
 
 #### `is_ancestor(candidate: Location, head: Segment) -> bool`
 
 Determines if a location is an ancestor of a given segment head. The algorithm:
 
-1. Initialize a queue with the head segment's prior location(s)
-2. Pop a location from the queue
-3. If location is in the candidate's segment AND `location.command >= candidate.command`, return true (the candidate is reachable)
-4. If segment already visited at this entry point or higher, skip to step 2
-5. Mark segment as visited with current entry point
-6. If segment's max_cut < candidate's max_cut, skip (can't contain ancestor)
-7. If a valid skip list entry exists, add only that skip target to the queue; otherwise add prior location(s)
-8. Repeat until found or queue exhausted
-
-The ordering of steps 3-5 is critical: the found check (step 3) executes before the visited check (step 4). This ensures that entering a segment at different commands works correctly. If we enter segment S at command 3 and later at command 5 while searching for command 4, the second entry still finds the target (5 >= 4) even though the segment was already marked visited.
+1. Initialize a max-heap queue with the head segment's prior location(s) that have `max_cut >= candidate.max_cut`
+2. Pop the highest `max_cut` location from the queue
+3. Load the segment and check if it contains the candidate command
+4. If not found, find the first skip list entry with `max_cut >= candidate.max_cut` (the lowest valid skip, which jumps furthest back); if none, add prior location(s) with `max_cut >= candidate.max_cut`
+5. Deduplicate by segment before enqueuing
+6. Repeat until found or queue exhausted
 
 This operation is particularly expensive during braiding, where it is invoked O(B * S) times (B = braid size, S = active strands). Each call potentially traverses a significant portion of the graph.
 
@@ -94,7 +88,7 @@ Both operations share a common pattern:
 - Queue-based exploration of prior segments
 - Merge segments contribute two parent edges to the queue
 
-Without visited tracking, the number of queue operations grows exponentially with merge depth rather than linearly with segment count.
+Without deduplication, the number of queue operations grows exponentially with merge depth rather than linearly with segment count.
 
 ## Design Constraints
 
@@ -104,296 +98,260 @@ Target environments include:
 
 Key observations:
 1. Branch width at any point is bounded by peer count (P), assuming well-behaved devices. Each device can only create one new branch from any given command (either via action or merge, but not both). Misbehaving devices could violate this bound.
-2. Traversal proceeds backward (high max_cut to low max_cut), so evicting entries with high effective max_cut is safe
+2. Traversal proceeds backward (high `max_cut` to low `max_cut`). Processing the highest `max_cut` first bounds the queue size to the graph width at any given `max_cut` level, rather than accumulating entries across many levels as a FIFO would.
 
 ## Specification
 
-### Capped Visited Set
+### Location Ordering
 
-A fixed-size data structure tracking visited segments during traversal, using `heapless::Vec` for no-alloc storage.
+`Location` is ordered by `max_cut` first (then by segment index as a tiebreaker). This means the max-heap naturally processes locations with the highest `max_cut` first:
 
 ```rust
-struct CappedVisited<const CAP: usize> {
-    // (segment_id, min_max_cut, highest_command_visited)
-    entries: heapless::Vec<(usize, MaxCut, CommandIndex), CAP>,
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub struct Location {
+    pub max_cut: MaxCut,
+    pub segment: SegmentIndex,
 }
 ```
 
-Each entry tracks:
-- **segment_id**: The segment being tracked
-- **min_max_cut**: The minimum max_cut in the segment (i.e., the max_cut of command 0)
-- **highest_command_visited**: The highest command index we've entered this segment at
+The field ordering is critical: Rust's derived `Ord` compares fields in declaration order, so `max_cut` being first gives the desired heap behavior.
 
-This allows calculating the max_cut of any entry point without loading the segment:
+### Traversal Queue
+
+A fixed-capacity max-heap that processes locations with the highest `max_cut` first:
+
 ```rust
-entry_point_max_cut = min_max_cut + command_index
+pub const QUEUE_CAPACITY: usize = 512;
+
+pub type TraversalQueue =
+    heapless::binary_heap::BinaryHeap<Location, heapless::binary_heap::Max, QUEUE_CAPACITY>;
 ```
 
-### Operations
-
-#### `clear()`
-
-Resets the visited set for reuse.
+### Queue Helper
 
 ```rust
-fn clear(&mut self) {
-    self.entries.clear();
+fn push_queue(queue: &mut TraversalQueue, loc: Location) -> Result<(), StorageError> {
+    if queue.iter().any(|q| q.segment == loc.segment) {
+        return Ok(());
+    }
+    queue
+        .push(loc)
+        .map_err(|_| StorageError::TraversalQueueOverflow(QUEUE_CAPACITY))
 }
 ```
 
-#### `get(segment: usize) -> Option<(MaxCut, CommandIndex)>`
+`push_queue` prevents the same segment from appearing in the queue twice, which is the primary mechanism for avoiding exponential blowup. Note that deduplication only applies to items currently in the queue: once a segment is popped and processed, a later path could re-enqueue it. In practice this is rare, especially with skip lists, and revisits produce redundant work but not incorrect results.
 
-Returns the min_max_cut and highest_command_visited for a segment if it exists in the set.
+### Traversal Buffers
+
+Buffers are owned by the caller and passed into traversal functions. A dual-buffer design supports nested traversals (e.g., `find_needed_segments` calling `is_ancestor`):
 
 ```rust
-fn get(&self, segment: usize) -> Option<(MaxCut, CommandIndex)> {
-    self.entries
-        .iter()
-        .find(|(s, _, _)| *s == segment)
-        .map(|(_, min_mc, highest)| (*min_mc, *highest))
+pub struct TraversalBuffer {
+    queue: TraversalQueue,
 }
-```
 
-#### `insert_or_update(segment: usize, min_max_cut: MaxCut, command: CommandIndex)`
-
-Inserts a new segment or updates the highest_command_visited if the segment already exists.
-
-When the set is full and a new segment needs to be inserted, evicts the entry with the highest effective max_cut (min_max_cut + highest_command), as this represents the newest point visited and is least likely to be encountered again during backward traversal.
-
-```rust
-fn insert_or_update(&mut self, segment: usize, min_max_cut: MaxCut, command: CommandIndex) {
-    // Single pass: check for existing segment and track eviction candidate
-    let mut evict_idx = 0;
-    let mut evict_max_cut = MaxCut::MIN;
-
-    for (i, (s, min_mc, highest)) in self.entries.iter_mut().enumerate() {
-        if *s == segment {
-            // Segment exists - update highest_command if this entry point is higher
-            if command > *highest {
-                *highest = command;
-            }
-            return;
-        }
-        // Track entry with highest effective max_cut for potential eviction
-        let effective_max_cut = *min_mc + MaxCut::from(*highest);
-        if effective_max_cut > evict_max_cut {
-            evict_max_cut = effective_max_cut;
-            evict_idx = i;
-        }
+impl TraversalBuffer {
+    pub const fn new() -> Self {
+        Self { queue: TraversalQueue::new() }
     }
 
-    // Segment not found - insert new entry
-    if self.entries.len() < CAP {
-        self.entries.push((segment, min_max_cut, command)).unwrap();
-    } else {
-        // Evict entry with highest effective max_cut (already found above)
-        self.entries[evict_idx] = (segment, min_max_cut, command);
+    /// Returns a cleared queue ready for use.
+    pub fn get(&mut self) -> &mut TraversalQueue {
+        self.queue.clear();
+        &mut self.queue
     }
 }
-```
 
-### Segment-Level Tracking
-
-For operations that only need segment-level visited tracking (not entry point granularity), use `CappedVisited` with `CommandIndex::MAX` to indicate the entire segment has been visited. This allows a single buffer to be reused across different traversal operations, reducing total memory allocation in embedded environments with static buffers.
-
-#### `mark_segment_visited(segment: usize, min_max_cut: MaxCut)`
-
-Helper for segment-level-only tracking:
-
-```rust
-fn mark_segment_visited(&mut self, segment: usize, min_max_cut: MaxCut) {
-    self.insert_or_update(segment, min_max_cut, CommandIndex::MAX);
+/// Two independent queue buffers so that an outer traversal
+/// (e.g. `find_needed_segments`) can maintain state in one buffer while
+/// calling leaf operations (e.g. `is_ancestor`) that use the other.
+pub struct TraversalBuffers {
+    pub primary: TraversalBuffer,
+    pub secondary: TraversalBuffer,
 }
 ```
 
-#### `was_segment_visited(segment: usize) -> bool`
+### Reference Implementation
 
-Check if a segment was visited at any entry point:
+The following Rust snippets illustrate how the data structures above are used in each traversal operation. The normative algorithm descriptions are in [Affected Operations](#affected-operations); these snippets show one concrete realization.
 
-```rust
-fn was_segment_visited(&self, segment: usize) -> bool {
-    self.get(segment).is_some()
-}
-```
-
-### Integration with Traversal
-
-The visited set enables skipping segment loads when we've already visited a segment at the same or higher entry point. Buffers are passed in by the caller to avoid large stack allocations in the traversal functions.
-
-#### is_ancestor traversal
+#### is_ancestor
 
 ```rust
 fn is_ancestor(
-    target: Location,
-    start: Location,
+    search_location: Location,
+    segment: &Segment,
     storage: &Storage,
-    visited: &mut CappedVisited<CAP>,
-    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+    buffers: &mut TraversalBuffer,
 ) -> bool {
-    visited.clear();
-    queue.clear();
-    queue.push_back(start).unwrap();
+    let queue = buffers.get();
 
-    while let Some(loc) = queue.pop_front() {
-        // Check if target found BEFORE visited check
-        if loc.segment == target.segment && loc.command >= target.command {
+    // Only enqueue priors that could contain the target
+    for prior in segment.prior() {
+        if prior.max_cut >= search_location.max_cut {
+            push_queue(queue, prior)?;
+        }
+    }
+
+    while let Some(loc) = queue.pop() {
+        let segment = storage.get_segment(loc);
+
+        if segment.get_command(search_location).is_some() {
             return true;
         }
 
-        // Check if we can skip loading this segment entirely
-        if let Some((_, highest)) = visited.get(loc.segment) {
-            if loc.command <= highest {
-                continue;  // Already visited at this entry point or higher
+        // Skip list is sorted by max_cut ascending, so the first entry
+        // with max_cut >= target has the lowest valid max_cut, jumping
+        // furthest back in the graph.
+        if let Some(&skip) = segment
+            .skip_list()
+            .iter()
+            .find(|skip| skip.max_cut >= search_location.max_cut)
+        {
+            push_queue(queue, skip)?;
+        } else {
+            for prior in segment.prior() {
+                if prior.max_cut >= search_location.max_cut {
+                    push_queue(queue, prior)?;
+                }
             }
         }
-
-        // Must load segment
-        let segment = storage.get_segment(loc.segment);
-        visited.insert_or_update(loc.segment, segment.min_max_cut(), loc.command);
-
-        // Add priors to queue with push_back()
     }
     false
 }
 ```
 
-#### get_location_from traversal
+Key properties:
+- **Early `max_cut` filtering**: Only locations with `max_cut >= target` are enqueued, eliminating the need to load a segment before determining it's too old.
+- **Skip list selection**: Uses the first skip entry with sufficient `max_cut` (which, because the list is sorted ascending, is the lowest valid `max_cut` and therefore jumps furthest back).
+- **Deduplication via `push_queue`**: Prevents the same segment from appearing in the queue twice.
 
-For `get_location_from`, we may need to search only the portion of the segment we haven't searched before:
+#### get_location_from
 
 ```rust
 fn get_location_from(
     start: Location,
     target_address: Address,
     storage: &Storage,
-    visited: &mut CappedVisited<CAP>,
-    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+    buffers: &mut TraversalBuffer,
 ) -> Option<Location> {
-    visited.clear();
-    queue.clear();
-    queue.push_back(start).unwrap();
+    if start.max_cut < target_address.max_cut {
+        return None;  // Starting point is older than target
+    }
 
-    while let Some(loc) = queue.pop_front() {
-        // Check visited status and determine search range
-        let search_start = if let Some((_, highest)) = visited.get(loc.segment) {
-            if loc.command <= highest {
-                continue;  // Already searched this entry point or higher
-            }
-            highest + 1  // Only search commands we haven't seen
-        } else {
-            0  // First visit - search from beginning
-        };
+    let queue = buffers.get();
+    push_queue(queue, start)?;
 
-        // Must load segment
-        let segment = storage.get_segment(loc.segment);
-        visited.insert_or_update(loc.segment, segment.min_max_cut(), loc.command);
+    while let Some(loc) = queue.pop() {
+        let segment = storage.get_segment(loc);
 
-        // Search commands from search_start to loc.command
-        for cmd_idx in (search_start..=loc.command).rev() {
-            if segment.command(cmd_idx).address == target_address {
-                return Some(Location::new(loc.segment, cmd_idx));
-            }
+        if let Some(found) = segment.get_by_address(target_address) {
+            return Some(found);
         }
 
-        // Add priors to queue with push_back()
+        // Skip list is sorted by max_cut ascending, so the first entry
+        // with max_cut >= target has the lowest valid max_cut, jumping
+        // furthest back in the graph.
+        if let Some(&skip) = segment
+            .skip_list()
+            .iter()
+            .find(|skip| skip.max_cut >= target_address.max_cut)
+        {
+            push_queue(queue, skip)?;
+        } else {
+            for prior in segment.prior() {
+                if prior.max_cut >= target_address.max_cut {
+                    push_queue(queue, prior)?;
+                }
+            }
+        }
     }
     None
 }
 ```
 
-#### find_needed_segments traversal
+#### find_needed_segments
 
-For operations that only need segment-level tracking (not entry point granularity), use `CappedVisited` with the segment-level helpers:
+This operation uses the dual-buffer pattern: `primary` for its own queue, `secondary` passed to `is_ancestor` calls:
 
 ```rust
 fn find_needed_segments(
     storage: &Storage,
-    visited: &mut CappedVisited<CAP>,
-    queue: &mut heapless::Deque<Location, MAX_QUEUE>,
+    buffers: &mut TraversalBuffers,
 ) -> Vec<Location> {
-    visited.clear();
-    queue.clear();
-    queue.push_back(storage.get_head()).unwrap();
+    let queue = buffers.primary.get();
+    push_queue(queue, storage.get_head())?;
 
     let mut result = Vec::new();
-    while let Some(head) = queue.pop_front() {
-        // Simple segment-level check - no entry point tracking needed
-        if visited.was_segment_visited(head.segment) {
-            continue;  // Already visited this segment
-        }
+    while let Some(head) = queue.pop() {
+        let segment = storage.get_segment(head);
+        // Process segment, calling is_ancestor with buffers.secondary...
 
-        let segment = storage.get_segment(head.segment);
-        visited.mark_segment_visited(head.segment, segment.min_max_cut());
-        // Process segment...
-        // Add priors to queue with push_back()
+        for prior in segment.prior() {
+            push_queue(queue, prior)?;
+        }
     }
     result
 }
 ```
 
-Using FIFO ordering (breadth-first) aligns with the eviction strategy: segments are processed from high to low max_cut, so low max_cut entries accumulate in the visited set. When eviction occurs, the entries with highest effective max_cut are removed—precisely the ones least likely to be encountered again.
+### Why Max-Heap Ordering Works
+
+Processing the highest `max_cut` first has two critical properties:
+
+1. **Bounded queue size**: At any point during traversal, the queue contains at most one entry per concurrent branch at the current `max_cut` frontier. A FIFO queue would accumulate entries across many `max_cut` levels, growing proportionally to graph depth rather than width.
+
+2. **Effective deduplication**: While a segment is in the queue, `push_queue` prevents it from being enqueued again. Once a segment is popped and processed, a different path could re-enqueue it, but this is rare in practice — skip lists cause most backward jumps to converge on the same segments before they are popped, and the max-heap ordering means a segment is unlikely to be reached again at a lower `max_cut` via a substantially different path.
+
+Together, these properties mean the queue serves as the primary deduplication mechanism, with no additional data structures required. Occasional revisits may occur but produce redundant work, not incorrect results.
 
 ### Capacity Sizing
 
-The "active frontier" during traversal is bounded by concurrent branches, which is bounded by peer count for well-behaved devices. The lazy eviction strategy (evicting highest effective max_cut on overflow) keeps low max_cut entries that are more likely to be revisited during backward traversal.
+The queue size at any point during traversal is bounded by the number of concurrent branches at the current `max_cut` frontier, which is bounded by peer count for well-behaved devices.
 
-Each entry requires approximately 24 bytes (8-byte segment_id + 8-byte MaxCut + 4-byte CommandIndex + padding).
+Each `Location` entry requires approximately 16 bytes (8-byte `MaxCut` + 8-byte `SegmentIndex`). With the heap's internal bookkeeping, memory usage is:
 
-| Environment          | Suggested Capacity | Memory       |
-|:---------------------|:------------------:|:------------:|
-| Embedded (small)     | 64                 | ~1.5 KB      |
-| Embedded (standard)  | 256                | ~6 KB        |
-| Server               | 512                | ~12 KB       |
+| Capacity | Memory  |
+|:--------:|:-------:|
+| 512      | ~8 KB   |
 
-Using a single `CappedVisited` buffer for all traversal operations (rather than separate structures for entry-point vs. segment-level tracking) reduces total memory allocation, particularly important in embedded environments with static buffers.
-
-Capacity should be tuned based on profiling of real-world graph topologies.
+Two buffers (`TraversalBuffers`) use approximately 16 KB total.
 
 ### Correctness
 
-The algorithm remains correct even when the set overflows:
-- Eviction may cause a segment to be revisited
-- Revisiting produces redundant work but not incorrect results
-- The algorithm converges as long as progress is made toward the root
+The algorithm remains correct because:
+- `push_queue` prevents redundant processing, not necessary processing. A segment is only skipped if it is already in the queue (and will be processed when popped). If a segment has already been popped and is later re-enqueued via a different path, it will be processed again — this is redundant but not incorrect.
+- Queue overflow produces a clear error (`TraversalQueueOverflow`) rather than silent data loss.
+- The `max_cut` filtering invariant ensures only relevant segments are visited: all enqueued locations have `max_cut >= target`, so the search space is bounded.
 
 ### Complexity
 
-**CappedVisited**:
+**Queue operations**:
 
 | Aspect               | Bound                             |
 |:---------------------|:----------------------------------|
 | Memory               | O(CAP) - constant                 |
-| `clear`              | O(1)                              |
-| `get`                | O(CAP)                            |
-| `insert_or_update`   | O(CAP)                            |
+| `push_queue`         | O(CAP) (linear scan for dedup, then O(log CAP) heap insert) |
+| `pop`                | O(log CAP)                        |
 
 **Traversal**:
 
 | Aspect               | Bound                             |
 |:---------------------|:----------------------------------|
-| Typical              | O(S) where S = segment count      |
-| Overflow             | O(S * R) where R = revisit factor |
+| Typical              | O(S * log CAP) where S = segments visited |
 
 ## Trade-offs
 
 **Advantages:**
 - Fixed memory regardless of graph size
 - No dynamic allocation
+- Queue handles deduplication without additional data structures
+- Queue size bounded by graph width, not depth
 - Correct results guaranteed
-- Graceful performance degradation under overflow
+- Early `max_cut` pruning avoids loading irrelevant segments
 
 **Disadvantages:**
-- May revisit segments if capacity exceeded
-- O(CAP) lookup within set
-- Requires capacity tuning for workloads
-
-## Implementation Notes
-
-### Sorted List Optimization
-
-For larger CAP values, maintaining a sorted list by effective max_cut with binary search could reduce eviction candidate lookup from O(CAP) to O(1). However, this trades eviction performance for insert cost:
-
-- **Unsorted (specified above):** O(CAP) insert (to find eviction candidate), O(CAP) lookup by segment_id
-- **Sorted by effective max_cut:** O(1) eviction candidate, O(CAP) insert (due to shifting), O(CAP) lookup by segment_id
-
-Note that lookup by segment_id remains O(CAP) either way since we're searching by segment_id, not by max_cut. The optimal choice depends on the hit rate and target architecture. On systems where CAP fits in L1 cache, linear scan may outperform more complex data structures due to cache locality. Benchmarking on target hardware is recommended for CAP values exceeding ~64 entries.
+- O(CAP) uniqueness check per enqueue
+- Hard error on queue overflow rather than graceful degradation
+- Requires capacity sized to maximum expected graph width
