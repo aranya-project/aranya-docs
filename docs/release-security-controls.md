@@ -8,6 +8,21 @@ permalink: "/release-security-controls/"
 
 This document describes the security controls that protect the Aranya release pipeline. For the release process itself, see [Release Process](/release-process/).
 
+## Outstanding TODOs
+
+All items below are tracked under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
+
+| # | Section | Action | Level | Repos affected |
+|---|---|---|---|---|
+| 1 | [Branch Protections](#branch-protections) | Add `patch/**/*` wildcard branch protection rule | org | all |
+| 2 | [Branch Protections](#branch-protections) | Enable "Require review from Code Owners" (currently `false` in org ruleset and not configured at repo level) | org | all |
+| 3 | [CI/CD](#cicd) | Update `release.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya |
+| 4 | [CI/CD](#cicd) | Update `release-plz.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya-core |
+| 5 | [Release Environment Protections](#release-environment-protections) | Create `release` environment (already exists in aranya) | env-level: `release` | aranya-core |
+| 6 | [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release.yml` `tag` job | repo (workflow) | aranya |
+| 7 | [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release-plz.yml` `release-plz-release` job | repo (workflow) | aranya-core |
+| 8 | [Secrets Management](#secrets-management) | Move `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` from repo-level to `release` environment | env-level: `release` | aranya, aranya-core |
+
 ## Branch Protections
 
 Default branch protection rules are configured at the **org level** ([aranya-project org rulesets](https://github.com/organizations/aranya-project/settings/rules)) and apply to all repos. Repo-level overrides or additional rules can be configured per repo under Settings > Rules > Rulesets.
@@ -17,19 +32,19 @@ The following branches must be protected:
 - **`main`** -- used for normal product releases (major and minor versions). Protected by org-level default rules.
 - **`patch/**/*`** -- used for patch releases. Requires a wildcard branch protection rule at the org or repo level. -- **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
 
-Required branch protection settings (verify in org-level rulesets or repo-level branch protection rules -- either location is valid, but org-level is preferred for consistency):
+Required branch protection settings. These should be configured at the **org level** unless noted as repo-specific:
 
 | Setting | Value | Level | Status | Notes |
 |---|---|---|---|---|
-| Require a pull request before merging | Enabled | org or repo | Configured (org ruleset) | No direct pushes to protected branches |
-| Required approvals | 2 | org or repo | Configured (org ruleset) | Release PRs require at least 2 internal approvals |
-| Dismiss stale pull request approvals when new commits are pushed | Enabled | org or repo | Configured (org ruleset) | Prevents approval of outdated code |
-| Require review from Code Owners | Enabled | org or repo | **TODO** (`false` in org ruleset) | At least one CODEOWNERS reviewer must approve |
-| Require status checks to pass before merging | Enabled | repo | Configured (per-repo rulesets) | Specific checks differ per repo; see [CI/CD](#cicd) |
-| Require branches to be up to date before merging | Enabled | repo | Configured (per-repo rulesets) | Prevents merge skew |
-| Do not allow bypassing the above settings | Enabled | org or repo | Not configured (org ruleset allows bypass by `TeamLeads` team and repo admins) | Bypass should only be granted to org admins under documented circumstances |
-| Restrict force pushes | Enabled (no one) | org or repo | Configured (org ruleset) | Prevent history rewriting on protected branches |
-| Restrict deletions | Enabled | org or repo | Configured (org ruleset) | Prevent deletion of protected branches |
+| Require a pull request before merging | Enabled | org | Configured (org ruleset) | No direct pushes to protected branches |
+| Required approvals | 2 | org | Configured (org ruleset) | Release PRs require at least 2 internal approvals |
+| Dismiss stale pull request approvals when new commits are pushed | Enabled | org | Configured (org ruleset) | Prevents approval of outdated code |
+| Require review from Code Owners | Enabled | org | **TODO** (`false` in org ruleset; not configured at repo level either) | At least one CODEOWNERS reviewer must approve; configure at org level |
+| Require status checks to pass before merging | Enabled | repo | Configured (per-repo rulesets) | Repo-specific: each repo has different checks; see [CI/CD](#cicd) |
+| Require branches to be up to date before merging | Enabled | repo | Configured (per-repo rulesets) | Repo-specific: configured alongside status checks |
+| Bypass permissions | `TeamLeads` team and repo admins | org | Configured (org ruleset) | Intentional: team leads may bypass with a documented paper trail |
+| Restrict force pushes | Enabled | org | Configured (org ruleset `non_fast_forward` rule) | No one can force push to protected branches |
+| Restrict deletions | Enabled | org | Configured (org ruleset) | Prevent deletion of protected branches |
 
 Branch protections should only be bypassed by team members with elevated permissions under special documented circumstances (e.g. by team leads or admin with a documented paper trail explaining the rationale).
 
@@ -41,31 +56,14 @@ Branch protections should only be bypassed by team members with elevated permiss
 
 ## CI/CD
 
-CI/CD runs on `main` and all PRs/feature branches. Workflow files are **repo-level** (committed in each repo's `.github/workflows/` directory). Required status checks are also **repo-level** since each repo has different workflows and jobs -- configure them in each repo's branch protection rules under "Require status checks to pass".
+CI/CD runs on `main` and all PRs/feature branches. Workflow files are **repo-level** (committed in each repo's `.github/workflows/` directory). Required status checks are also **repo-level** since each repo has different workflows and jobs.
 
-**aranya repo** ([`aranya/.github/workflows/`](https://github.com/aranya-project/aranya/tree/main/.github/workflows)):
-
-| Workflow file | Jobs (required status checks) | Triggers |
+| Repo | Workflows | Required status checks (rulesets) |
 |---|---|---|
-| `build.yml` | `build-release`, `build-aranya-lib`, `build-certgen` | `push: main`, `pull_request` |
-| `correctness.yml` | `fmt`, `clippy`, `machete`, `check` | `push: main`, `pull_request` |
-| `tests.yml` | `unit-tests`, `c-tests`, `c-example-application`, `rust-example-application`, `rust-example-application-multi-node` | `push: main`, `pull_request` |
-| `security.yml` | `security-checks` | `push: main`, `pull_request` |
-| `doc.yml` | `aranya-client-capi-docs`, `aranya-rust-docs` | `push: main`, `pull_request` |
-| `release.yml` | `tag`, `publish` | `push: main` (release-only; see note below) |
-| `publish.yml` | `release`, `build`, `docs`, `publish-daemon`, `publish-capi-lib`, `publish-capi-docs` | Called by `release.yml` |
+| aranya | [`.github/workflows/`](https://github.com/aranya-project/aranya/tree/main/.github/workflows) | [Rulesets settings](https://github.com/aranya-project/aranya/settings/rules) |
+| aranya-core | [`.github/workflows/`](https://github.com/aranya-project/aranya-core/tree/main/.github/workflows) | [Rulesets settings](https://github.com/aranya-project/aranya-core/settings/rules) |
 
-**aranya-core repo** ([`aranya-core/.github/workflows/`](https://github.com/aranya-project/aranya-core/tree/main/.github/workflows)):
-
-| Workflow file | Jobs (required status checks) | Triggers |
-|---|---|---|
-| `build.yml` | `build-release` | `push: main`, `pull_request`, `merge_group` |
-| `correctness.yml` | `fmt`, `canaries`, `clippy`, `machete`, `check` | `push: main`, `pull_request`, `merge_group` |
-| `tests.yml` | `unit-tests` | `push: main`, `pull_request`, `merge_group` |
-| `security.yml` | `security-checks` | `push: main`, `pull_request`, `merge_group` |
-| `doc.yml` | `doc` | `push: main`, `pull_request`, `merge_group` |
-| `embedded.yml` | `build-embedded` | `push: main`, `pull_request`, `merge_group` |
-| `release-plz.yml` | `release-plz-release` | `push: main` (release-only; see note below) |
+The security-critical workflows are `release.yml` and `publish.yml` (aranya) and `release-plz.yml` (aranya-core). These handle tagging, publishing crates to crates.io, and uploading release artifacts.
 
 Additional CI/CD policies:
 
@@ -75,7 +73,7 @@ Additional CI/CD policies:
 
 ## Release Environment Protections
 
-Release workflows (`release.yml` and `publish.yml` in aranya, `release-plz.yml` in aranya-core) should use a [GitHub Environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) to gate access to release secrets and provide an additional approval step. Configure the following in each repo under Settings > Environments *(repo-level)*:
+Release workflows (`release.yml` and `publish.yml` in aranya, `release-plz.yml` in aranya-core) should use a [GitHub Environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) to gate access to release secrets and provide an additional approval step. Environment settings *(repo-level)*: [aranya](https://github.com/aranya-project/aranya/settings/environments), [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
 
 | Setting | Value | Level | Workflow files | Status | Notes |
 |---|---|---|---|---|---|
