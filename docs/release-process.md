@@ -20,40 +20,7 @@ Throughout this document, tasks are marked to indicate their level of automation
 
 ## Release Security
 
-This section documents the security controls that protect the release pipeline.
-
-### Branch Protections
-
-- `main` is a protected branch used for normal product releases (major and minor versions).
-- `patch/**/*` branches are used for patch releases and must be protected with a wildcard branch protection rule. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
-- Release PRs (targeting `main` or `patch/**/*`) require at least 2 internal approvals.
-- Branch protections should only be bypassed by team members with elevated permissions under special documented circumstances (e.g. by team leads or admin with a documented paper trail explaining the rationale).
-
-### Code Review
-
-- [CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) ([aranya](https://github.com/aranya-project/aranya/blob/main/.github/CODEOWNERS)) have been defined based on corresponding team leads and subject matter experts. Those who have reviewed sections of code or worked on that code before may additionally be considered a code owner.
-- Before merging PRs, review is required from at least one code owner and at least one other internal engineer. External contributor reviews do not count toward required approvals.
-- Security-critical changes and release PRs require approval from at least 2 team leads, code owners, or key stakeholders.
-
-### CI/CD
-
-- CI/CD runs on `main` and all feature branches.
-- Checks include security vulnerability scans, [cargo vet](https://mozilla.github.io/cargo-vet/) <!-- TODO: link to internal cargo vet spec when available -->, linting, unit tests, integration tests, formatting, etc.
-- `main` and `patch/**/*` branches run additional publish/release workflows that create tags, publish crates to crates.io, and upload release artifacts. These workflows are not triggered on other branches.
-- CI/CD runners are only available to users within our GitHub organization, with proper repo permissions assigned to them. External users require manual approval to run CI/CD jobs on our runners. This prevents unwanted accumulation of cost on ephemeral cloud runners and potential exploitation of self-hosted runners.
-- Each repo must configure a set of required status checks (CI/CD jobs) that must pass before a PR can be merged.
-- All branch protection checks must pass before merging.
-
-### Release Environment Protections
-
-- Release workflows should use a GitHub Environment with deployment branch restrictions limiting access to `main` and `patch/**/*`. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
-- Required reviewers on the environment provide an additional approval gate before release workflows proceed. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
-- This prevents an attacker from modifying a workflow on an unprotected branch to trigger an unauthorized release, since the environment will block execution and deny access to secrets.
-
-### Secrets Management
-
-- Release credentials (e.g., `CARGO_REGISTRY_TOKEN`) should be scoped to the release environment rather than stored as repo-level secrets, so unprotected branches cannot access them. — **TODO** ([aranya#730](https://github.com/aranya-project/aranya/issues/730))
-- The crates.io API key is rotated after each release to limit the window of exposure if a key is compromised (see [Post-Release Checklist](#post-release-checklist)).
+See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline.
 
 ## Pre-Release Checklist
 
@@ -248,7 +215,7 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 5. **(partially-automated)** Bump the version and update changelogs. If the base version is X.Y.Z, the patch release will be X.Y.(Z+1). If the patch contains a breaking API change, increment the major version instead: (X+1).Y.Z. See [semver](https://semver.org/#summary) for details.
 
-6. **(partially-automated)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security](#release-security) for details.
+6. **(partially-automated)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
 
 7. **(manual)** Follow the standard Release Checklist to complete the release from the base branch.
 
