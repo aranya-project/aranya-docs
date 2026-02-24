@@ -83,7 +83,7 @@ Crates merged into the main branch of the aranya-core repo should implement comp
 
 2. **(manual)** Open a PR on aranya-core to release new versions. Look at crate diffs since last release and apply semantic versioning to each crate. `release-plz update` can help decide what version to use for each crate.
 
-   The aranya-crypto crate is updated often and results in a breaking change to most of the other crates in aranya-core. release-plz is not able to set the correct version automatically. Therefore, it is often required to run `release-plz update -p <crate>` and `release-plz set-version <crate>@version` manually:
+   When the aranya-crypto crate is updated, it often and results in a breaking change to most of the other crates in aranya-core. release-plz is not able to set the correct version automatically. Therefore, it is often required to run `release-plz update -p <crate>` and `release-plz set-version <crate>@version` manually:
 
    ```bash
    release-plz update -p aranya-policy-ifgen-build --allow-dirty
