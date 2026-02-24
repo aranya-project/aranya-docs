@@ -77,7 +77,7 @@ cargo install cargo-semver-checks
 
 Crates merged into the main branch of the aranya-core repo should implement completed features. Incomplete features should be staged on feature branches or hidden behind feature flags. This allows the aranya repo to run `cargo update` to get the latest versions of all the aranya-core crates without worrying about incorporating partially implemented features.
 
-### Process
+### Aranya-Core Release Steps
 
 1. **(partially-automated)** Before releasing aranya-core, open a PR in aranya that patches aranya-core deps with the main branch of aranya-core. This verifies the changes compile/run and catches compatibility issues early. AI can open the PR, but manual review is required.
 
@@ -90,15 +90,17 @@ Crates merged into the main branch of the aranya-core repo should implement comp
    release-plz set-version aranya-policy-ifgen-build@0.6.0
    ```
 
-3. **(partially-automated)** When releasing Aranya, open a PR to bump crate versions to use the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate.
+## Aranya Release Process
 
-## Aranya Release Checklist
+The aranya repo contains the daemon, client libraries, and C API. Aranya releases are versioned independently from aranya-core -- all crates in the aranya repo share the same version number per semver guidelines.
+
+### Aranya Release Steps
 
 Tasks to complete on the day of the release:
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
    - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
-2. **(partially-automated)** Open a PR to bump crate versions for the release. Can do this a day before release or on day of release. (release lead)
+2. **(partially-automated)** Open a PR to bump crate versions for the release, including the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate. Can do this a day before release or on day of release. (release lead)
 3. **(manual)** Check that all CI/CD jobs have passed on the `main` branch before merging.
 4. **(manual)** Merge the release PR into `main`.
 5. **(automated)** Once the release PR is merged, CI/CD workflows automatically:
@@ -206,7 +208,7 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 6. **(partially-automated)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
 
-7. **(manual)** Follow the standard Release Checklist to complete the release from the base branch.
+7. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
 
 8. **(partially-automated)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
 
