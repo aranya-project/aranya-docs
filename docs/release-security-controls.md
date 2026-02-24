@@ -12,16 +12,16 @@ This document describes the security controls that protect the Aranya release pi
 
 All items below are tracked under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
 
-| # | Section | Action | Level | Repos affected |
-|---|---|---|---|---|
-| 1 | [Branch Protections](#branch-protections) | Add `patch/**/*` wildcard branch protection rule | org | all |
-| 2 | [Branch Protections](#branch-protections) | Enable "Require review from Code Owners" (currently `false` in org ruleset and not configured at repo level) | org | all |
-| 3 | [CI/CD](#cicd) | Update `release.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya |
-| 4 | [CI/CD](#cicd) | Update `release-plz.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya-core |
-| 5 | [Release Environment Protections](#release-environment-protections) | Create `release` environment (already exists in aranya) | env-level: `release` | aranya-core |
-| 6 | [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release.yml` `tag` job | repo (workflow) | aranya |
-| 7 | [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release-plz.yml` `release-plz-release` job | repo (workflow) | aranya-core |
-| 8 | [Secrets Management](#secrets-management) | Move `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` from repo-level to `release` environment | env-level: `release` | aranya, aranya-core |
+| Section | Action | Level | Repos affected |
+|---|---|---|---|
+| [Branch Protections](#branch-protections) | Add `patch/**/*` wildcard branch protection rule | org | all |
+| [Branch Protections](#branch-protections) | Enable "Require review from Code Owners" (currently `false` in org ruleset and not configured at repo level) | org | all |
+| [CI/CD](#cicd) | Update `release.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya |
+| [CI/CD](#cicd) | Update `release-plz.yml` trigger to include `push: patch/**/*` | repo (workflow) | aranya-core |
+| [Release Environment Protections](#release-environment-protections) | Create `release` environment (already exists in aranya) | env-level: `release` | aranya-core |
+| [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release.yml` `tag` job | repo (workflow) | aranya |
+| [Release Environment Protections](#release-environment-protections) | Add `environment: release` to `release-plz.yml` `release-plz-release` job | repo (workflow) | aranya-core |
+| [Secrets Management](#secrets-management) | Move `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` from repo-level to `release` environment | env-level: `release` | aranya, aranya-core |
 
 ## Branch Protections
 
