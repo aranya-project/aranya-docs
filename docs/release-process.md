@@ -92,39 +92,28 @@ Crates merged into the main branch of the aranya-core repo should implement comp
 
 3. **(partially-automated)** When releasing Aranya, open a PR to bump crate versions to use the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate.
 
-## Release Checklist
+## Aranya Release Checklist
 
 Tasks to complete on the day of the release:
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
    - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
-
 2. **(partially-automated)** Open a PR to bump crate versions for the release. Can do this a day before release or on day of release. (release lead)
-
 3. **(manual)** Check that all CI/CD jobs have passed on the `main` branch before merging.
-
-4. **(manual)** Merge the release PR.
-
+4. **(manual)** Merge the release PR into `main`.
 5. **(automated)** Once the release PR is merged, CI/CD workflows automatically:
    - Create a new release tag based on the aranya repo crate versions
    - Upload artifacts (executables, libraries, C headers, Rust docs, Doxygen docs) to the GitHub release
    - Publish crates to crates.io
    - Publish C API Doxygen docs to the gh-pages branch
-
 6. **(manual)** Verify that the publish.yml and release.yml workflows succeeded.
-
 7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
-
 8. **(manual)** Verify that release artifacts were attached to the GitHub release.
-
 9. **(partially-automated)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. If using AI to generate release notes, ensure it has context for all commits, PRs, and past release notes. Release notes must be reviewed by engineering leadership before publishing. (release lead)
-
 10. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
-
 11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
-
 12. **(manual)** Schedule a product release retrospective for release process improvements.
 
 ## Post-Release Checklist
