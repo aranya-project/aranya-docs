@@ -32,13 +32,71 @@ for each segment S traversed from head:
         add S to result
 ```
 
-In the `slow_test_4` test case this produces ~62,000+ `is_ancestor()` calls in 7 seconds, each doing BFS with file I/O.
+In one test case this produces ~62,000+ `is_ancestor()` calls in 7 seconds, each doing BFS with file I/O.
 
 ## Key Insight
 
-Process segments in descending `longest_max_cut` order. Since a have_location's ancestors always have lower max_cut, we encounter every have_location before processing any of its ancestors. When we find a have_location, we push its priors as "covered" — the peer has them and they don't need to be sent. This propagates through the graph without any `is_ancestor()` calls.
+Process segments in descending `longest_max_cut` order. Since a have_location's ancestors always have lower max_cut, we encounter every have_location before processing any of its ancestors. When we find a have_location, we push its priors as "covered" — the peer has them and they don't need to be sent. This propagates through the graph as each covered segment's priors are themselves pushed as covered, without any `is_ancestor()` calls.
 
 This also eliminates the need to filter redundant have_locations: if A is an ancestor of B, both independently mark their priors as covered. Duplicate marks are harmless.
+
+A segment can't be immediately committed to the result when first encountered — a have_location discovered later (at a lower max_cut) could mark it as covered. Instead, segments are held tentatively and finalized only once all segments with higher max_cut have been processed, guaranteeing no future have_location can reach them.
+
+Finally, if every remaining unprocessed segment is marked covered, we can stop early. All remaining paths lead to segments the peer already has, so no tentatively-held segment can be retroactively covered. Everything held can be finalized at once.
+
+### Example
+
+Consider a DAG with 6 single-command segments, where the peer reports having commands at H1 and H2:
+
+```
+          F [mc 10]    ← head
+         / \
+   D [mc 8]  E [mc 7]
+        |       |
+   C [mc 5]    |      ← H1 (peer has this)
+        \     /
+         \   /
+       B [mc 3]        ← H2 (peer has this)
+           |
+       A [mc 0]        ← init
+```
+
+The correct result is {F, D, E} — the segments the peer doesn't have.
+
+**Old algorithm — 8 `is_ancestor()` calls, each a BFS traversal:**
+
+Phase 1 filters redundant have_locations by checking all pairs (2 calls):
+
+| Call | Check | Result | Action |
+|------|-------|--------|--------|
+| 1 | is_ancestor(B, C)? | Yes | Remove H2 |
+| 2 | is_ancestor(C, B)? | No | Keep H1 |
+
+Phase 2 traverses from head, checking each segment against the remaining H1 (6 calls):
+
+| Call | Segment | is_ancestor of H1? | Action |
+|------|---------|---------------------|--------|
+| 3 | F | No | Add to result |
+| 4 | D | No | Add to result |
+| 5 | E | No | Add to result |
+| 6 | C | Yes | Skip |
+| 7 | B | Yes | Skip |
+| 8 | A | Yes | Skip |
+
+**New algorithm — 5 queue pops, 0 `is_ancestor()` calls:**
+
+have_locations sorted descending: H1 (mc 5), H2 (mc 3).
+
+| Step | Pop | Covered? | Action |
+|------|-----|----------|--------|
+| 1 | F (mc 10) | no | No have match. Add to pending, push D and E uncovered. |
+| 2 | D (mc 8) | no | No have match. Add to pending, push C uncovered. |
+| 3 | E (mc 7) | no | No have match. Add to pending, push B uncovered. |
+| 4 | C (mc 5) | no | H1 matches! Push prior B as **covered** (updates B in queue). |
+| 5 | B (mc 3) | **yes** | Already covered. Push prior A as covered. |
+| — | | | All remaining heads covered — **early termination**. |
+
+Flush pending to result: **{F, D, E}**. Segment A is never even visited. With more have_locations and larger graphs, the gap grows from 8 vs 5 to tens of thousands of BFS traversals vs a single linear pass.
 
 ## Changes to TraversalQueue
 
@@ -85,16 +143,6 @@ Then handle the popped segment in one of three ways:
 3. **Uncovered, no have_location**: Add the segment to pending (via `first_location()`) and push its priors into heads as uncovered to continue traversal.
 
 If all remaining entries in heads are covered, terminate early — every remaining branch leads to segments the peer already has, so nothing in pending will be needed. Otherwise, when heads is exhausted, flush all remaining pending segments to the result.
-
-## Why This Works
-
-1. **Max_cut ordering**: A have_location's ancestors always have lower max_cut. Processing segments by descending `longest_max_cut` means we encounter have_locations before their ancestors.
-
-2. **Delayed addition**: A pending segment is flushed to `result` only when its `shortest_max_cut` is greater than the just-popped head's `longest_max_cut`. At that point, all segments that could have covered it have been processed.
-
-3. **Coverage propagation**: Pushing priors with `covered=true` propagates through the graph as each covered entry is popped and its own priors are pushed covered.
-
-4. **Early termination**: When all heads are covered, every remaining branch leads to segments the peer already has.
 
 ## Complexity
 
