@@ -68,7 +68,7 @@ When creating release PRs, reference these examples:
 ## Important Restrictions
 
 - **Do NOT assist with aranya-core release PRs** - Determining crate versions is complex due to transitive dependencies causing non-obvious breaking changes
-- **Always require human review** - The release lead must review all AI-generated content
+- **Always require human review** - The release lead must review all content generated in support of the release
 - **Never skip verification steps** - All automated workflows must be verified by a human
 
 ## Workflow
