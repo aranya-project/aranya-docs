@@ -248,6 +248,7 @@ The following improvements have been identified but not yet implemented:
 
 ### Process Gaps
 
+- **Protected patch release branches** - Configure `patch/**/*` wildcard branch protection rule at the org or repo level so patch release PRs require the same review and CI gates as releases from `main`. See [Release Security Controls](/release-security-controls/) for details and tracking under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
 - **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
 - **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
 
