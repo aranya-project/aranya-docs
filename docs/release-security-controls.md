@@ -77,7 +77,7 @@ Release workflows (`release.yml` and `publish.yml` in aranya, `release-plz.yml` 
 
 | Setting | Value | Level | Workflow files | Status | Notes |
 |---|---|---|---|---|---|
-| Deployment branches | `main` and `patch/*` | env-level: `release` | -- | aranya: Configured; aranya-core: **TODO** | Restricts which branches can deploy to this environment |
+| Deployment branches | `main` and `patch/**/*` | env-level: `release` | -- | aranya: Configured; aranya-core: **TODO** | Restricts which branches can deploy to this environment |
 | Required reviewers | At least 1 team lead or release manager | env-level: `release` | -- | aranya: Configured (3 reviewers); aranya-core: **TODO** | Human approval gate before release workflows proceed |
 | Workflow `environment: release` | Referenced in release jobs | repo (workflow) | `release.yml` (aranya), `release-plz.yml` (aranya-core) | **TODO** (neither repo references it) | Required for environment protections to take effect |
 
