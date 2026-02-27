@@ -55,6 +55,7 @@ Log timeouts with:
 - `network_rtt_ms`
 
 ### PSK Authentication Failures (ERROR level)
+TODO: Will need updated when mtls lands.
 
 Log PSK mismatches during QUIC connection establishment with:
 - `peer_device_id`

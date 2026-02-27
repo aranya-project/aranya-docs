@@ -42,7 +42,7 @@ Goal: Establish consistent structured logging with correlation IDs and device/te
    - Files: `crates/aranya-daemon/src/main.rs`
 
 2. **Correlation IDs**
-   - Add `correlation_id: String` to all RPC requests
+   - Add `correlation_id: Tarpc::TraceId` to all RPC requests
    - Thread through client → daemon → sync
    - Derive from tarpc `rpc.trace_id` for cross-process correlation
    - Edit Files: `crates/aranya-daemon-api/`, `crates/aranya-daemon/src/api.rs`, `crates/aranya-client/src/client.rs`, `crates/aranya-client/src/util.rs`, `crates/aranya-client/src/team.rs`, `crates/aranya-client/src/device.rs`

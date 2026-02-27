@@ -32,6 +32,8 @@ AFC operations are split between client and daemon:
 
 Note: Avoid placing logging in the hot path.
 
+For level definitions (for example, what `DEBUG` vs `TRACE` means), see [Log Levels](logging.md#log-levels).
+
 ### Channel Lifecycle Events (INFO level)
 
 **Channel creation:**

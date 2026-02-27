@@ -10,7 +10,7 @@ How to configure logging for the Aranya daemon and client applications.
 
 ## Overview
 
-Aranya uses Rust `tracing` for structured logging. Configure logging separately for:
+Aranya uses Rust [`tracing`](https://docs.rs/tracing/latest/tracing/) for structured logging. Configure logging separately for:
 - Daemon (`aranya-daemon`) - configured via config file or environment variable
 - Client applications - configured by the application embedding `aranya-client`
 
@@ -88,6 +88,23 @@ ARANYA_DAEMON=off ./aranya-daemon --config daemon.toml
 - Config file: Production default logging level
 - Environment variable: Temporary debugging without config changes
 
+### Runtime Log Level Changes
+
+Currently, the Aranya daemon applies log level configuration at startup only and does not support runtime log level changes without restarting.
+
+**Future enhancement:** The `tracing_subscriber` library supports reloadable filters through the `reload` layer, but Aranya's daemon does not yet implement this. To support dynamic log level adjustment at runtime, the daemon would need to:
+
+1. **Use `tracing_subscriber::reload::Layer`** - Wraps the filter in a reloadable handle that allows updates via a broadcast channel
+2. **Expose a control mechanism** such as:
+   - Signal handler for SIGUSR1 that triggers filter reload
+   - Admin API endpoint to accept new filter directives
+   - Watch a config file for changes
+
+**Current options for temporary debugging:**
+
+- Redeploy the daemon with updated `ARANYA_DAEMON` environment variable
+- Use the `ARANYA_DAEMON` env var at startup to enable debug logging before issues occur
+
 ## Client Application Logging
 
 The `aranya-client` library does not configure logging itself. Applications embedding the client must initialize `tracing_subscriber`.
@@ -115,6 +132,8 @@ use std::io;
 C applications using the `aranya-client-capi` library must call `aranya_init_logging()` to initialize the client library's logging system. The function supports file output and format configuration through environment variables.
 
 To enable daemon logging for C applications, configure the daemon using the `daemon.toml` configuration files that your application provides to each daemon instance. For development and testing, you can also temporarily override logging using the `ARANYA_DAEMON` environment variable. See the [Configuration File](#configuration-file) section for the complete list of logging configuration options and the [Environment Variable Override](#environment-variable-override) section for temporary overrides.
+
+Note: Client and daemon logging are configured independently. Aranya correlation IDs are propagated across boundaries, but end-to-end trace continuity is best-effort: if either side filters out the relevant spans/events, the execution path may not be fully reconstructable.
 
 **Function Signature:**
 
@@ -154,6 +173,53 @@ ARANYA_CAPI_LOG="/var/log/myapp/client.log" \
 ```
 
 Note: If `ARANYA_CAPI` is not set or set to `"off"`, no logs will be emitted
+
+A further expansion on this could be a function that takes in the config file rather than depending on the env variables
+
+### Preview Function Signature ###
+
+```c
+#if defined(ENABLE_ARANYA_PREVIEW)
+AranyaError aranya_init_logging_with_config(const struct AranyaLoggingConfig *cfg);
+
+struct AranyaLoggingConfig {
+  size_t size;
+  const char *filter; // e.g., "info,aranya_client=debug"
+  const char *log_path; // e.g., "./client.log" or NULL
+  AranyaLogFormat format; // JSON or TEXT
+  AranyaLoggingConfigFlags flags;
+};
+
+#include <stdio.h>
+#include <string.h>
+
+#include "aranya-client.h"
+
+int init_client_logging(void) {
+  struct AranyaLoggingConfig cfg;
+  memset(&cfg, 0, sizeof(cfg));
+
+  cfg.size = sizeof(cfg);
+  cfg.filter = "info,aranya_client=debug,aranya_client::afc=trace";
+  cfg.log_path = "./client.log";
+  cfg.format = ARANYA_LOG_FORMAT_JSON;
+  cfg.flags = ARANYA_LOGGING_CONFIG_USE_ENV_FALLBACK;
+
+  AranyaError rc = aranya_init_logging_with_config(&cfg);
+  if (rc != ARANYA_ERROR_SUCCESS) {
+    fprintf(stderr, "failed to initialize logging: %s\n", aranya_error_to_str(rc));
+    return 1;
+  }
+  return 0;
+}
+
+#endif /* ENABLE_ARANYA_PREVIEW */
+```
+
+For this preview API, `filter` should accept the same syntax as `RUST_LOG`/`EnvFilter` (for example, `"info,aranya_client::afc=trace"`) passed directly from the C application. This allows applications to configure tracing without setting process environment variables.
+
+Implementation note: parse the provided filter directly when initializing tracing, rather than mutating `RUST_LOG` at runtime.
+
 
 ### Client Log Filters
 
