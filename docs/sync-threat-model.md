@@ -24,7 +24,7 @@ Because DeviceIds are pre-authorization, any sync protocol control that requires
  - **Graph:** Sometimes called a "Team" or "DAG", a graph is a set of commands in an Aranya protocol. The set of commands is structured as a Directed Acyclic Graph.
  - **Commands:** Nodes in the graph are serialized messages and referred to as commands. Each command that is not a merge command is cryptographically signed by the device that authored it. All edges in the graph are cryptographic hashes of a preceding command referred to as the Parent. Merge commands are unsigned and have exactly two parents. The initial command has no parents. All other commands have exactly one parent. The hash of a command, including the command's signature, is the CommandId for the command.
  - **Device:** A device is an instance of the Aranya daemon with a unique set of device keys.
- - **DeviceId:** The cryptographic hash of a public key used by a device to sign the it's key bundle.
+ - **DeviceId:** The cryptographic hash of the device's public identity key.
  - **Sync Group:** Two or more devices which are authorized to send and receive the commands associated with a graph. (This does not imply that they can author commands or decrypt any ciphertexts stored in the graph.)
  - **Team CA:** The customer-provided certificate authority used to issue and validate certificates for devices in a sync group. The Team CA serves as the trust root for sync transport authentication.
  - **mTLS:** Mutual TLS. A TLS configuration in which both the client and server present and validate certificates during the handshake, ensuring that both parties are authenticated.
