@@ -42,7 +42,7 @@ When patching a vulnerability, consider whether a patch release of our own crate
 
 ## Exemptions and Trust
 
-For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—reduce them over time by auditing or adding trust entries. Even when exempting the initial version, always audit diffs when updating to a new version.
+For dependencies from well-established maintainers or widely-used crates, you may add an exemption instead of auditing each version. Exemptions should be temporary—reduce them over time by auditing or adding trust entries.
 
 You can also trust publishers directly using `cargo vet trust`. This is appropriate for:
 - External maintainers whose review processes we believe meet our standards. The team evaluates this on a case-by-case basis (e.g., tokio-rs for async runtime crates).
