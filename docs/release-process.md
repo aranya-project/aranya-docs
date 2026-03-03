@@ -213,10 +213,6 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 8. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
 
-## QA Process
-
-TODO: Define testing, regression, process, and communication procedures.
-
 
 ## Future Improvements
 
