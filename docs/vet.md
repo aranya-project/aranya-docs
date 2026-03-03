@@ -52,7 +52,17 @@ For crates in your workspace that aren't published to crates.io, manually set `a
 
 ## Audit Requirements
 
-Focus on unsafe code, network access, file I/O, [build scripts](#build-script), [proc macros](#proc-macro), and [FFI](#ffi). Watch for red flags like obfuscated code, hardcoded network addresses, checked-in binaries, or build scripts that download code. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for detailed guidance.
+### Initial Audits
+
+For initial audits, evaluate the overall quality of the crate: does it have tests, documentation, and specs? Is unsafe code minimal and well-documented? Is the project actively maintained? These signals help assess whether the crate is trustworthy.
+
+### Diff Audits (Updates)
+
+The primary goal of diff audits is to catch malicious changes introduced in updates. Watch for red flags like obfuscated code, hardcoded network addresses, checked-in binaries, or build scripts that download code.
+
+### General Guidance
+
+Cargo-vet defines two [built-in criteria](https://mozilla.github.io/cargo-vet/built-in-criteria.html): `safe-to-run` (no surprising filesystem, network, or system resource usage) and `safe-to-deploy` (no serious security vulnerabilities, with full reasoning about unsafe blocks and powerful imports). Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for details on the audit file format.
 
 Example audit note:
 ```
