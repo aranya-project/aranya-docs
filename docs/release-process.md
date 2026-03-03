@@ -48,16 +48,23 @@ The main branch should always be in a releasable state. In general, whatever is 
 
 - **(manual)** Hold a go/no-go meeting with leadership and relevant developers to confirm the release schedule and flag any exceptions. (release lead)
 
-### Code Freeze (3 days before release)
+### PR Merge Deadline (2 days before release)
 
-A code freeze on aranya-core and aranya begins 3 work days before the scheduled release. This ensures adequate time to:
-- Release aranya-core one day before the aranya release
-- Have a full day to release aranya without other code changes needing to land
+Any PRs the team wants to incorporate into the release should be merged at least 2 days before the scheduled release date. This ensures all intended changes land before the code freeze begins.
 
-During the code freeze:
-- **(manual)** Communicate the code freeze to the team. Only release-critical fixes should be merged. (release lead)
+### Day 1: aranya-core release (1 day before aranya release)
+
+A code freeze prevents new changes from landing while a release is in progress. Only release-critical fixes should be merged during a freeze. The release process typically takes 2 days since aranya depends on aranya-core crates published to crates.io.
+
+- **(manual)** Communicate the code freeze to the team. (release lead)
 - **(manual)** Release aranya-core crates to crates.io. This is often delegated to engineers who have been closely involved in the aranya-core code changes. (release lead)
 - **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
+
+The aranya-core code freeze ends after the aranya-core release is complete.
+
+### Day 2: aranya release
+
+The aranya code freeze begins when the aranya release starts and ends after the aranya release is complete.
 
 ## Aranya-Core Release Process
 
