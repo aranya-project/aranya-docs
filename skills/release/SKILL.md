@@ -20,7 +20,7 @@ allowed-tools: Read, Grep, Glob, Bash(git *), Bash(cargo *), Edit, Write, WebFet
 You are assisting with the Aranya release process. Before proceeding, read the full release process documentation:
 
 1. Read `docs/release-process.md` in the aranya-docs repo for the complete process
-2. Understand which tasks are marked as **(partially-automated)** - these are the tasks you can assist with
+2. Understand the release process tasks and their automation level
 
 ## Arguments
 
@@ -75,6 +75,6 @@ When creating release PRs, reference these examples:
 
 1. Confirm the release type and version with the user
 2. Read the relevant sections of `docs/release-process.md`
-3. For the requested release type, assist with the **(partially-automated)** tasks
+3. For the requested release type, assist with the release tasks
 4. Provide clear summaries of changes for human review
 5. Do not merge PRs or create releases without explicit human approval

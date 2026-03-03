@@ -15,7 +15,6 @@ Major releases will generally occur on a 6-week cadence. Special releases or pat
 Throughout this document, tasks are marked to indicate their level of automation:
 
 - **(manual)** - Requires human action with no automation support
-- **(partially-automated)** - Can be assisted by AI tools but requires human review and judgment
 - **(automated)** - Fully automated by CI/CD workflows; human action is limited to verification
 
 ## Release Security
@@ -31,12 +30,12 @@ There will be tickets and meetings created during a release cycle to coordinate 
 ### Week 1
 
 - **(manual)** Create a planning milestone to decide which features to include in the release. Have this reviewed by product manager and engineering leadership. Provide milestone to leadership so they have visibility into the features we're targeting. (release lead)
-- **(partially-automated)** Verify that the documentation is up-to-date. AI can flag potential areas where docs may be out-of-date. (product manager)
+- **(manual)** Verify that the documentation is up-to-date. (product manager)
 
 ### Week 5
 
 - **(manual)** Hold a meeting with relevant stakeholders (leadership, developers) to confirm feature set and timeline. (product manager)
-- **(partially-automated)** Distribute changelog/release notes internally before the software release is completed. (release lead)
+- **(manual)** Distribute changelog/release notes internally before the software release is completed. (release lead)
 - **(manual)** Define a PR merge order based on feature priorities and dependencies. (release lead)
 - **(manual)** Communicate with team before release about merging in PRs ahead of time, especially aranya-core PRs. (release lead)
 - **(manual)** Block off time on relevant developer and DevOps team member calendars to support the release. (product manager)
@@ -79,7 +78,7 @@ Crates merged into the main branch of the aranya-core repo should implement comp
 
 ### Aranya-Core Release Steps
 
-1. **(partially-automated)** Before releasing aranya-core, open a PR in aranya that patches aranya-core deps with the main branch of aranya-core. This verifies the changes compile/run and catches compatibility issues early. AI can open the PR, but manual review is required.
+1. **(manual)** Before releasing aranya-core, open a PR in aranya that patches aranya-core deps with the main branch of aranya-core. This verifies the changes compile/run and catches compatibility issues early.
 
 2. **(manual)** Open a PR on aranya-core to release new versions. Look at crate diffs since last release and apply semantic versioning to each crate. `release-plz update` can help decide what version to use for each crate.
 
@@ -100,7 +99,7 @@ Tasks to complete on the day of the release:
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
    - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
-2. **(partially-automated)** Open a PR to bump crate versions for the release, including the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate. Can do this a day before release or on day of release. (release lead)
+2. **(manual)** Open a PR to bump crate versions for the release, including the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate. Can do this a day before release or on day of release. (release lead)
 3. **(manual)** Check that all CI/CD jobs have passed on the `main` branch before merging.
 4. **(manual)** Merge the release PR into `main`.
 5. **(automated)** Once the release PR is merged, CI/CD workflows automatically:
@@ -112,7 +111,7 @@ Tasks to complete on the day of the release:
 7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
 8. **(manual)** Verify that release artifacts were attached to the GitHub release.
-9. **(partially-automated)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. If using AI to generate release notes, ensure it has context for all commits, PRs, and past release notes. Release notes must be reviewed by engineering leadership before publishing. (release lead)
+9. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. Release notes must be reviewed by engineering leadership before publishing. (release lead)
 10. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
 11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
@@ -121,7 +120,7 @@ Tasks to complete on the day of the release:
 ## Post-Release Checklist
 
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key.
-- **(partially-automated)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct): https://aranya-project.github.io/aranya-docs/capi/
+- **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct): https://aranya-project.github.io/aranya-docs/capi/
 - **(manual)** Check the published docs.rs website for all Aranya crates (sometimes CI builds the docs but the official website fails to build the docs correctly). See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
 
 ## Release Issue Template
@@ -194,53 +193,28 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 2. **(manual)** Update CI configuration to allow releases from the base branch. Modify the release workflow to permit releases from `patch/X.Y.Z`. See [this example PR](https://github.com/aranya-project/aranya/pull/706) for the specific workflow changes required.
 
-3. **(partially-automated)** Create a patch release branch targeting the base branch:
+3. **(manual)** Create a patch release branch targeting the base branch:
    ```bash
    git checkout -b release-X.Y.<Z+1> patch/X.Y.Z
    ```
 
-4. **(partially-automated)** Cherry-pick the fix from main:
+4. **(manual)** Cherry-pick the fix from main:
    ```bash
    git cherry-pick <commit-hash>
    ```
 
-5. **(partially-automated)** Bump the version and update changelogs. If the base version is X.Y.Z, the patch release will be X.Y.(Z+1). If the patch contains a breaking API change, increment the major version instead: (X+1).Y.Z. See [semver](https://semver.org/#summary) for details.
+5. **(manual)** Bump the version and update changelogs. If the base version is X.Y.Z, the patch release will be X.Y.(Z+1). If the patch contains a breaking API change, increment the major version instead: (X+1).Y.Z. See [semver](https://semver.org/#summary) for details.
 
-6. **(partially-automated)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
+6. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
 
 7. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
 
-8. **(partially-automated)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
+8. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
 
 ## QA Process
 
 TODO: Define testing, regression, process, and communication procedures.
 
-## Using AI to Assist with Releases
-
-AI tools can help with tasks marked **(partially-automated)** throughout this document. When using AI for release tasks:
-
-1. Point the AI to this release process documentation for context.
-2. Provide example PRs from past releases as references:
-   - Major releases: [5.0.0](https://github.com/aranya-project/aranya/pull/728), [4.0.0](https://github.com/aranya-project/aranya/pull/618), [3.0.0](https://github.com/aranya-project/aranya/pull/512), [2.0.0](https://github.com/aranya-project/aranya/pull/465), [1.0.0](https://github.com/aranya-project/aranya/pull/389)
-   - Minor releases: [4.1.0](https://github.com/aranya-project/aranya/pull/679), [0.6.0](https://github.com/aranya-project/aranya/pull/276)
-   - Patch releases: [4.1.1](https://github.com/aranya-project/aranya/pull/705), [0.6.1](https://github.com/aranya-project/aranya/pull/284)
-   - CI/workflow fixes: [allow release from patch branch](https://github.com/aranya-project/aranya/pull/706), [don't publish examples](https://github.com/aranya-project/aranya/pull/623)
-
-For patch releases, provide AI with context on the vulnerability being patched (e.g., RustSec advisory links, affected crates, severity).
-
-AI can assist with:
-- Generating changelogs and release notes
-- Creating version bump PRs
-- Cherry-picking fixes for patch releases
-- Updating the website docs in [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) with a link to the latest Doxygen docs for the C API
-- Updating the website docs to reflect changes in Aranya's design, feature set, or application-facing APIs
-
-AI is not recommended for aranya-core release PRs. Determining what version to bump crates to is complex, as transitive dependencies can cause breaking changes in non-obvious ways.
-
-The release lead remains responsible for reviewing AI-generated content and ensuring the release process is followed correctly.
-
-**Note:** When updating this document, also update `skills/release/SKILL.md` to keep the AI skill in sync with the release process.
 
 ## Future Improvements
 
@@ -255,7 +229,7 @@ The following improvements have been identified but not yet implemented:
 ### Automation Opportunities
 
 - **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo so issues can be created directly from the template without copying from this document.
-- **Automate verification tasks** - Steps 6-8 (verifying workflows succeeded, crates published, artifacts attached) could have a script or AI assistance to check automatically.
+- **Automate verification tasks** - Steps 6-8 (verifying workflows succeeded, crates published, artifacts attached) could be automated with a script.
 - **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
 - **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
 
