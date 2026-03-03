@@ -19,7 +19,7 @@ Throughout this document, tasks are marked to indicate their level of automation
 
 ## Release Security
 
-See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline.
+See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
 
 ## Pre-Release Checklist
 

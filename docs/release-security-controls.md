@@ -6,7 +6,7 @@ permalink: "/release-security-controls/"
 
 # Release Security Controls
 
-This document describes the security controls that protect the Aranya release pipeline. For the release process itself, see [Release Process](/release-process/).
+This document describes the security controls that protect the Aranya release pipeline. These controls also enforce our QA process: peer review ensures test coverage, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging. For the release process itself, see [Release Process](/release-process/).
 
 ## Outstanding TODOs
 
