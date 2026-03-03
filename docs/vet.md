@@ -10,12 +10,19 @@ permalink: "/vet/"
 
 [Cargo Vet](https://mozilla.github.io/cargo-vet/) is a tool for verifying that third-party Rust dependencies have been audited by trusted entities. This document describes our internal development process for auditing dependencies using cargo-vet.
 
+### Key Concepts
+
+- **Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages.
+- **Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`), relying on a developer mistyping a dependency name.
+- **Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and A depends on B, then B is a transitive dependency.
+- **Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase.
+
 ### Defending Against Supply Chain Attacks
 
-[Supply chain attacks](#supply-chain-attack) target the software development process through [typosquatting](#typosquatting), compromised updates, and account takeovers. Each dependency increases attack surface, audit burden, and potential for forced patch releases. Our audit process defends against these threats through multiple layers:
+Supply chain attacks target the software development process through typosquatting, compromised updates, and account takeovers. Each dependency increases attack surface, audit burden, and potential for forced patch releases. Our audit process defends against these threats through multiple layers:
 
 - **Version pinning** - All dependencies are pinned to specific versions in `Cargo.lock`, preventing automatic updates. Any version change requires an explicit commit and must pass cargo-vet checks.
-- **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged. This forces deliberate decisions about new dependencies and their [transitive dependencies](#transitive-dependency).
+- **Mandatory audits** - New dependencies and version updates must be audited, exempted, or trusted before CI will pass and the PR can be merged. This forces deliberate decisions about new dependencies and their transitive dependencies.
 - **Human review** - Audits require manual code inspection, not just automated checks. Reviewers verify audit quality and can request re-audits.
 - **Trusted imports** - We import audits from organizations in the [cargo-vet registry](https://github.com/mozilla/cargo-vet/blob/main/registry.toml) and select others (like AWS) based on reviewer judgment, leveraging community review efforts while maintaining our own verification standards.
 
@@ -34,7 +41,7 @@ New repositories should be initialized with `cargo vet init`. After initializati
 ## When Audits Are Required
 
 - **Adding a new dependency** - CI will fail until the dependency is audited, exempted, or trusted
-- **Updating a dependency version** - A [relative audit](#relative-audit) is needed covering the version change
+- **Updating a dependency version** - A relative audit is needed covering the version change
 - **Patching a vulnerability** - Prioritize the audit and reference the [advisory](https://rustsec.org/advisories/) in your notes
 - **Transitive dependency updates** - Run `cargo vet check` after any `Cargo.lock` changes
 
@@ -71,9 +78,6 @@ manipulation during encoding. No networking code. Reader/writer
 interface allows caller to manage file I/O.
 ```
 
-### Using AI Tools
-
-AI tools can help summarize crates and search for patterns, but they are **not a substitute for manual review**. Use them as a second set of eyes after you've already reviewed the code yourself. Audit notes should reflect your manual review, not AI-generated summaries. The responsibility remains with the human reviewer.
 
 ## Workflow
 
@@ -137,12 +141,3 @@ If you discover a crate version that fails criteria, communicate with the team s
 
 PRs with unaudited dependencies will fail CI checks and cannot be merged into protected branches.
 
-## Definitions
-
-<a id="build-script"></a>**Build script** - A Rust file (`build.rs`) that runs at compile time with full system access.
-<a id="ffi"></a>**FFI (Foreign Function Interface)** - A mechanism allowing Rust to call functions in other languages, bypassing Rust's safety guarantees.
-<a id="proc-macro"></a>**Proc macro** - A Rust macro that runs arbitrary code at compile time with full system access.
-<a id="relative-audit"></a>**Relative audit** - An audit that reviews only the changes between two versions of a crate, rather than the entire codebase.
-<a id="supply-chain-attack"></a>**Supply chain attack** - An attack targeting the software development or distribution process, such as compromising upstream packages or publishing malicious packages. We pin all dependencies to specific versions so they are not updated automatically; any version change must go through our cargo-vet audit process.
-<a id="transitive-dependency"></a>**Transitive dependency** - A dependency of a dependency. If your project depends on crate A, and A depends on B, then B is a transitive dependency.
-<a id="typosquatting"></a>**Typosquatting** - Publishing a malicious package with a name similar to a popular package (e.g., `serdes` instead of `serde`). This attack relies on a developer mistyping a dependency name when adding it to their project.
