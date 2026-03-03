@@ -44,7 +44,9 @@ There will be tickets and meetings created during a release cycle to coordinate 
 
 ### Week 6
 
-- **(manual)** Hold a go/no-go meeting with leadership and relevant developers to decide when/what to release. (release lead)
+The main branch should always be in a releasable state. In general, whatever is on main at the scheduled release date is what gets released. Changes to timing or feature sets are the exception, not the rule (e.g., waiting for a customer-driven feature or following up with a patch release shortly after).
+
+- **(manual)** Hold a go/no-go meeting with leadership and relevant developers to confirm the release schedule and flag any exceptions. (release lead)
 
 ### Code Freeze (3 days before release)
 
