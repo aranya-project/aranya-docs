@@ -40,7 +40,7 @@ There will be tickets and meetings created during a release cycle to coordinate 
 - **(manual)** Define a PR merge order based on feature priorities and dependencies. (release lead)
 - **(manual)** Communicate with team before release about merging in PRs ahead of time, especially aranya-core PRs. (release lead)
 - **(manual)** Block off time on relevant developer and DevOps team member calendars to support the release. (product manager)
-- **(manual)** Verify any new crates merged into the main branch have been published to crates.io. It's especially important to publish any new crates from the aranya-core repo ahead of the release because it is a dependency of the aranya repo. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow. Mark expiration date of credential in calendar to confirm with DevOps that the credential is valid before attempting the next aranya-core release.
+- **(manual)** Verify any new crates merged into the main branch have been published to crates.io. It's especially important to publish any new crates from the aranya-core repo ahead of the release because it is a dependency of the aranya repo. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow. Regular rotation of the crates.io credential would prevent expiration-related failures; without it, the credential may expire unnoticed between releases.
 - **(manual)** Verify that rustdocs build without warnings: `cargo make gen-docs-nightly`
 
 ### Week 6
