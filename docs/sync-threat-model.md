@@ -173,7 +173,7 @@ Devices MUST verify the cryptographic signature on DeviceId discovery responses 
 
 #### ADDR-003
 
-DeviceId discovery must only be preformed over connections that are encrypted and authenticated, ensuring that both parties are members of the sync group.
+DeviceId discovery must only be performed over connections that are encrypted and authenticated, ensuring that both parties are members of the sync group.
 
 *Mitigates: DA-3*
 
