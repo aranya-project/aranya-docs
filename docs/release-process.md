@@ -126,6 +126,51 @@ Tasks to complete on the day of the release:
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
 12. **(manual)** Schedule a product release retrospective for release process improvements.
 
+### Release PR Guidelines
+
+Release PRs are version-bump-only PRs. All feature work must be merged before the release PR is opened. The release PR's sole purpose is to update crate versions and dependency metadata.
+
+#### PR Title
+
+Use the conventional commit format: `release: X.Y.Z`
+
+Examples: `release: 5.0.0`, `release: 4.1.0`, `release: 4.1.1`
+
+#### PR Description
+
+The description should include:
+
+1. **Version bump summary** -- A one-line description of the version change (e.g., "Bump all workspace crate versions from 4.1.0 to 5.0.0").
+2. **Headline features** (major/minor only) -- A brief list of notable features or changes included in the release (e.g., "Release Aranya 4.0.0 including: Custom roles RBAC, AFC security enhancements").
+3. **Prerequisite PRs** (if any) -- List any PRs that must be merged before the release PR (e.g., "Merge this PR first: #509").
+4. **Security advisory reference** (patch only) -- Link to the RustSec advisory or bug report that prompted the patch (e.g., "Patch release for https://rustsec.org/advisories/RUSTSEC-2026-0007").
+5. **Cherry-pick details** (patch only) -- List the cherry-picked commits with their original PR references (e.g., "Cherry-picks: eccd7a0d Update `bytes` to resolve security vulnerability warning (#703)").
+
+#### Expected File Changes
+
+Release PRs should only touch version and dependency metadata files:
+
+- `Cargo.toml` -- Workspace-level version bumps for all crates
+- `Cargo.lock` -- Regenerated lockfile reflecting the version bump
+- `supply-chain/*` -- Patch releases only. Normal releases handle dependency audits on the feature PRs that merge into main before the release.
+
+Source code changes (`*.rs`) should not appear in a release PR. If they do, it likely means feature work was not merged before the release.
+
+#### Branch Conventions
+
+| Release Type | Head Branch | Base Branch |
+|---|---|---|
+| Major/Minor | `release-X.Y.Z` | `main` |
+| Patch | `release-X.Y.Z` | `patch/X.Y.Z-1` (the base branch created from the release tag being patched) |
+
+#### CI/Workflow Fix PRs
+
+Occasionally, release-related CI or workflow issues need to be fixed separately from the release itself. These are not versioned releases and use different conventions:
+
+- **Title:** Use `chore:` prefix (e.g., `chore: allow release from release-4.1.0-base branch`)
+- **Description:** Link the failing CI run, explain the root cause, and describe the fix
+- **Files:** CI/build configuration only (e.g., `Cargo.toml` publish flags, workflow files). No version bumps.
+
 ## Post-Release Checklist
 
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key.

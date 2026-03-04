@@ -1,6 +1,6 @@
 <!--
   Auto-generated from: docs/release-process.md
-  Last updated: 2026-02-18
+  Last updated: 2026-03-04
 
   This skill provides AI assistance for the Aranya release process.
   For the full release process documentation, see the source spec.
@@ -45,10 +45,6 @@ For security patch releases:
 4. Bump the patch version (X.Y.Z → X.Y.(Z+1), or (X+1).Y.Z if breaking)
 5. Generate release notes explaining the vulnerability
 
-Reference PRs for patch releases:
-- [4.1.1](https://github.com/aranya-project/aranya/pull/705)
-- [0.6.1](https://github.com/aranya-project/aranya/pull/284)
-
 ### Documentation Update (`/release docs`)
 
 For post-release documentation tasks:
@@ -57,13 +53,15 @@ For post-release documentation tasks:
 - Verify existing documentation links are correct
 - Check the published docs.rs website for all Aranya crates. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
 
-## Reference PRs
+## Release PR Guidelines
 
-When creating release PRs, reference these examples:
-- Major releases: [5.0.0](https://github.com/aranya-project/aranya/pull/728), [4.0.0](https://github.com/aranya-project/aranya/pull/618), [3.0.0](https://github.com/aranya-project/aranya/pull/512), [2.0.0](https://github.com/aranya-project/aranya/pull/465), [1.0.0](https://github.com/aranya-project/aranya/pull/389)
-- Minor releases: [4.1.0](https://github.com/aranya-project/aranya/pull/679), [0.6.0](https://github.com/aranya-project/aranya/pull/276)
-- Patch releases: [4.1.1](https://github.com/aranya-project/aranya/pull/705), [0.6.1](https://github.com/aranya-project/aranya/pull/284)
-- CI/workflow fixes: [allow release from patch branch](https://github.com/aranya-project/aranya/pull/706), [don't publish examples](https://github.com/aranya-project/aranya/pull/623)
+When creating release PRs, follow the "Release PR Guidelines" section in `docs/release-process.md`. Key points:
+
+- **Title:** `release: X.Y.Z` (conventional commit format)
+- **Description:** Version bump summary, headline features (major/minor), security advisory (patch), cherry-pick details (patch), prerequisite PRs (if any)
+- **Files:** Only version/dependency metadata (`Cargo.toml`, `Cargo.lock`, `supply-chain/` files). No source code changes.
+- **Branches:** Major/minor target `main`; patches target the `patch/X.Y.Z` base branch
+- **CI fixes:** Use `chore:` prefix, link failing CI run, explain root cause and fix
 
 ## Important Restrictions
 
