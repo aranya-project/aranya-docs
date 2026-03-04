@@ -69,7 +69,7 @@ The primary goal of diff audits is to catch malicious changes introduced in upda
 
 ### General Guidance
 
-Cargo-vet defines two [built-in criteria](https://mozilla.github.io/cargo-vet/built-in-criteria.html): `safe-to-run` (no surprising filesystem, network, or system resource usage) and `safe-to-deploy` (no serious security vulnerabilities, with full reasoning about unsafe blocks and powerful imports). Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for details on the audit file format.
+Cargo-vet defines two [built-in criteria](https://mozilla.github.io/cargo-vet/built-in-criteria.html): `safe-to-run` (no surprising filesystem, network, or system resource usage) and `safe-to-deploy` (no serious security vulnerabilities, with full reasoning about unsafe blocks and powerful imports). `safe-to-deploy` implies `safe-to-run`—it is the strictly stronger criterion. All audits should use the `safe-to-deploy` criteria because Aranya crates are deployed to production environments exposed to untrusted input. If an audit can only certify a dependency as `safe-to-run`, the team should discuss whether that dependency can be included in Aranya before proceeding. Document your findings in audit notes, including whether areas of concern are actually used by our code. See the [cargo-vet documentation on recording audits](https://mozilla.github.io/cargo-vet/recording-audits.html) for details on the audit file format.
 
 Example audit note:
 ```
