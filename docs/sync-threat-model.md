@@ -137,7 +137,7 @@ The primary threats to device identity and addressing involve an adversary attem
 
 > **Threat DA-2: Man-in-the-Middle on Discovery.** During DeviceId discovery (when a device knows an address but not the DeviceId), an attacker intercepts the challenge-response protocol and forwards the challenge to a different address, attempting to bind their address to another device's identity.
 
-> **Threat DA-3: DeviceId discovery.** If DeviceID discovery is not encrypted and authenticated and advisory can observe or preform oracle attacks to discover the identities of the devices in the team.
+> **Threat DA-3: DeviceId discovery.** If DeviceID discovery is not encrypted and authenticated an adversary can observe or perform oracle attacks to discover the identities of the devices in the team.
 
 ### DeviceId Discovery
 
