@@ -216,7 +216,7 @@ Copy the template below into a new GitHub issue to track release progress. Repla
 - [ ] Verify release artifacts attached to GitHub release
 - [ ] Verify docs.rs pages built correctly for all crates
 - [ ] Update C API docs landing page URLs
-- [ ] Add release notes to GitHub release
+- [ ] Add release notes to GitHub release (must be reviewed by engineering leadership before publishing)
 - [ ] Have product owner/team lead review the release (release notes, CI workflows, published docs, uploaded artifacts, crates.io listings)
 
 ### Announcements
