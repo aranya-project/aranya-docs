@@ -30,11 +30,11 @@ There will be tickets and meetings created during a release cycle to coordinate 
 ### Week 1
 
 - **(manual)** Create a planning milestone to decide which features to include in the release. Have this reviewed by product manager and engineering leadership. Provide milestone to leadership so they have visibility into the features we're targeting. (release lead)
-- **(manual)** Verify that the documentation is up-to-date. (product manager)
+- **(manual)** Verify that the documentation is up-to-date: crate rustdocs, the [documentation website](https://aranya-project.github.io/aranya-docs/), specs, release process docs, Doxygen docs, etc. Most docs should be updated alongside code changes, but this step catches anything that was missed. (product manager)
 
 ### Week 5
 
-- **(manual)** Hold a meeting with relevant stakeholders (leadership, developers) to confirm feature set and timeline. (product manager)
+- **(manual)** Hold a meeting with relevant stakeholders (leadership, developers) to review the expected feature set and timeline. The default is to release whatever is on main, but this is the opportunity to flag exceptions (e.g., delaying to land a high-priority feature). (product manager)
 - **(manual)** Distribute changelog/release notes internally before the software release is completed. (release lead)
 - **(manual)** Define a PR merge order based on feature priorities and dependencies. (release lead)
 - **(manual)** Communicate with team before release about merging in PRs ahead of time, especially aranya-core PRs. (release lead)
@@ -52,7 +52,7 @@ The main branch should always be in a releasable state. In general, whatever is 
 
 Any PRs the team wants to incorporate into the release should be merged at least 2 days before the scheduled release date. This ensures all intended changes land before the code freeze begins.
 
-### Day 1: aranya-core release (1 day before aranya release)
+### One day before Aranya release: aranya-core release
 
 A code freeze prevents new changes from landing while a release is in progress. Only release-critical fixes should be merged during a freeze. The release process typically takes 2 days since aranya depends on aranya-core crates published to crates.io.
 
@@ -62,7 +62,7 @@ A code freeze prevents new changes from landing while a release is in progress. 
 
 The aranya-core code freeze ends after the aranya-core release is complete.
 
-### Day 2: aranya release
+### Release day: Aranya release
 
 The aranya code freeze begins when the aranya release starts and ends after the aranya release is complete.
 
@@ -91,7 +91,7 @@ Code merged into main (or any protected branch we plan to release from) that is 
 
 2. **(manual)** Open a PR on aranya-core to release new versions. Look at crate diffs since last release and apply semantic versioning to each crate. `release-plz update` can help decide what version to use for each crate.
 
-   When the aranya-crypto crate is updated, it often and results in a breaking change to most of the other crates in aranya-core. release-plz is not able to set the correct version automatically. Therefore, it is often required to run `release-plz update -p <crate>` and `release-plz set-version <crate>@version` manually:
+   When the aranya-crypto crate is updated, it often results in a breaking change to most of the other crates in aranya-core. release-plz is not able to set the correct version automatically. Therefore, it is often required to run `release-plz update -p <crate>` and `release-plz set-version <crate>@version` manually:
 
    ```bash
    release-plz update -p aranya-policy-ifgen-build --allow-dirty
@@ -120,11 +120,13 @@ Tasks to complete on the day of the release:
 7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
 8. **(manual)** Verify that release artifacts were attached to the GitHub release.
-9. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. Release notes must be reviewed by engineering leadership before publishing. (release lead)
-10. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
-11. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
+9. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
+10. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/aranya-docs/capi/
+11. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. Release notes must be reviewed by engineering leadership before publishing. (release lead)
+12. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
+13. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
-12. **(manual)** Schedule a product release retrospective for release process improvements.
+14. **(manual)** Schedule a product release retrospective for release process improvements.
 
 ### Release PR Guidelines
 
@@ -161,7 +163,7 @@ Source code changes (`*.rs`) should not appear in a release PR. If they do, it l
 | Release Type | Head Branch | Base Branch |
 |---|---|---|
 | Major/Minor | `release-X.Y.Z` | `main` |
-| Patch | `release-X.Y.Z` | `patch/X.Y.Z-1` (the base branch created from the release tag being patched) |
+| Patch | `patch-release-X.Y.Z` | `release/patch/X.Y.Z` (the protected base branch created from the release tag being patched) |
 
 #### CI/Workflow Fix PRs
 
@@ -173,9 +175,7 @@ Occasionally, release-related CI or workflow issues need to be fixed separately 
 
 ## Post-Release Checklist
 
-- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key.
-- **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct): https://aranya-project.github.io/aranya-docs/capi/
-- **(manual)** Check the published docs.rs website for all Aranya crates (sometimes CI builds the docs but the official website fails to build the docs correctly). See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
+- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub environment secrets for both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
 
 ## Release Issue Template
 
@@ -207,7 +207,7 @@ Copy the template below into a new GitHub issue to track release progress. Repla
 - [ ] Verify publish.yml and release.yml workflows succeeded
 - [ ] Verify aranya-* crates released on [crates.io](https://crates.io/search?q=aranya)
 - [ ] Verify release artifacts attached to GitHub release
-- [ ] Verify docs.rs pages built correctly
+- [ ] Verify docs.rs pages built correctly for all crates
 - [ ] Update C API docs landing page URLs
 - [ ] Add release notes to GitHub release
 - [ ] Have product owner/team lead review the release (release notes, CI workflows, published docs, uploaded artifacts, crates.io listings)
@@ -230,40 +230,49 @@ Patch releases should ideally not contain breaking API changes, though this may 
 
 ### When to Issue a Patch Release
 
-1. A security vulnerability is discovered in a dependency (e.g., via [RustSec advisories](https://rustsec.org/advisories/)). The vulnerability must either directly impact us or a downstream dependency. If you cannot prove that there are no downstream dependencies impacted, then a defensive patch release is required.
-2. Patch the vulnerability on the main branch first.
-3. Discuss with engineering leadership whether a patch release is required, considering:
+Common events that may prompt a patch release:
+
+- **Security vulnerability in a dependency** -- discovered via [RustSec advisories](https://rustsec.org/advisories/), [Dependabot alerts](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/about-dependabot-alerts), external contributor reports, or internal review. The vulnerability must either directly impact us or a downstream dependency. If you cannot prove that there are no downstream dependencies impacted, then a defensive patch release is required.
+- **Security vulnerability in our code** -- discovered by internal developers, external contributors, security audits, or a [RustSec advisory](https://rustsec.org/advisories/) filed against one of our published crates.
+- **Critical behavioral regression** -- a bug that significantly impacts functionality and cannot wait for the next scheduled release.
+
+Once the issue is identified:
+
+1. Patch the vulnerability or fix the bug on the main branch first.
+2. Discuss with engineering leadership whether a patch release is required, considering:
    - Does our code directly use the vulnerable code path?
    - Could any downstream dependencies be impacted?
-   - What is the severity of the vulnerability?
+   - What is the severity of the vulnerability or regression?
 
 ### Patch Release Process
 
-1. **(manual)** Create a base branch from the release tag being patched:
+1. **(manual)** Determine the patch version X.Y.Z. Increment the patch number from the original release (e.g., 5.0.0 becomes 5.0.1). If the patch contains a breaking API change, increment the major version instead (e.g., 6.0.0). See [semver](https://semver.org/#summary) for details.
+
+2. **(manual)** Create a base branch from the original release tag. This is the protected branch that release workflows trigger on when the patch PR is merged into it:
    ```bash
-   git checkout -b patch/X.Y.Z vX.Y.Z
-   git push origin patch/X.Y.Z
+   git checkout -b release/patch/X.Y.Z v<original-version>
+   git push origin release/patch/X.Y.Z
    ```
 
-2. **(manual)** Update CI configuration to allow releases from the base branch. Modify the release workflow to permit releases from `patch/X.Y.Z`. See [this example PR](https://github.com/aranya-project/aranya/pull/706) for the specific workflow changes required.
+3. **(manual)** Update CI configuration to allow releases from the base branch. Modify the release workflow to permit releases from `release/patch/*`. See [this example PR](https://github.com/aranya-project/aranya/pull/706) for the specific workflow changes required.
 
-3. **(manual)** Create a patch release branch targeting the base branch:
+4. **(manual)** Create a patch release branch from the base branch. This is the working branch where fixes are cherry-picked and versions are bumped:
    ```bash
-   git checkout -b release-X.Y.<Z+1> patch/X.Y.Z
+   git checkout -b patch-release-X.Y.Z release/patch/X.Y.Z
    ```
 
-4. **(manual)** Cherry-pick the fix from main:
+5. **(manual)** Cherry-pick the fix from main:
    ```bash
    git cherry-pick <commit-hash>
    ```
 
-5. **(manual)** Bump the version and update changelogs. If the base version is X.Y.Z, the patch release will be X.Y.(Z+1). If the patch contains a breaking API change, increment the major version instead: (X+1).Y.Z. See [semver](https://semver.org/#summary) for details.
+6. **(manual)** Bump the version to X.Y.Z and update changelogs.
 
-6. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Patch release base branches (`patch/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
+7. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Release base branches (`release/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
 
-7. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
+8. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
 
-8. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
+9. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
 
 
 ## Future Improvements
@@ -272,7 +281,7 @@ The following improvements have been identified but not yet implemented:
 
 ### Process Gaps
 
-- **Protected patch release branches** - Configure `patch/**/*` wildcard branch protection rule at the org or repo level so patch release PRs require the same review and CI gates as releases from `main`. See [Release Security Controls](/release-security-controls/) for details and tracking under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
+- **Protected release branches** - Configure `release/**/*` wildcard branch protection rule at the org or repo level so patch release PRs require the same review and CI gates as releases from `main`. See [Release Security Controls](/release-security-controls/) for details and tracking under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
 - **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
 - **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
 
