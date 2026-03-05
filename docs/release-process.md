@@ -194,7 +194,7 @@ Copy the template below into a new GitHub issue to track release progress. Repla
 **Target Release Date:** [DATE]
 **Release Lead:** @[USERNAME]
 
-## Code Freeze (3 days before release)
+## Code Freeze (1 day before release)
 
 - [ ] Communicate code freeze to the team
 - [ ] Release aranya-core crates to crates.io
