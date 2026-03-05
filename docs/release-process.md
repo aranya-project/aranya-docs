@@ -42,7 +42,7 @@ See [Release Security Controls](/release-security-controls/) for detailed docume
 
 The main branch should always be in a releasable state. In general, whatever is on main at the scheduled release date is what gets released. Changes to timing or feature sets are the exception, not the rule (e.g., waiting for a customer-driven feature or following up with a patch release shortly after).
 
-- **(manual)** Hold a go/no-go meeting with leadership and relevant developers to confirm the release schedule and flag any exceptions. (release lead)
+- **(manual)** Get go/no-go agreement from leadership and relevant developers to confirm the release schedule and flag any exceptions. (release lead)
 
 ### PR Merge Deadline (2 days before release)
 
@@ -98,27 +98,25 @@ The aranya repo contains the daemon, client libraries, and C API. Aranya release
 
 The aranya code freeze begins when the aranya release starts and ends after the aranya release is complete. Tasks to complete on the day of the release:
 
-1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
-   - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
-2. **(manual)** Open a PR to bump crate versions for the release, including the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate. Can do this a day before release or on day of release. (release lead)
-3. **(manual)** Check that all CI/CD jobs have passed on the `main` branch before merging.
-4. **(manual)** Merge the release PR into `main`.
-5. **(automated)** Once the release PR is merged, CI/CD workflows automatically:
-   - Create a new release tag based on the aranya repo crate versions
+1. **(manual)** Open a PR to bump crate versions for the release, including the latest aranya-core dependency versions. All crates in the aranya repo are set to the same version per semver guidelines, making this straightforward to automate. Can do this a day before release or on day of release. (release lead)
+2. **(manual)** Check that all CI/CD jobs have passed on the release PR branch before merging.
+3. **(manual)** Merge the release PR into `main`.
+4. **(automated)** Once the release PR is merged, CI/CD workflows automatically:
+   - Create a new GitHub release with a tag based on the aranya repo crate versions
    - Upload artifacts (executables, libraries, C headers, Rust docs, Doxygen docs) to the GitHub release
    - Publish crates to crates.io
    - Publish C API Doxygen docs to the gh-pages branch
-6. **(manual)** Verify that the publish.yml and release.yml workflows succeeded.
-7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
+5. **(manual)** Verify that all CI/CD workflows succeeded on the `main` branch after merging.
+6. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
-8. **(manual)** Verify that release artifacts were attached to the GitHub release.
-9. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
-10. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/aranya-docs/capi/
-11. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. Release notes must be reviewed by engineering leadership before publishing. (release lead)
-12. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
-13. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
+7. **(manual)** Verify that release artifacts were attached to the GitHub release.
+8. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
+9. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/aranya-docs/capi/
+10. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. Release notes must be reviewed by engineering leadership before publishing. (release lead)
+11. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. (product manager)
+12. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
-14. **(manual)** Schedule a product release retrospective for release process improvements.
+13. **(manual)** Schedule a product release retrospective for release process improvements.
 
 ### Release PR Guidelines
 
@@ -189,21 +187,21 @@ Copy the template below into a new GitHub issue to track release progress. Repla
 ## Code Freeze (1 day before release)
 
 - [ ] Communicate code freeze to the team
-- [ ] Release aranya-core crates to crates.io
+- [ ] Merge aranya-core release PR into `main`
+- [ ] Verify aranya-core release workflow passed and crates are visible on crates.io
 - [ ] Verify aranya builds with newly released aranya-core crates
 
 ## Release Day
 
 ### Pre-Merge
 
-- [ ] Announce release process starting to leadership, team leads, and DevOps
 - [ ] Open PR to bump crate versions
-- [ ] Verify all CI/CD jobs pass on `main` branch
+- [ ] Verify all CI/CD jobs pass on the release PR branch
 - [ ] Merge the release PR
 
 ### Post-Merge Verification
 
-- [ ] Verify publish.yml and release.yml workflows succeeded
+- [ ] Verify all CI/CD workflows succeeded on `main`
 - [ ] Verify aranya-* crates released on [crates.io](https://crates.io/search?q=aranya)
 - [ ] Verify release artifacts attached to GitHub release
 - [ ] Verify docs.rs pages built correctly for all crates
