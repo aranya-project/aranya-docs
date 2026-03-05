@@ -35,7 +35,7 @@ See [Release Security Controls](/release-security-controls/) for detailed docume
 - **(manual)** Define a PR merge order based on feature priorities and dependencies. (release lead)
 - **(manual)** Communicate with team before release about merging in PRs ahead of time, especially aranya-core PRs. (release lead)
 - **(manual)** Block off time on relevant developer and DevOps team member calendars to support the release. (product manager)
-- **(manual)** Verify any new crates merged into the main branch have been published to crates.io. It's especially important to publish any new crates from the aranya-core repo ahead of the release because it is a dependency of the aranya repo. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow. Regular rotation of the crates.io credential would prevent expiration-related failures; without it, the credential may expire unnoticed between releases.
+- **(manual)** Verify any new crates merged into the main branch have been published to crates.io. It's especially important to publish any new crates from the aranya-core repo ahead of the release because it is a dependency of the aranya repo. Regular rotation of the crates.io credential would prevent expiration-related failures; without it, the credential may expire unnoticed between releases.
 - **(manual)** Verify that rustdocs build without warnings: `cargo make gen-docs-nightly`
 
 ### Week 6
@@ -48,25 +48,13 @@ The main branch should always be in a releasable state. In general, whatever is 
 
 Any PRs the team wants to incorporate into the release should be merged at least 2 days before the scheduled release date. This ensures all intended changes land before the code freeze begins.
 
-### One day before Aranya release: aranya-core release
+## Assumptions
 
-A code freeze prevents new changes from landing while a release is in progress. Only release-critical fixes should be merged during a freeze. The release process typically takes 2 days since aranya depends on aranya-core crates published to crates.io.
+Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features.
 
-- **(manual)** Communicate the code freeze to the team. (release lead)
-- **(manual)** Release aranya-core crates to crates.io. This is often delegated to engineers who have been closely involved in the aranya-core code changes. (release lead)
-- **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
+## Aranya-Core Release Process (1 day before Aranya release)
 
-The aranya-core code freeze ends after the aranya-core release is complete.
-
-### Release day: Aranya release
-
-The aranya code freeze begins when the aranya release starts and ends after the aranya release is complete.
-
-## Aranya-Core Release Process
-
-Crates in the aranya-core repo should be published to crates.io regularly as changes are available on the main branch. Crates in the aranya repo can be released less frequently depending on which feature sets need to be released.
-
-We don't want to tie aranya-core crate version bumps to Aranya releases, but in practice they may often happen at the same time.
+Crates in the aranya-core repo should be published to crates.io regularly as changes are available on the main branch. We don't want to tie aranya-core crate version bumps to Aranya releases, but in practice they may often happen at the same time.
 
 ### Tools
 
@@ -77,15 +65,15 @@ cargo install release-plz
 cargo install cargo-semver-checks
 ```
 
-### Assumptions
-
-Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features.
-
 ### Aranya-Core Release Steps
 
-1. **(manual)** Before releasing aranya-core, open a PR in aranya that patches aranya-core deps with the main branch of aranya-core. This verifies the changes compile/run and catches compatibility issues early.
+A code freeze prevents new changes from landing while a release is in progress. Only release-critical fixes should be merged during a freeze. The overall release process typically takes 2 days since aranya depends on aranya-core crates published to crates.io. The aranya-core code freeze begins when the aranya-core release starts (one day before the aranya release) and ends after the aranya-core release is complete.
 
-2. **(manual)** Open a PR on aranya-core to release new versions. Look at crate diffs since last release and apply semantic versioning to each crate. `release-plz update` can help decide what version to use for each crate.
+1. **(manual)** Communicate the code freeze to the team. (release lead)
+
+2. **(manual)** Before releasing aranya-core, open a PR in aranya that patches aranya-core deps with the main branch of aranya-core. This verifies the changes compile/run and catches compatibility issues early.
+
+3. **(manual)** Open a PR on aranya-core to release new versions. Look at crate diffs since last release and apply semantic versioning to each crate. `release-plz update` can help decide what version to use for each crate.
 
    When the aranya-crypto crate is updated, it often results in a breaking change to most of the other crates in aranya-core. release-plz is not able to set the correct version automatically. Therefore, it is often required to run `release-plz update -p <crate>` and `release-plz set-version <crate>@version` manually:
 
@@ -94,13 +82,21 @@ Code merged into main (or any protected branch we plan to release from) that is 
    release-plz set-version aranya-policy-ifgen-build@0.6.0
    ```
 
-## Aranya Release Process
+4. **(manual)** Merge the aranya-core release PR into `main`.
+
+5. **(automated)** CI automatically publishes new crates or crates with updated versions to crates.io after the release PR is merged.
+
+6. **(manual)** Verify that the release workflow passed and that the updated crates are visible on crates.io. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow.
+
+7. **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
+
+## Aranya Release Process (release day)
 
 The aranya repo contains the daemon, client libraries, and C API. Aranya releases are versioned independently from aranya-core -- all crates in the aranya repo share the same version number per semver guidelines.
 
 ### Aranya Release Steps
 
-Tasks to complete on the day of the release:
+The aranya code freeze begins when the aranya release starts and ends after the aranya release is complete. Tasks to complete on the day of the release:
 
 1. **(manual)** Announce to leadership, team leads, and DevOps that the release process is starting. (release lead)
    - Example: "Starting Aranya v[VERSION] release. Expected completion: [DATE]. Please hold non-essential PRs."
