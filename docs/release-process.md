@@ -228,7 +228,7 @@ Patch releases address security vulnerabilities or critical bugs that cannot wai
 
 Patch releases should ideally not contain breaking API changes, though this may be unavoidable if the patch itself requires an API change. This requires backporting or cherry-picking fixes from the main branch onto the release commit being patched rather than releasing directly from main.
 
-### When to Issue a Patch Release
+### Determining When to Issue a Patch Release
 
 Common events that may prompt a patch release:
 
