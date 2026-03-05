@@ -140,13 +140,20 @@ Examples: `release: 5.0.0`, `release: 4.1.0`, `release: 4.1.1`
 
 #### PR Description
 
-The description should include:
+All release PRs should include:
 
 1. **Version bump summary** -- A one-line description of the version change (e.g., "Bump all workspace crate versions from 4.1.0 to 5.0.0").
-2. **Headline features** (major/minor only) -- A brief list of notable features or changes included in the release (e.g., "Release Aranya 4.0.0 including: Custom roles RBAC, AFC security enhancements").
-3. **Prerequisite PRs** (if any) -- List any PRs that must be merged before the release PR (e.g., "Merge this PR first: #509").
-4. **Security advisory reference** (patch only) -- Link to the RustSec advisory or bug report that prompted the patch (e.g., "Patch release for https://rustsec.org/advisories/RUSTSEC-2026-0007").
-5. **Cherry-pick details** (patch only) -- List the cherry-picked commits with their original PR references (e.g., "Cherry-picks: eccd7a0d Update `bytes` to resolve security vulnerability warning (#703)").
+2. **Prerequisite PRs** (if any) -- List any PRs that must be merged before the release PR (e.g., "Merge this PR first: #509").
+
+Major/minor release PRs should additionally include:
+
+3. **Headline features** -- A brief list of notable features or changes included in the release (e.g., "Release Aranya 4.0.0 including: Custom roles RBAC, AFC security enhancements").
+
+Patch release PRs should additionally include:
+
+4. **Security advisory reference** -- Link to the RustSec advisory, Dependabot alert, or bug report that prompted the patch (e.g., "Patch release for https://rustsec.org/advisories/RUSTSEC-2026-0007").
+5. **Cherry-pick details** -- List the cherry-picked commits with their original PR references (e.g., "Cherry-picks: eccd7a0d Update `bytes` to resolve security vulnerability warning (#703)").
+6. **Impact assessment** -- Brief explanation of whether the vulnerability directly affects our code or is a defensive patch for downstream consumers.
 
 #### Expected File Changes
 
