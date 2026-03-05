@@ -23,10 +23,6 @@ See [Release Security Controls](/release-security-controls/) for detailed docume
 
 ## Pre-Release Checklist
 
-There will be tickets and meetings created during a release cycle to coordinate the release:
-- Mid-cycle meeting for pre-release checklist
-- End of cycle meeting for release checklist
-
 ### Week 1
 
 - **(manual)** Create a planning milestone to decide which features to include in the release. Have this reviewed by product manager and engineering leadership. Provide milestone to leadership so they have visibility into the features we're targeting. (release lead)
