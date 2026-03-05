@@ -60,7 +60,7 @@ When creating release PRs, follow the "Release PR Guidelines" section in `docs/r
 - **Title:** `release: X.Y.Z` (conventional commit format)
 - **Description:** Version bump summary, headline features (major/minor), security advisory (patch), cherry-pick details (patch), prerequisite PRs (if any)
 - **Files:** Only version/dependency metadata (`Cargo.toml`, `Cargo.lock`, `supply-chain/` files). No source code changes.
-- **Branches:** Major/minor target `main`; patches target the `patch/X.Y.Z` base branch
+- **Branches:** Major/minor target `main`; patches target the `release/patch/X.Y.Z` base branch
 - **CI fixes:** Use `chore:` prefix, link failing CI run, explain root cause and fix
 
 ## Important Restrictions
