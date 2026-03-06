@@ -10,13 +10,13 @@ permalink: "/finalization/"
 
 Finalization is the process by which a prefix of the graph's weave becomes permanent and irreversible. Once a set of commands is finalized, they cannot be recalled by future merges. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
 
-Aranya uses a BFT consensus protocol to achieve finalization. Devices with the `Finalize` permission participate in consensus rounds to agree on the current state of the weave and produce a Finalize command that commits that state to the graph.
+Aranya uses a BFT consensus protocol to achieve finalization. Devices in the finalizer set participate in consensus rounds to agree on the current state of the weave and produce a Finalize command that commits that state to the graph.
 
 ## Terminology
 
 | Term | Definition |
 |---|---|
-| Finalizer | A device whose role includes the `Finalize` permission, participating in finalization consensus |
+| Finalizer | A device in the finalizer set, participating in finalization consensus |
 | Finalize command | A graph command containing Merkle roots of the finalized weave and FactDB; all ancestors become permanent |
 | Consensus round | A single execution of the BFT protocol to agree on a Finalize command |
 | Proposer | The finalizer selected to propose the next finalization point in a given round |
@@ -37,30 +37,21 @@ Finalization applies to the **control plane only** -- the persistent commands on
 4. **On-demand** -- Finalization rounds are triggered explicitly by a finalizer, not on a fixed schedule.
 5. **Deterministic verification** -- Any device can verify a Finalize command by checking its Merkle roots against its local weave and FactDB.
 
-## Roles and Permissions
+## Finalizer Set
 
-### Finalize Permission
+The finalizer set is the group of devices authorized to participate in finalization consensus. Unlike role-based permissions, the finalizer set is managed independently and can only be changed through consensus.
 
-A new permission, **`Finalize`**, is added to the policy. Any device whose role includes this permission participates in finalization consensus.
+### Initialization
 
-The `Finalize` permission can be added to any existing role via `add_perm_to_role`, or a custom role can be created specifically for finalization. For convenience, a new default role is provided:
+The initial finalizer set is established in the team's `Init` command. The `Init` command includes an optional list of finalizer public signing keys. These keys are used to verify consensus signatures and identify which devices are authorized to participate in finalization.
 
-### Finalizer Role
-
-| Property | Value |
-|---|---|
-| Name | `finalizer` |
-| Default | Yes |
-| Rank | `DEFAULT_FINALIZER_ROLE_RANK` (500) |
-| Permissions | `Finalize` |
-
-The Finalizer role exists as a convenience for teams that want dedicated finalization devices. Teams may instead add the `Finalize` permission to existing roles (e.g. Admin) to allow those devices to participate in consensus alongside their other responsibilities.
+If the list is omitted, the team owner's public signing key is used as the sole initial finalizer. Teams should grow the finalizer set to at least 4 members before relying on finalization for BFT safety.
 
 ### Validator Set
 
-All devices with the `Finalize` permission form the validator set. Each finalizer has equal voting power of 1. The validator set is determined at the start of each consensus round from the current FactDB state.
+All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1.
 
-The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault). A team may operate without finalization if fewer than 4 finalizers are available.
+The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault). A team initialized with fewer than 4 finalizers can still finalize, but without Byzantine fault tolerance.
 
 | Finalizers (n) | Byzantine tolerance (f) | Quorum (2f+1) |
 |---|---|---|
@@ -69,20 +60,51 @@ The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault)
 | 10 | 3 | 7 |
 | 13 | 4 | 9 |
 
+### Changing the Finalizer Set
+
+The finalizer set can only be changed through a `Finalize` command that includes an optional `new_finalizer_set` field. This field, when present, contains the complete new set of finalizer public signing keys. The change takes effect at the next finalization height.
+
+This design ensures that:
+
+- Only a quorum of the current finalizers can authorize changes to the finalizer set.
+- An admin or owner cannot unilaterally add or remove finalizers, preserving BFT guarantees.
+- The finalizer set is always agreed upon by consensus, preventing split-brain scenarios where different devices have different views of who the finalizers are.
+
 ## Consensus Protocol
 
 Finalization uses a BFT consensus protocol based on Tendermint. The protocol is integrated via the [malachite](https://github.com/circlefin/malachite) library, which provides a standalone Rust implementation of the Tendermint algorithm.
 
 ### Triggering Finalization
 
-Any finalizer device can trigger a finalization round by initiating a consensus proposal. This is an on-demand operation -- there is no automatic timer or command threshold.
-
-If two finalizers trigger finalization at the same height concurrently, both consensus rounds proceed normally. Honest finalizers treat duplicate proposals at the same height as a single finalization -- they participate in whichever round they observe first and ignore redundant messages. The only cost is extra consensus traffic from the duplicate initiator. At most one Finalize command succeeds per height (`!exists FinalizeRecord[height: this.height]`), so duplicates are harmless.
-
 A finalizer should only trigger finalization when:
 
 1. There are unfinalized commands in the graph beyond the last Finalize command.
 2. The finalizer has synced with enough peers to have a reasonably complete view of the graph.
+
+#### Single Finalizer
+
+When the finalizer set contains exactly one member, the BFT consensus protocol is skipped. The sole finalizer publishes a `Finalize` command directly with its own signature, which satisfies the quorum check (`(1 * 2 / 3) + 1 = 1`). No `StartFinalization` command is needed.
+
+This is safe because the finalizer set is always established by a single authoritative source -- the `Init` command or a prior `Finalize` command approved by quorum. Two devices cannot independently believe they are the sole finalizer at the same height:
+
+- At team creation, all devices process the same `Init` command and agree on the initial set.
+- After a `Finalize` command changes the set, the new set was approved by the previous quorum. Devices that haven't synced this `Finalize` are still operating at the previous height and cannot produce a valid `Finalize` at the new height (the `parent_finalize_id` chain would be broken).
+
+#### Multiple Finalizers
+
+When the finalizer set contains 2 or more members, the full BFT consensus protocol is used. A finalizer triggers a round by publishing a `StartFinalization` command to the graph. This creates an `ActiveFinalization` fact in the FactDB, gating the consensus round at the policy level.
+
+The `StartFinalization` policy enforces:
+
+- The author is a member of the current finalizer set.
+- The height is exactly the last finalized height + 1 (or 1 if no prior finalization exists).
+- No `ActiveFinalization` fact exists at this height (`!exists ActiveFinalization[height: this.height]`).
+
+Once the `ActiveFinalization` fact exists, finalizers begin the off-graph consensus protocol. The `ActiveFinalization` fact is cleared when the `Finalize` command succeeds.
+
+If a consensus round stalls (repeated timeouts without reaching quorum), the Tendermint protocol automatically advances to the next round number within the same height with a new proposer. No re-triggering is needed -- rounds retry automatically until consensus is reached or finalizers go permanently offline.
+
+If two finalizers publish `StartFinalization` at the same height concurrently, only the first to be accepted in the weave succeeds. The second is rejected by the `!exists ActiveFinalization[height: this.height]` check. This is harmless -- the consensus round proceeds with the first trigger.
 
 ### Consensus Round
 
@@ -90,7 +112,7 @@ A consensus round proceeds as follows:
 
 #### 1. Head Exchange
 
-When a finalization round is triggered, each finalizer publishes a `ConsensusHeadExchange` transient command containing its current graph head. This allows the proposer to determine a finalization point that all finalizers can agree on.
+When a finalization round is triggered, each finalizer sends a head exchange message to all other finalizers containing its current graph head. This allows the proposer to determine a finalization point that all finalizers can agree on.
 
 #### 2. Proposer Selection
 
@@ -124,7 +146,7 @@ When a finalizer observes a quorum (2/3+) of prevotes for the same proposal, it 
 
 #### 6. Decision
 
-When a quorum (2/3+) of precommits is observed for the same proposal, the round reaches consensus. Any finalizer that observes the quorum can assemble and publish the Finalize command to the graph, collecting signatures from the precommit messages on the consensus branch. This ensures the Finalize command is published even if the original proposer goes offline after consensus is reached.
+When a quorum (2/3+) of precommits is observed for the same proposal, the round reaches consensus. Any finalizer that observes the quorum can assemble and publish the Finalize command to the graph, collecting signatures from the precommit messages. This ensures the Finalize command is published even if the original proposer goes offline after consensus is reached.
 
 If multiple finalizers publish a Finalize command for the same height, the policy rejects duplicates (`!exists FinalizeRecord[height: this.height]`). The first to be accepted in the weave succeeds; the rest are rejected but remain on the graph as recalled commands. This is harmless -- at most one Finalize command succeeds per height. A potential optimization is to drop duplicate Finalize commands at the graph layer before writing to storage, avoiding the space overhead of recalled duplicates.
 
@@ -132,46 +154,53 @@ If precommit quorum is not reached (nil quorum or timeout), the round number inc
 
 ### Consensus Communication
 
-Consensus messages (proposals, prevotes, precommits) are graph commands. They propagate through the normal sync protocol, reaching all finalizers regardless of network topology. This means:
+Consensus messages (head exchanges, proposals, prevotes, precommits) are sent off-graph between finalizers. This keeps the graph clean -- the only on-graph commands produced by finalization are `StartFinalization` and `Finalize`.
 
-- Finalizers do not need to know each other's network addresses or be configured as direct sync peers.
-- Consensus messages reach finalizers through whatever sync topology exists (direct peers, hub-and-spoke, multi-hop relay).
-- No additional peer discovery or routing protocol is required.
+#### Transport
 
-#### Consensus Branch
+Consensus messages are multiplexed as separate QUIC streams on the existing QUIC connections used for sync. QUIC natively supports multiple independent streams on a single connection, so consensus and sync traffic coexist without interference. Finalizers open consensus streams only with other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
 
-Consensus commands (proposals, prevotes, precommits) are published on an ephemeral branch of the graph. This branch is separate from the main command history -- consensus commands do not participate in the weave and are not processed by the policy engine on non-finalizer devices.
+When a finalizer needs to send a consensus message, it opens a new stream on the existing QUIC connection to the target peer. Each stream begins with a `MsgType` enum value that identifies the protocol:
 
-The consensus branch works as follows:
+```rust
+enum MsgType {
+    Sync,
+    Consensus,
+}
+```
 
-1. The proposer publishes a `ConsensusProposal` command, branching off from the current graph head.
-2. Finalizers publish `ConsensusPrevote` and `ConsensusPrecommit` commands as children on the consensus branch.
-3. Once consensus is reached, the proposer publishes the `Finalize` command parented off the **main graph head**, not the consensus branch.
-4. The consensus branch is now dead -- no future commands extend it. Devices prune it during garbage collection.
+The QUIC server reads the `MsgType` when accepting a stream and routes it to the appropriate protocol handler. Streams with an unrecognized `MsgType` are closed immediately.
 
-This keeps the main graph clean. The consensus branch is a side channel that uses the graph for transport and sync but does not affect the weave or FactDB.
+#### Finalizer Peer Configuration
 
-#### Consensus Command Types
+Finalizer network addresses are configured at runtime via the client API:
 
-| Command | Location | Author | Description |
+- **`add_finalizer_peer(signing_key, address)`** -- Registers a finalizer peer's network address. The local finalizer establishes (or reuses) a QUIC connection to this address for consensus communication.
+- **`remove_finalizer_peer(signing_key)`** -- Removes a finalizer peer.
+
+The on-graph finalizer set contains only public signing keys. Mapping keys to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
+
+Non-finalizer devices do not need to configure finalizer peers.
+
+#### Consensus Message Types
+
+| Message | Transport | Sender | Description |
 |---|---|---|---|
-| `ConsensusHeadExchange` | Consensus branch | Finalizer | Publishes the finalizer's current graph head |
-| `ConsensusProposal` | Consensus branch | Proposer | Proposed finalization point with Merkle roots |
-| `ConsensusPrevote` | Consensus branch | Finalizer | First-stage vote for or against a proposal |
-| `ConsensusPrecommit` | Consensus branch | Finalizer | Second-stage vote to commit a proposal |
-| `Finalize` | Main graph | Any finalizer | Final command produced after consensus is reached |
+| `HeadExchange` | QUIC stream | Finalizer | Current graph head of the sending finalizer |
+| `Proposal` | QUIC stream | Proposer | Proposed finalization point with Merkle roots |
+| `Prevote` | QUIC stream | Finalizer | First-stage vote for or against a proposal |
+| `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
 
-### Consensus Overhead
+All consensus messages are signed by the sending finalizer's signing key. Recipients verify the signature and that the sender is a member of the current finalizer set before processing.
 
-A successful consensus round produces 3n + 2 commands (n head exchanges + 1 proposal + n prevotes + n precommits + 1 Finalize), where n is the number of finalizers. A failed round (timeout) adds up to 2n + 1 commands before the next round begins (head exchange is not repeated).
+#### Graph Commands
 
-| Finalizers | Commands (success) | Commands (1 failed round + success) |
+Only two graph commands are produced per finalization round:
+
+| Command | Author | Description |
 |---|---|---|
-| 4 | 14 | 23 |
-| 7 | 23 | 38 |
-| 10 | 32 | 53 |
-
-Since consensus commands live on an ephemeral branch, this overhead only temporarily increases memory usage and sync transport bandwidth. After finalization completes, the consensus commands can be garbage collected, leaving only the Finalize command on the main graph.
+| `StartFinalization` | Finalizer | Gates the consensus round; creates `ActiveFinalization` fact |
+| `Finalize` | Any finalizer | Commits finalized state after consensus; clears `ActiveFinalization` fact |
 
 ### Timeouts
 
@@ -200,17 +229,19 @@ The Finalize command is defined in the graph spec. Key properties:
   - `order` -- Merkle root of the finalized weave.
   - `facts` -- Merkle root of the finalized FactDB.
   - `signatures` -- Signatures from the finalizers that precommitted to this finalization. Each entry contains the finalizer's device ID and their signature over the Finalize command content. Only finalizers that participated in the precommit are included -- Byzantine or offline finalizers are absent.
-- **Policy check**: The command author must have the `Finalize` permission. The policy verifies that `signatures` contains at least a quorum (strictly more than 2/3) of valid signatures from the current validator set. This ensures the Finalize command is accepted only if a supermajority of finalizers agreed, even if some finalizers were offline, unresponsive, or malicious.
+- **New finalizer set** (optional) -- If present, the complete new set of finalizer public signing keys that takes effect at the next height.
+- **Policy check**: The command author must be a member of the current finalizer set. The policy verifies that `signatures` contains at least a quorum (strictly more than 2/3) of valid signatures from the current finalizer set. This ensures the Finalize command is accepted only if a supermajority of finalizers agreed, even if some finalizers were offline, unresponsive, or malicious.
 
-The multi-signature field serves as a compact proof of consensus. Any device can verify that a supermajority of finalizers agreed to the finalization without needing to process the consensus branch. This is especially useful after the consensus branch has been garbage collected.
+The multi-signature field serves as a compact proof of consensus. Any device can verify that a supermajority of finalizers agreed to the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
 
 ### Finalize Ordering Guarantee
 
 All Finalize commands in the graph must form a chain -- for any two Finalize commands, one must be an ancestor of the other. This is enforced by:
 
-1. The BFT consensus protocol ensures only one Finalize command is produced per height.
-2. Each proposal references the previous Finalize command as its starting point.
-3. The policy rejects a Finalize command if a non-ancestor Finalize command exists.
+1. `StartFinalization` enforces sequential heights and prevents concurrent rounds at different heights.
+2. The BFT consensus protocol ensures only one Finalize command is produced per height.
+3. Each proposal references the previous Finalize command as its starting point.
+4. The policy rejects a Finalize command if a non-ancestor Finalize command exists.
 
 ### Finalization and Branches
 
@@ -233,12 +264,16 @@ Once a Finalize command is committed to the graph:
 
 ## Validator Set Changes
 
-The validator set can change between finalization heights as finalizer devices are added or removed from the team. The validator set for height H is determined by the FactDB state at the previous Finalize command (height H-1).
+The finalizer set can only be changed through the `Finalize` command's optional `new_finalizer_set` field. The validator set for height H is determined by the finalizer set recorded at the previous Finalize command (height H-1), or the initial set from the `Init` command if no finalization has occurred.
 
-This means:
+When a `Finalize` command includes a `new_finalizer_set`:
 
-- Adding a new finalizer device takes effect at the next finalization height after the `AssignRole` command is finalized.
-- Removing a finalizer device (revoking the Finalizer role or removing the device) takes effect at the next finalization height after the revocation is finalized.
+- The new set must contain at least 1 member. For BFT safety, at least 4 members are recommended.
+- The new set takes effect at the next finalization height (H+1).
+- The current height's consensus still uses the old set for quorum and signature verification.
+- All devices learn the new finalizer set when they process the `Finalize` command through sync.
+
+This means adding, removing, or replacing finalizers requires the current quorum to agree. No single administrator can change the finalizer set unilaterally.
 
 ## Partition Handling
 
@@ -249,6 +284,24 @@ Finalization and normal graph operations are independent:
 
 Finalizers that were partitioned and have a stale view of the graph will prevote nil until they sync enough state to verify the proposal. This is safe -- it only affects liveness, not safety.
 
+### Finalization Round Fault Tolerance
+
+The design is resilient to finalizers going offline and coming back because on-graph state and off-graph consensus serve different roles:
+
+- **`StartFinalization`** is a command on the main graph. It persists in the weave and creates a durable `ActiveFinalization` fact in the FactDB. When an offline finalizer syncs, it receives this command and knows a finalization round is active at that height.
+- **Consensus messages** (head exchanges, proposals, votes) are off-graph QUIC messages. They are not persisted. A returning finalizer does not need the prior consensus history.
+
+When a finalizer comes back online:
+
+1. It syncs the main graph and processes the `StartFinalization` command, restoring the `ActiveFinalization` fact in its local FactDB.
+2. It observes that finalization is active at the current height.
+3. It reconnects to other finalizers over QUIC (using locally configured peer addresses) and joins the in-progress consensus round. The malachite protocol handles late-joining nodes -- the finalizer participates in whatever round is currently active.
+4. If the round has advanced (due to timeouts while the finalizer was offline), the returning finalizer picks up at the current round number.
+
+This works because the Tendermint protocol does not require all validators to participate from the start of a round. A finalizer that joins mid-round can still prevote and precommit. As long as 2/3+ of finalizers are eventually online and communicating, consensus completes.
+
+If fewer than 2/3 of finalizers are online, rounds continue to time out and advance. The `ActiveFinalization` fact remains in the FactDB, so when enough finalizers recover, they resume consensus at the same height without needing a new `StartFinalization` command.
+
 ## Security Considerations
 
 ### Byzantine Finalizers
@@ -256,7 +309,7 @@ Finalizers that were partitioned and have a stale view of the graph will prevote
 The BFT consensus tolerates up to f < n/3 Byzantine finalizers. A Byzantine finalizer can:
 
 - Refuse to participate (equivalent to being offline -- affects liveness, not safety).
-- Send conflicting votes (equivocation). Malachite detects equivocation and provides evidence. The team can respond by revoking the compromised device.
+- Send conflicting votes (equivocation). Malachite detects equivocation and provides evidence. The team can respond by removing the compromised device from the finalizer set in the next `Finalize` command.
 - Propose invalid Finalize commands. Honest finalizers will reject invalid proposals during verification (step 3 of prevote).
 
 A Byzantine finalizer cannot:
@@ -264,58 +317,63 @@ A Byzantine finalizer cannot:
 - Cause an invalid Finalize command to be accepted (requires 2/3+ quorum of honest verification).
 - Rewrite finalized history.
 - Prevent finalization indefinitely if 2/3+ honest finalizers are online (liveness guarantee).
+- Change the finalizer set without quorum agreement.
 
-### Finalization and Privilege Escalation
+### Finalizer Set Independence
 
-The `Finalize` permission only grants the ability to participate in finalization consensus. If a device's role has only this permission (e.g. the default Finalizer role), its blast radius is limited to disrupting or halting consensus.
+The finalizer set is independent of the role-based permission system. An admin or owner cannot add or remove finalizers -- only the current finalizer quorum can authorize changes. This prevents a compromised admin from undermining BFT guarantees by manipulating the validator set.
 
-If the `Finalize` permission is added to a role with other permissions (e.g. Admin), a compromised device has a broader blast radius. Teams should weigh the operational convenience of multi-purpose finalizers against the security benefit of dedicated finalizer devices.
+A compromised finalizer's blast radius is limited to disrupting or halting consensus. It cannot affect non-finalization operations (team membership, roles, AFC, etc.) unless it also has other permissions through its role.
 
 ### Minimum Validator Set
 
-Teams should maintain at least 4 finalizer devices to tolerate 1 Byzantine fault. Teams with fewer than 4 finalizers cannot safely finalize and should not attempt to do so.
+Teams should maintain at least 4 finalizer devices to tolerate 1 Byzantine fault. The `Init` and `Finalize` commands enforce a minimum of 1 finalizer, but teams with fewer than 4 have no Byzantine fault tolerance.
 
 ## Policy Changes
 
-### New Permission
+### Init Command Changes
 
-Add `Finalize` to the `Perm` enum:
-
-```policy
-enum Perm {
-    // ... existing permissions ...
-    Finalize,
-}
-```
-
-The Owner role receives the `Finalize` permission alongside all other permissions. The new Finalizer default role receives only this permission.
-
-### Finalizer Default Role
-
-Add a `Finalizer` variant to `DefaultRoleName` and seed it in `setup_default_roles`:
+The `Init` command is extended with an optional `finalizers` field containing the initial finalizer set as a list of public signing keys:
 
 ```policy
-enum DefaultRoleName {
-    Admin,
-    Operator,
-    Member,
-    Finalizer,
+command Init {
+    fields {
+        // ... existing fields ...
+        finalizers optional list[bytes],
+    }
+
+    // ... existing seal/open ...
+
+    policy {
+        // ... existing init logic ...
+
+        // Initialize finalizer set.
+        if this.finalizers is Some {
+            let finalizer_keys = unwrap this.finalizers
+            check finalizer_keys.count >= 1
+
+            for key in finalizer_keys {
+                create Finalizer[signing_key: key]=>{}
+            }
+        } else {
+            // Default to the team owner's signing key.
+            let owner = get_author(envelope)
+            create Finalizer[signing_key: owner.signing_key]=>{}
+        }
+    }
 }
+
+fact Finalizer[signing_key bytes]=>{}
 ```
 
-The Finalizer role is created with rank `DEFAULT_FINALIZER_ROLE_RANK` (500) and granted only the `Finalize` permission.
+### StartFinalization Command
 
-### Transient Commands
-
-A new `transient` keyword is introduced in the policy language for commands that are synced via the graph but excluded from the weave. Unlike `ephemeral` commands (which are local-only and never synced), transient commands propagate through the sync protocol like normal commands but do not participate in weave ordering, do not mutate the FactDB, and do not emit effects. They are validated when received (author signature, permission checks) to prevent unauthorized publishing.
-
-Consensus commands are defined as transient:
+The `StartFinalization` command gates a finalization round. It creates an `ActiveFinalization` fact in the FactDB:
 
 ```policy
-transient command ConsensusHeadExchange {
+command StartFinalization {
     fields {
         height int,
-        graph_head id,
     }
 
     seal { return seal_command(serialize(this)) }
@@ -323,72 +381,39 @@ transient command ConsensusHeadExchange {
 
     policy {
         check team_exists()
+
         let author = get_author(envelope)
-        check device_has_perm(author.device_id, Perm::Finalize)
+        check is_finalizer(author.signing_key)
+
+        // Height must be sequential.
+        if exists FinalizeRecord[height: this.height - 1] {
+            // Previous height was finalized, this is the next height.
+        } else if this.height == 1 {
+            // First finalization ever.
+        } else {
+            fail "height must be last finalized height + 1"
+        }
+
+        // No active finalization at this height.
+        check !exists ActiveFinalization[height: this.height]
+
+        // Cannot start finalization at an already-finalized height.
+        check !exists FinalizeRecord[height: this.height]
+
+        finish {
+            create ActiveFinalization[
+                height: this.height,
+            ]=>{}
+        }
     }
 }
 
-transient command ConsensusProposal {
-    fields {
-        height int,
-        round int,
-        weave_root bytes,
-        facts_root bytes,
-        parent_finalize_id id,
-    }
-
-    seal { return seal_command(serialize(this)) }
-    open { return deserialize(open_envelope(envelope)) }
-
-    policy {
-        check team_exists()
-        let author = get_author(envelope)
-        check device_has_perm(author.device_id, Perm::Finalize)
-    }
-}
-
-transient command ConsensusPrevote {
-    fields {
-        height int,
-        round int,
-        value_id optional bytes,
-        voter_id id,
-    }
-
-    seal { return seal_command(serialize(this)) }
-    open { return deserialize(open_envelope(envelope)) }
-
-    policy {
-        check team_exists()
-        let author = get_author(envelope)
-        check device_has_perm(author.device_id, Perm::Finalize)
-    }
-}
-
-transient command ConsensusPrecommit {
-    fields {
-        height int,
-        round int,
-        value_id optional bytes,
-        voter_id id,
-    }
-
-    seal { return seal_command(serialize(this)) }
-    open { return deserialize(open_envelope(envelope)) }
-
-    policy {
-        check team_exists()
-        let author = get_author(envelope)
-        check device_has_perm(author.device_id, Perm::Finalize)
-    }
-}
+fact ActiveFinalization[height int]=>{}
 ```
 
-After finalization completes, transient consensus commands on the consensus branch are eligible for garbage collection.
+### Finalize Command
 
-#### Finalize Command
-
-The `Finalize` command itself is **not** ephemeral -- it is a normal weave command that permanently commits state:
+The `Finalize` command is a normal weave command that permanently commits state:
 
 ```policy
 command Finalize {
@@ -402,6 +427,7 @@ command Finalize {
         facts_root bytes,
         parent_finalize_id optional id,
         signatures list[struct FinalizerSignature],
+        new_finalizer_set optional list[bytes],
     }
 
     seal { return seal_command(serialize(this)) }
@@ -411,18 +437,18 @@ command Finalize {
         check team_exists()
 
         let author = get_author(envelope)
-        check device_has_perm(author.device_id, Perm::Finalize)
+        check is_finalizer(author.signing_key)
 
         // Verify quorum: signatures must contain strictly more than
-        // 2/3 of the current validator set.
-        let validators = get_devices_with_perm(Perm::Finalize)
-        let required = (validators.count * 2 / 3) + 1
+        // 2/3 of the current finalizer set.
+        let finalizers = get_finalizers()
+        let required = (finalizers.count * 2 / 3) + 1
         check this.signatures.count >= required
 
-        // Verify each signature is from a valid finalizer.
+        // Verify each signature is from a current finalizer.
         for sig in this.signatures {
-            check device_has_perm(sig.device_id, Perm::Finalize)
-            check verify_signature(sig.device_id, sig.signature, this)
+            check is_finalizer(sig.signing_key)
+            check verify_signature(sig.signing_key, sig.signature, this)
         }
 
         // Finalize commands must form a chain.
@@ -434,17 +460,44 @@ command Finalize {
         // No conflicting Finalize at this height.
         check !exists FinalizeRecord[height: this.height]
 
+        // Active finalization must exist at this height.
+        check exists ActiveFinalization[height: this.height]
+
+        // Validate new finalizer set if provided.
+        if this.new_finalizer_set is Some {
+            let new_set = unwrap this.new_finalizer_set
+            check new_set.count >= 1
+        }
+
         finish {
             create FinalizeRecord[
                 finalize_id: command_id(envelope),
                 height: this.height,
             ]=>{}
+
+            // Clear the active finalization gate.
+            delete ActiveFinalization[height: this.height]
+
+            // Update finalizer set if a new one was provided.
+            if this.new_finalizer_set is Some {
+                let new_set = unwrap this.new_finalizer_set
+
+                // Remove all current finalizers.
+                for f in get_finalizers() {
+                    delete Finalizer[signing_key: f.signing_key]
+                }
+
+                // Add new finalizers.
+                for key in new_set {
+                    create Finalizer[signing_key: key]=>{}
+                }
+            }
         }
     }
 }
 
 struct FinalizerSignature {
-    device_id id,
+    signing_key bytes,
     signature bytes,
 }
 
@@ -453,10 +506,11 @@ fact FinalizeRecord[finalize_id id]=>{height int}
 
 ### New Policy Functions
 
-Two new built-in functions are required:
+The following new built-in functions are required:
 
-- **`get_devices_with_perm(perm)`** -- Returns all devices whose role includes the specified permission. Used to determine the validator set and verify quorum size.
-- **`verify_signature(device_id, signature, data)`** -- Verifies a cryptographic signature against the device's public signing key. Used to validate finalizer signatures on the Finalize command.
+- **`is_finalizer(signing_key)`** -- Returns true if the given public key is in the current finalizer set (`exists Finalizer[signing_key: signing_key]`).
+- **`get_finalizers()`** -- Returns all entries in the current finalizer set. Used to determine the validator set and verify quorum size.
+- **`verify_signature(signing_key, signature, data)`** -- Verifies a cryptographic signature against a public key. Used to validate finalizer signatures on the Finalize command.
 
 ## Integration with Malachite
 
@@ -468,10 +522,10 @@ The consensus protocol is implemented using the malachite library. The integrati
 | `ValueId` | Hash of the proposed Finalize command content |
 | `Height` | Finalization sequence number |
 | `Validator` | Finalizer device |
-| `ValidatorSet` | All devices with `Finalize` permission (equal voting power) |
+| `ValidatorSet` | All devices in the finalizer set (equal voting power) |
 | `Address` | Device ID |
-| `Vote` | Prevote/precommit graph commands |
-| `Proposal` | Finalization proposal graph command |
+| `Vote` | Prevote/precommit QUIC messages |
+| `Proposal` | Finalization proposal QUIC message |
 
 ### Malachite Context Implementation
 
@@ -479,10 +533,11 @@ The `Context` trait is implemented with:
 
 - **`select_proposer`** -- Deterministic selection from the sorted validator set using `height + round` as index modulo validator count.
 - **`new_proposal`** -- Constructs a proposal containing the weave and facts Merkle roots.
-- **`new_prevote` / `new_precommit`** -- Constructs vote commands signed with the finalizer's signing key.
+- **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
 
 ## Future Work
 
+- **Graph-based consensus transport** -- Relay consensus messages as graph commands instead of requiring direct QUIC connections between finalizers. This would allow consensus to work through the existing sync topology without finalizers needing to know each other's network addresses. Requires graph support for non-permanent commands (e.g. truncation or branch-level garbage collection).
 - **Pruning** -- Define a garbage collection strategy for finalized graph data, retaining only Merkle proofs.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
