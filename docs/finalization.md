@@ -53,12 +53,17 @@ All devices in the finalizer set form the validator set. Each finalizer has equa
 
 The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault). A team initialized with fewer than 4 finalizers can still finalize, but without Byzantine fault tolerance.
 
-| Finalizers (n) | Byzantine tolerance (f) | Quorum (2f+1) |
+Consensus requires a quorum of strictly more than 2/3 of the finalizer set: `required = (n * 2 / 3) + 1`.
+
+| Finalizers (n) | Quorum required | Byzantine tolerance (f < n/3) |
 |---|---|---|
-| 4 | 1 | 3 |
-| 7 | 2 | 5 |
-| 10 | 3 | 7 |
-| 13 | 4 | 9 |
+| 1 | 1 | 0 |
+| 2 | 2 | 0 |
+| 3 | 3 | 0 |
+| 4 | 3 | 1 |
+| 7 | 5 | 2 |
+| 10 | 7 | 3 |
+| 13 | 9 | 4 |
 
 ### Changing the Finalizer Set
 
