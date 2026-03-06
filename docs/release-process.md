@@ -19,7 +19,7 @@ Throughout this document, tasks are marked to indicate their level of automation
 
 ## Release Security
 
-See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
+See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
 
 ## Pre-Release Checklist
 
@@ -172,7 +172,7 @@ Occasionally, release-related CI or workflow issues need to be fixed separately 
 
 ## Post-Release Checklist
 
-- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub environment secrets for both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
+- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub repo secrets for both [aranya](https://github.com/aranya-project/aranya/settings/secrets/actions) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/secrets/actions).
 
 ## Release Issue Template
 
@@ -265,31 +265,8 @@ Once the issue is identified:
 
 6. **(manual)** Bump the version to X.Y.Z and update changelogs.
 
-7. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Release base branches (`release/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
+7. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch.
 
 8. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
 
 9. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
-
-
-## Future Improvements
-
-The following improvements have been identified but not yet implemented:
-
-### Process Gaps
-
-- **Protected release branches** - Configure `release/**/*` wildcard branch protection rule at the org or repo level so patch release PRs require the same review and CI gates as releases from `main`. See [Release Security Controls](/release-security-controls/) for details and tracking under [aranya#730](https://github.com/aranya-project/aranya/issues/730).
-- **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
-- **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
-
-### Automation Opportunities
-
-- **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo so issues can be created directly from the template without copying from this document.
-- **Automate verification tasks** - Steps 6-8 (verifying workflows succeeded, crates published, artifacts attached) could be automated with a script.
-- **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
-- **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
-
-### Risk Mitigation
-
-- **Credential expiration monitoring** - Add recurring reminders or automated alerts for credential expiration instead of relying on manual calendar entries.
-- **Release checklist sign-off** - Add a sign-off step where the release lead confirms all items are complete before announcing.
