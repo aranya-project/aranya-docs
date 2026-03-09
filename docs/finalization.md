@@ -8,7 +8,7 @@ permalink: "/finalization/"
 
 ## Overview
 
-Finalization is the process by which a prefix of the graph's weave becomes permanent. Once a set of commands is finalized, they cannot be recalled by future merges. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
+Finalization is the process by which all ancestors of a Finalize command become permanent. Once a set of commands is finalized, they cannot be recalled by future merges. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
 
 Finalization has two components:
 
@@ -20,12 +20,12 @@ Finalization has two components:
 | Term | Definition |
 |---|---|
 | Finalizer | A device in the finalizer set, participating in finalization consensus |
-| Finalize command | A multi-signed graph command that permanently commits a prefix of the weave; all ancestors become permanent |
+| Finalize command | A multi-signed graph command whose ancestors all become permanent |
 | Consensus round | A single execution of the BFT protocol to agree on a finalization point |
 | Proposer | A finalizer that proposes a finalization point; if multiple finalizers propose concurrently, the BFT algorithm selects one |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
-| Quorum | Strictly more than 2/3 of total voting power required for consensus decisions |
+| Quorum | The minimum number of finalizers required for a consensus decision: `(n * 2 / 3) + 1` where n is the finalizer set size |
 | Sequence number (seq) | The sequence number of a finalization round; increments with each successful Finalize command |
 
 ## Scope
@@ -34,8 +34,8 @@ Finalization applies to the **control plane only** -- the persistent commands on
 
 ## Design Goals
 
-1. **Safety** -- A Finalize command is only produced when 2/3+ of finalizers agree on the same weave prefix. No two conflicting Finalize commands can exist in the graph.
-2. **Liveness** -- As long as 2/3+ of finalizers are online and can communicate, finalization makes progress.
+1. **Safety** -- A Finalize command is only produced when a quorum of finalizers agree. No two conflicting Finalize commands can exist in the graph.
+2. **Liveness** -- As long as a quorum of finalizers are online and can communicate, finalization makes progress.
 3. **Offline tolerance** -- Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active. Finalization does not block graph operations.
 4. **On-demand** -- Finalization rounds are initiated by a finalizer proposing a round, not on a fixed schedule.
 5. **Deterministic verification** -- Any device can verify a Finalize command by checking its signatures against the current finalizer set.
@@ -56,7 +56,7 @@ All devices in the finalizer set form the validator set. Each finalizer has equa
 
 The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault). A team initialized with fewer than 4 finalizers can still finalize, but without Byzantine fault tolerance.
 
-Consensus requires a quorum of strictly more than 2/3 of the finalizer set: `required = (n * 2 / 3) + 1`.
+Consensus requires a quorum of the finalizer set (see terminology).
 
 | Finalizers (n) | Quorum required | Byzantine tolerance (f < n/3) |
 |---|---|---|
@@ -96,7 +96,7 @@ Key properties of multi-signature commands:
 
 ### Finalize Command
 
-The `Finalize` command permanently commits a prefix of the weave. It is the only graph command produced by finalization.
+The `Finalize` command makes all of its ancestors permanent. It is the only graph command produced by finalization.
 
 Properties:
 
@@ -212,8 +212,7 @@ command Finalize {
     policy {
         check team_exists()
 
-        // Verify quorum: signatures must contain strictly more than
-        // 2/3 of the current finalizer set.
+        // Verify quorum.
         let finalizers = get_finalizers()
         let required = (finalizers.count * 2 / 3) + 1
         check this.signatures.count >= required
@@ -327,11 +326,11 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 
 **Prevote.** Each finalizer receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
 
-Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized, or a proposal referencing an unknown parent. This allows the round to fail fast without waiting for the full timeout. If 2/3+ prevote nil, the round advances immediately to the next proposer.
+Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized, or a proposal referencing an unknown parent. This allows the round to fail fast without waiting for the full timeout. If a quorum prevote nil, the round advances immediately to the next proposer.
 
-**Precommit.** When a finalizer observes a quorum (2/3+) of prevotes for the same proposal, it broadcasts a precommit for that proposal. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil.
+**Precommit.** When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil.
 
-**Decision.** When a quorum (2/3+) of precommits is observed for the same proposal, the round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the round number increments and a new proposer is selected. The process repeats from the head exchange step.
+**Decision.** When a quorum of precommits is observed for the same proposal, the round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the round number increments and a new proposer is selected. The process repeats from the head exchange step.
 
 #### Phase 2: Signature Collection
 
@@ -404,14 +403,14 @@ Timeouts increase linearly with each successive round to accommodate network del
 timeout(round) = base_timeout + round * timeout_increment
 ```
 
-Rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If 2/3+ prevote nil, the round advances to the next proposer without waiting for any timeout.
+Rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the round advances to the next proposer without waiting for any timeout.
 
 ### Partition Handling
 
 Finalization and normal graph operations are independent:
 
-- **During partitions**: Non-finalizer devices continue publishing commands and syncing with reachable peers. The graph branches as normal. If fewer than 2/3 of finalizers can communicate, finalization halts but graph operations are unaffected.
-- **After partition heals**: Devices sync and merge branches. Once 2/3+ of finalizers can communicate again, finalization resumes. The next Finalize command will cover all commands accumulated during the partition.
+- **During partitions**: Non-finalizer devices continue publishing commands and syncing with reachable peers. The graph branches as normal. If fewer than a quorum of finalizers can communicate, finalization halts but graph operations are unaffected.
+- **After partition heals**: Devices sync and merge branches. Once a quorum of finalizers can communicate again, finalization resumes. The next Finalize command will cover all commands accumulated during the partition.
 
 Finalizers that were partitioned and have a stale view of the graph will prevote nil until they sync enough state to verify the proposal. This is safe -- it only affects liveness, not safety.
 
@@ -460,9 +459,9 @@ The BFT consensus tolerates up to f < n/3 Byzantine finalizers. A Byzantine fina
 
 A Byzantine finalizer cannot:
 
-- Cause an invalid Finalize command to be accepted (requires 2/3+ quorum of honest verification).
+- Cause an invalid Finalize command to be accepted (requires a quorum of honest verification).
 - Rewrite finalized history.
-- Prevent finalization indefinitely if 2/3+ honest finalizers are online (liveness guarantee).
+- Prevent finalization indefinitely if a quorum of honest finalizers are online (liveness guarantee).
 - Change the finalizer set without quorum agreement.
 
 ### Finalizer Set Independence
