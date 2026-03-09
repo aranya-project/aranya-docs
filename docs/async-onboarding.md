@@ -76,28 +76,28 @@ sequenceDiagram
 ```
 
 1. Admin prepares onboarding process
-        1. Admin create one time join key (asymmetric key)
-        2. Admin create signed device certificate
-        3. Admin create onboarding bundle
-                1. Admin creates 11 word phrase from CSPRNG
-                2. Admin derives mailbox ID (128bits)
-                3. Admin derives symmetric encryption key for onboarding bundle
-                4. Admin derives authenticator that the new user will use to authenticate to the onboarding server
-                5. Admin encrypts certificate + private key
-                6. Admin encrypts one time join keypair
-                7. Admin encrypts pairing/syncing info
-                8. Admin encrypts team ID
-        4. Admin publishes one-time onboarding public key to graph (AllowSelfJoinTeam)
-        5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
-        6. send 11words to new user
-2. Admin sends 11 words to new device: 
-        1. New device derives mailbox ID
-        2. New device derives symmetric encryption key for onboarding bundle
+    1. Admin create one time join key (asymmetric key)
+    2. Admin create signed device certificate
+    3. Admin create onboarding bundle
+        1. Admin creates 11 word phrase from CSPRNG
+        2. Admin derives mailbox ID (128bits)
+        3. Admin derives symmetric encryption key for onboarding bundle
+        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server
+        5. Admin encrypts certificate + private key
+        6. Admin encrypts one time join keypair
+        7. Admin encrypts pairing/syncing info
+        8. Admin encrypts team ID
+    4. Admin publishes one-time onboarding public key to graph (AllowSelfJoinTeam)
+    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
+    6. send 11words to new user
+2. Admin sends 11 words to new device:
+    1. New device derives mailbox ID
+    2. New device derives symmetric encryption key for onboarding bundle
 3. New device fetches encrypted onboarding bundle using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server
-        1. New device decrypts certificate + private key
-        2. New device decrypts one time join keypair
-        3. New device decrypts pairing/syncing info
-        4. New device decrypts team ID
+    1. New device decrypts certificate + private key
+    2. New device decrypts one time join keypair
+    3. New device decrypts pairing/syncing info
+    4. New device decrypts team ID
 4. New device publishes SelfJoinTeam command
 
 
