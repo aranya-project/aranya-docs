@@ -18,7 +18,7 @@ See [Release Security Controls](/release-security-controls/) for detailed docume
 
 #### Development Assumptions
 
-Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features.
+Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features. It also means we can release from a protected branch at any time without a case-by-case assessment of whether the code is release-worthy, since this is guaranteed by the development process itself.
 
 ## Automation Markers
 
