@@ -36,8 +36,44 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 Actors:
 - Admin - the privileged device capable and authorized to initiate the asynchronous onboarding proceedure. 
 - Onboarding Server - the server that stores the onboarding bundle and validates the credentials provided for requests.
-- New Device - the device that is being onboarded to the team. 
+- New Device - the device that is being onboarded to the team.
 
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Graph
+    participant Server as Onboarding Server
+    participant New as New Device
+
+    Note over Admin: Generate 11-word phrase from CSPRNG
+    Note over Admin: Derive mailbox ID (128 bits)
+    Note over Admin: Derive symmetric encryption key
+    Note over Admin: Derive authenticator
+    Note over Admin: Create one-time join keypair
+    Note over Admin: Create signed device certificate
+    Note over Admin: Encrypt bundle:<br/>cert + private key,<br/>one-time join keypair,<br/>pairing/syncing info,<br/>team ID
+
+    Admin->>Graph: Publish one-time onboarding public key<br/>(AllowSelfJoinTeam)
+    Admin->>Server: drop(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
+    Note over Server: Store bundle keyed by mailbox ID
+
+    Admin-->>New: Send 11-word phrase (out of band)
+
+    Note over New: Derive mailbox ID
+    Note over New: Derive symmetric encryption key
+    Note over New: Derive authenticator
+
+    New->>Server: fetch(mailbox ID, authenticator)
+    Note over Server: Validate HMAC(authenticator, mailbox ID)
+    Server->>New: Encrypted onboarding bundle
+
+    Note over New: Decrypt cert + private key
+    Note over New: Decrypt one-time join keypair
+    Note over New: Decrypt pairing/syncing info
+    Note over New: Decrypt team ID
+
+    New->>Graph: SelfJoinTeam (using one-time join key)
+```
 
 1. Admin prepares onboarding process
         1. Admin create one time join key (asymmetric key)
