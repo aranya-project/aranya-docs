@@ -8,7 +8,7 @@ permalink: "/finalization/"
 
 ## Overview
 
-Finalization is the process by which a prefix of the graph's weave becomes permanent and irreversible. Once a set of commands is finalized, they cannot be recalled by future merges. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
+Finalization is the process by which a prefix of the graph's weave becomes permanent. Once a set of commands is finalized, they cannot be recalled by future merges. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
 
 Finalization has two components:
 
@@ -20,14 +20,13 @@ Finalization has two components:
 | Term | Definition |
 |---|---|
 | Finalizer | A device in the finalizer set, participating in finalization consensus |
-| Finalize command | A multi-signed graph command containing Merkle roots of the finalized weave and FactDB; all ancestors become permanent |
+| Finalize command | A multi-signed graph command that permanently commits a prefix of the weave; all ancestors become permanent |
 | Consensus round | A single execution of the BFT protocol to agree on a finalization point |
 | Proposer | A finalizer that proposes a finalization point; if multiple finalizers propose concurrently, the BFT algorithm selects one |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
 | Quorum | Strictly more than 2/3 of total voting power required for consensus decisions |
 | Sequence number (seq) | The sequence number of a finalization round; increments with each successful Finalize command |
-| Merkle root | The single hash at the top of a Merkle tree that uniquely represents an entire dataset; if any element changes, the root changes |
 
 ## Scope
 
@@ -39,7 +38,7 @@ Finalization applies to the **control plane only** -- the persistent commands on
 2. **Liveness** -- As long as 2/3+ of finalizers are online and can communicate, finalization makes progress.
 3. **Offline tolerance** -- Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active. Finalization does not block graph operations.
 4. **On-demand** -- Finalization rounds are initiated by a finalizer proposing a round, not on a fixed schedule.
-5. **Deterministic verification** -- Any device can verify a Finalize command by checking its Merkle roots against its local weave and FactDB.
+5. **Deterministic verification** -- Any device can verify a Finalize command by checking its signatures against the current finalizer set.
 
 ## Finalizer Set
 
@@ -89,7 +88,7 @@ The Finalize command uses multi-signature authentication instead of single-autho
 
 Key properties of multi-signature commands:
 
-- **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, weave_root, facts_root, new_finalizer_set) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, new_finalizer_set) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
 - **No single author.** The Finalize command has no `get_author()` check. Instead, the policy verifies that the `signatures` list contains a quorum of valid signatures from the current finalizer set.
 - **New FFI functions.** Multi-signature seal/open requires new envelope FFI:
   - `seal_multi_sig(data)` -- Seals a command where the ID is computed from `data` (the serialized fields excluding signatures).
@@ -104,8 +103,6 @@ Properties:
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
   - `seq` -- The finalization sequence number.
-  - `weave_root` -- Merkle root of the finalized weave ordering.
-  - `facts_root` -- Merkle root of the FactDB state after executing the finalized weave.
   - `signatures` -- List of signatures from finalizers that agreed to this finalization. Each entry contains a signing key and signature. Only finalizers that participated are included.
   - `new_finalizer_set` -- Optional. If present, the complete new set of finalizer public signing keys that takes effect at the next sequence number.
 - **Policy checks**:
@@ -142,7 +139,7 @@ Once a Finalize command is committed to the graph:
 
 - All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible.
 - Commands on branches that conflict with the finalized weave are permanently recalled.
-- Devices can prune graph data for finalized commands, retaining only the Finalize command and its Merkle roots as a compact proof of the finalized state.
+- Devices can prune graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
 ### Validator Set Changes
 
@@ -204,8 +201,6 @@ command Finalize {
 
     fields {
         seq int,
-        weave_root bytes,
-        facts_root bytes,
         signatures list[struct FinalizerSignature],
         new_finalizer_set optional list[bytes],
     }
@@ -327,17 +322,10 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 
 - **Seq** -- The finalization sequence number.
 - **Round** -- The round number within this sequence number (increments on timeout).
-- **Weave Merkle root** -- The Merkle root of the proposed finalized weave ordering.
-- **Facts Merkle root** -- The Merkle root of the FactDB state after executing the proposed weave.
+- **Finalization point** -- The graph command up to which the weave is finalized.
 - **Parent seq** -- The last finalized sequence number (0 if no prior finalization).
 
-**Prevote.** Each finalizer receives the proposal and independently verifies it:
-
-1. Compute the weave from the same starting point.
-2. Execute the weave through the policy engine to produce the FactDB state.
-3. Compare the computed Merkle roots against the proposal.
-
-If the roots match, the finalizer broadcasts a prevote for the proposal. If they do not match (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
+**Prevote.** Each finalizer receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
 
 Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized, or a proposal referencing an unknown parent. This allows the round to fail fast without waiting for the full timeout. If 2/3+ prevote nil, the round advances immediately to the next proposer.
 
@@ -347,7 +335,7 @@ Finalizers must prevote nil immediately for proposals that are obviously invalid
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command content from the agreed-upon proposal (seq, weave_root, facts_root, new_finalizer_set). Because the fields are deterministic given the proposal, every finalizer produces the same command content.
+Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command content from the agreed-upon proposal (seq, new_finalizer_set). Because the fields are deterministic given the proposal, every finalizer produces the same command content.
 
 Each finalizer signs the command content and shares its signature with all other finalizers over QUIC. Finalizers collect signatures until they have at least a quorum (`(n * 2 / 3) + 1`).
 
@@ -392,7 +380,7 @@ Non-finalizer devices do not need to configure finalizer peers.
 | Message | Transport | Sender | Description |
 |---|---|---|---|
 | `HeadExchange` | QUIC stream | Finalizer | Current graph head of the sending finalizer |
-| `Proposal` | QUIC stream | Proposer | Proposed finalization point with Merkle roots |
+| `Proposal` | QUIC stream | Proposer | Proposed finalization point |
 | `Prevote` | QUIC stream | Finalizer | First-stage vote for or against a proposal |
 | `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
 | `SignatureShare` | QUIC stream | Finalizer | Finalizer's signature over the agreed Finalize command content |
@@ -443,7 +431,7 @@ The consensus protocol is implemented using the malachite library. The integrati
 
 | Malachite Concept | Aranya Mapping |
 |---|---|
-| `Value` | Finalize command content (weave and facts Merkle roots) |
+| `Value` | Finalize command content (seq, finalization point) |
 | `ValueId` | Hash of the proposed Finalize command content |
 | `Height` | Finalization sequence number (seq) |
 | `Validator` | Finalizer device |
@@ -457,7 +445,7 @@ The consensus protocol is implemented using the malachite library. The integrati
 The `Context` trait is implemented with:
 
 - **`select_proposer`** -- Deterministic selection from the sorted validator set using `seq + round` as index modulo validator count.
-- **`new_proposal`** -- Constructs a proposal containing the weave and facts Merkle roots.
+- **`new_proposal`** -- Constructs a proposal containing the finalization point.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
 
 ## Security Considerations
@@ -490,6 +478,7 @@ Teams should maintain at least 4 finalizer devices to tolerate 1 Byzantine fault
 ## Future Work
 
 - **Graph-based consensus transport** -- Relay consensus messages as graph commands instead of requiring direct QUIC connections between finalizers. This would allow consensus to work through the existing sync topology without finalizers needing to know each other's network addresses. Requires graph support for non-permanent commands (e.g. truncation or branch-level garbage collection).
-- **Pruning** -- Define a garbage collection strategy for finalized graph data, retaining only Merkle proofs.
+- **Merkle roots** -- Add weave and FactDB Merkle roots to the Finalize command. A Merkle root is a single hash at the top of a binary hash tree that uniquely represents an entire dataset. The weave Merkle tree would be built from command hashes in weave order; the facts Merkle tree from FactDB key-value entries. This enables divergence detection (devices can compare roots to verify identical state), pruning (retain only roots as compact proof of prior state), and light clients (verify finalized state without replaying the full weave).
+- **Pruning** -- Define a garbage collection strategy for finalized graph data. Requires Merkle roots to retain compact proofs of pruned state.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
