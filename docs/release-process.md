@@ -178,54 +178,6 @@ Occasionally, release-related CI or workflow issues need to be fixed separately 
 
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub environment secrets for both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
 
-## Release Issue Template
-
-Copy the template below into a new GitHub issue to track release progress. Replace `[VERSION]` and `[DATE]` with the appropriate values.
-
-````markdown
-# Aranya v[VERSION] Release Checklist
-
-**Target Release Date:** [DATE]
-**Release Lead:** @[USERNAME]
-
-## Code Freeze (1 day before release)
-
-- [ ] Communicate code freeze to the team
-- [ ] Merge aranya-core release PR into `main`
-- [ ] Approve release environment deployment for aranya-core
-- [ ] Verify aranya-core release workflow passed and crates are visible on crates.io
-- [ ] Verify aranya builds with newly released aranya-core crates
-
-## Release Day
-
-### Pre-Merge
-
-- [ ] Open PR to bump crate versions
-- [ ] Verify all CI/CD jobs pass on the release PR branch
-- [ ] Merge the release PR
-- [ ] Approve release environment deployment for aranya
-
-### Post-Merge Verification
-
-- [ ] Verify all CI/CD workflows succeeded on `main`
-- [ ] Verify aranya-* crates released on [crates.io](https://crates.io/search?q=aranya)
-- [ ] Verify release artifacts attached to GitHub release
-- [ ] Verify docs.rs pages built correctly for all crates
-- [ ] Update C API docs landing page URLs
-- [ ] Add release notes to GitHub release (must be reviewed by engineering leadership before publishing)
-- [ ] Have product owner/team lead review the release (release notes, CI workflows, published docs, uploaded artifacts, crates.io listings)
-
-### Announcements
-
-- [ ] Announce release internally to company and leadership
-- [ ] Schedule release retrospective
-
-## Post-Release
-
-- [ ] Rotate crates.io API key
-````
-
-
 ## Patch Releases
 
 Patch releases address security vulnerabilities or critical bugs that cannot wait for the next major release. Even if our code doesn't directly trigger a vulnerable code path, a patch release may be warranted as a defensive measure if downstream dependencies could be impacted.
@@ -291,7 +243,7 @@ The following improvements have been identified but not yet implemented:
 
 ### Automation Opportunities
 
-- **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo so issues can be created directly from the template without copying from this document.
+- **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo. In the meantime, use `/release checklist [version]` to generate a checklist issue from the current release steps.
 - **Automate verification tasks** - Steps 6-8 (verifying workflows succeeded, crates published, artifacts attached) could be automated with a script.
 - **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
 - **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
