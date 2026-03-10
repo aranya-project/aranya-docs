@@ -22,7 +22,7 @@ Finalization has two components:
 | Finalizer | A device in the finalizer set, participating in finalization consensus |
 | Finalize command | A multi-signed graph command whose ancestors all become permanent |
 | Consensus round | A single execution of the BFT protocol to agree on a finalization point |
-| Proposer | A finalizer that proposes a finalization point; if multiple finalizers propose concurrently, the BFT algorithm selects one |
+| Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a finalization point for a given round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
 | Quorum | The minimum number of finalizers required for a consensus decision: `(n * 2 / 3) + 1` where n is the finalizer set size |
@@ -37,7 +37,7 @@ Finalization applies to the **control plane only** -- the persistent commands on
 1. **Safety** -- A Finalize command is only produced when a quorum of finalizers agree. No two conflicting Finalize commands can exist in the graph.
 2. **Liveness** -- As long as a quorum of finalizers are online and can communicate, finalization makes progress.
 3. **Offline tolerance** -- Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active. Finalization does not block graph operations.
-4. **On-demand** -- Finalization rounds are initiated by a finalizer proposing a round, not on a fixed schedule.
+4. **On-demand** -- Finalization rounds are initiated by a finalizer, not on a fixed schedule. The BFT protocol selects the proposer automatically.
 5. **Deterministic verification** -- Any device can verify a Finalize command by checking its signatures against the current finalizer set.
 
 ## Finalizer Set
@@ -46,37 +46,36 @@ The finalizer set is the group of devices authorized to participate in finalizat
 
 ### Initialization
 
-The initial finalizer set is established in the team's `Init` command. The `Init` command includes an optional list of finalizer public signing keys. These keys are used to verify consensus signatures and identify which devices are authorized to participate in finalization.
-
-If the list is omitted, the team owner's public signing key is used as the sole initial finalizer. Teams should grow the finalizer set to at least 4 members before relying on finalization for BFT safety.
+The initial finalizer set is established in the team's `Init` command. The `Init` command includes 4 optional finalizer fields (`finalizer1` through `finalizer4`), each containing a public signing key ID. If all 4 are specified, the team starts with a 4-member finalizer set and BFT safety. If none are specified, the team owner's public signing key ID is used as the sole initial finalizer.
 
 ### Validator Set
 
-All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1.
+All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1. The finalizer set is fixed at either 1 or 4 members.
 
-The minimum validator set size for BFT safety is 4 (tolerates 1 Byzantine fault). A team initialized with fewer than 4 finalizers can still finalize, but without Byzantine fault tolerance.
+Consensus requires a quorum of the finalizer set (see terminology):
 
-Consensus requires a quorum of the finalizer set (see terminology).
-
-| Finalizers (n) | Quorum required | Byzantine tolerance (f < n/3) |
+| Finalizers (n) | Byzantine tolerance: f = (n - 1) / 3 | Quorum: q = (n * 2 / 3) + 1 |
 |---|---|---|
-| 1 | 1 | 0 |
-| 2 | 2 | 0 |
-| 3 | 3 | 0 |
-| 4 | 3 | 1 |
-| 7 | 5 | 2 |
-| 10 | 7 | 3 |
-| 13 | 9 | 4 |
+| 1 | 0 | 1 |
+| 4 | 1 | 3 |
+| 7 | 2 | 5 |
+| 10 | 3 | 7 |
+| 13 | 4 | 9 |
+
+The supported set sizes follow the formula `n = 3f + 1`, which gives maximum fault tolerance for the fewest nodes. Adding nodes beyond `3f + 1` does not increase fault tolerance until the next threshold (7, 10, 13, ...).
+
+A single-finalizer team can finalize but has no Byzantine fault tolerance. A 4-member finalizer set is the smallest configuration that tolerates 1 Byzantine fault.
 
 ### Changing the Finalizer Set
 
-The finalizer set can only be changed through a `Finalize` command that includes an optional `new_finalizer_set` field. This field, when present, contains the complete new set of finalizer public signing keys. The change takes effect at the next finalization sequence number.
+The finalizer set can only be changed through a `Finalize` command that includes the optional `new_finalizer` fields. The Finalize command has 4 optional fields (`new_finalizer1` through `new_finalizer4`). When all are `None`, the current finalizer set is unchanged. When all 4 are provided, the complete new set of finalizer public signing key IDs replaces the current set at the next finalization sequence number.
 
 This design ensures that:
 
 - Only a quorum of the current finalizers can authorize changes to the finalizer set.
 - An admin or owner cannot unilaterally add or remove finalizers, preserving BFT guarantees.
 - The finalizer set is always agreed upon by consensus, preventing split-brain scenarios where different devices have different views of who the finalizers are.
+- The finalizer set cannot be downgraded from 4 to 1 member. Once a team has a 4-member set, it must always have 4 finalizers.
 
 ## Finalization Policy
 
@@ -88,8 +87,8 @@ The Finalize command uses multi-signature authentication instead of single-autho
 
 Key properties of multi-signature commands:
 
-- **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, new_finalizer_set) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
-- **No single author.** The Finalize command has no `get_author()` check. Instead, the policy verifies that the `signatures` list contains a quorum of valid signatures from the current finalizer set.
+- **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, new_finalizer fields) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **No single author.** The Finalize command has no `get_author()` check. Instead, the policy verifies that `signatures` contains a quorum of valid signatures from the current finalizer set.
 - **New FFI functions.** Multi-signature seal/open requires new envelope FFI:
   - `seal_multi_sig(data)` -- Seals a command where the ID is computed from `data` (the serialized fields excluding signatures).
   - `open_multi_sig(envelope)` -- Opens a multi-signature envelope and returns the deserialized fields.
@@ -102,16 +101,16 @@ Properties:
 
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
-  - `seq` -- The finalization sequence number.
-  - `signatures` -- List of signatures from finalizers that agreed to this finalization. Each entry contains a signing key and signature. Only finalizers that participated are included.
-  - `new_finalizer_set` -- Optional. If present, the complete new set of finalizer public signing keys that takes effect at the next sequence number.
+  - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which round is in progress and lets any node query finalization progress without traversing the graph.
+  - `signatures` -- Opaque byte blob containing the signatures from finalizers that agreed to this finalization. Deserialized by FFI into individual (key ID, signature) pairs. Only finalizers that participated are included.
+  - `new_finalizer1` through `new_finalizer4` -- Optional public signing key IDs. When all 4 are provided, they replace the current finalizer set at the next sequence number. When all are `None`, the current set is unchanged.
 - **Policy checks**:
-  - The `signatures` list contains at least `(n * 2 / 3) + 1` valid signatures from unique members of the current finalizer set.
+  - The `signatures` blob contains at least a quorum of valid signatures from unique members of the current finalizer set.
   - No `FinalizeRecord` exists at this sequence number (prevents duplicates).
   - The sequence number is sequential (previous seq must be finalized, or seq is 1).
-  - If `new_finalizer_set` is present, it contains at least 1 member.
+  - If new finalizer fields are provided: all 4 must be present, all unique key IDs, all valid team devices.
 
-The multi-signature field serves as a compact proof of consensus. Any device can verify that a supermajority of finalizers agreed to the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
+The multi-signature field serves as a compact proof of consensus. Any device can verify that a quorum of finalizers agreed to the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
 
 ### Finalize Ordering Guarantee
 
@@ -119,16 +118,16 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per sequence number.
 2. The policy rejects duplicate Finalize commands at the same sequence number (`!exists FinalizeRecord[seq: this.seq]`).
-3. Sequential sequence number enforcement ensures each Finalize builds on the previous one.
+3. Sequential sequence number enforcement ensures each Finalize builds on the previous one. A finalizer cannot skip back to an earlier sequence number or finalize an older point after a newer one.
 4. Because the command ID excludes signatures, multiple finalizers committing the same Finalize produce the same command -- the first succeeds and duplicates are rejected.
 
 ### Finalization and Branches
 
 Finalization advances along a single chain. Only commands in the ancestry of the Finalize command are finalized -- commands on unmerged branches are not. This means:
 
-- The proposer selects a finalization point along the longest merged lineage it knows about.
+- The proposer selects a finalization point along the longest merged branch it knows about.
 - Unmerged branches remain unfinalized but continue operating normally.
-- As devices sync and merge branches into the finalized lineage, those commands become eligible for finalization in subsequent rounds.
+- As devices sync and merge branches into the finalized branch, those commands become eligible for finalization in subsequent rounds.
 - No explicit merge step is required before finalization -- merges happen naturally through sync, and the next finalization round covers the newly merged commands.
 
 Branches do not finalize in parallel. Parallel finalization would produce Finalize commands that are not ancestors of each other, violating the chain guarantee. The graph must converge through merges before commands on separate branches can be finalized.
@@ -143,14 +142,20 @@ Once a Finalize command is committed to the graph:
 
 ### Validator Set Changes
 
-The finalizer set can only be changed through the `Finalize` command's optional `new_finalizer_set` field. The validator set for seq N is determined by the finalizer set recorded at the previous Finalize command (seq N-1), or the initial set from the `Init` command if no finalization has occurred.
+The finalizer set can only be changed through the `Finalize` command's optional `new_finalizer` fields. The validator set for seq N is determined by the finalizer set recorded at the previous Finalize command (seq N-1), or the initial set from the `Init` command if no finalization has occurred.
 
-When a `Finalize` command includes a `new_finalizer_set`:
+When a `Finalize` command includes new finalizer fields:
 
-- The new set must contain at least 1 member. For BFT safety, at least 4 members are recommended.
+- All 4 fields (`new_finalizer1` through `new_finalizer4`) must be provided. Partial updates are not supported.
+- All key IDs must be unique.
+- All key IDs must correspond to valid devices on the team.
 - The new set takes effect at the next finalization sequence number (N+1).
 - The current sequence number's consensus still uses the old set for quorum and signature verification.
 - All devices learn the new finalizer set when they process the `Finalize` command through sync.
+
+A single-finalizer team can upgrade to a 4-member set, but a 4-member set cannot be downgraded to a single finalizer. This prevents losing BFT safety once established.
+
+If validation fails, the entire `Finalize` command is rejected. The original finalizer set remains in effect and the sequence number is not consumed.
 
 This means adding, removing, or replacing finalizers requires the current quorum to agree. No single administrator can change the finalizer set unilaterally.
 
@@ -158,13 +163,16 @@ This means adding, removing, or replacing finalizers requires the current quorum
 
 #### Init Command Changes
 
-The `Init` command is extended with an optional `finalizers` field containing the initial finalizer set as a list of public signing keys:
+The `Init` command is extended with 4 optional finalizer fields. If all 4 are provided, the team starts with a 4-member finalizer set. If none are provided, the team owner is the sole finalizer. The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
 
 ```policy
 command Init {
     fields {
         // ... existing fields ...
-        finalizers optional list[bytes],
+        finalizer1 optional bytes,
+        finalizer2 optional bytes,
+        finalizer3 optional bytes,
+        finalizer4 optional bytes,
     }
 
     // ... existing seal/open ...
@@ -173,23 +181,25 @@ command Init {
         // ... existing init logic ...
 
         // Initialize finalizer set.
-        if this.finalizers is Some {
-            let finalizer_keys = unwrap this.finalizers
-            check finalizer_keys.count >= 1
+        // If all 4 finalizers provided, validate and create facts for each.
+        // Otherwise, default to team owner as sole finalizer.
+        check init_finalizer_set(
+            this.finalizer1, this.finalizer2,
+            this.finalizer3, this.finalizer4,
+            envelope,
+        )
 
-            for key in finalizer_keys {
-                create Finalizer[signing_key: key]=>{}
-            }
-        } else {
-            // Default to the team owner's signing key.
-            let owner = get_author(envelope)
-            create Finalizer[signing_key: owner.signing_key]=>{}
+        // Create initial FinalizeRecord so seq 1 has a predecessor.
+        finish {
+            create FinalizeRecord[seq: 0]=>{}
         }
     }
 }
 
-fact Finalizer[signing_key bytes]=>{}
+fact Finalizer[signing_key_id bytes]=>{}
 ```
+
+The `init_finalizer_set` FFI validates that either all 4 fields are provided or none are. When all 4 are provided, it checks that all key IDs are unique and correspond to valid team devices, then creates a `Finalizer` fact for each. When none are provided, it creates a single `Finalizer` fact for the team owner's public signing key ID.
 
 #### Finalize Command
 
@@ -201,8 +211,11 @@ command Finalize {
 
     fields {
         seq int,
-        signatures list[struct FinalizerSignature],
-        new_finalizer_set optional list[bytes],
+        signatures bytes,
+        new_finalizer1 optional bytes,
+        new_finalizer2 optional bytes,
+        new_finalizer3 optional bytes,
+        new_finalizer4 optional bytes,
     }
 
     // Command ID is computed from fields excluding signatures.
@@ -212,33 +225,20 @@ command Finalize {
     policy {
         check team_exists()
 
-        // Verify quorum.
-        let finalizers = get_finalizers()
-        let required = (finalizers.count * 2 / 3) + 1
-        check this.signatures.count >= required
+        // Verify quorum of valid signatures from unique current finalizers.
+        check verify_finalize_quorum(this.signatures)
 
-        // Verify each signature is from a unique current finalizer.
-        for sig in this.signatures {
-            check is_finalizer(sig.signing_key)
-            check verify_signature(sig.signing_key, sig.signature, this)
-        }
-
-        // Height must be sequential.
-        if this.seq == 1 {
-            // First finalization ever.
-            check !exists FinalizeRecord[seq: 0]
-        } else {
-            check exists FinalizeRecord[seq: this.seq - 1]
-        }
+        // Sequence number must be sequential.
+        check exists FinalizeRecord[seq: this.seq - 1]
 
         // No conflicting Finalize at this sequence number.
         check !exists FinalizeRecord[seq: this.seq]
 
-        // Validate new finalizer set if provided.
-        if this.new_finalizer_set is Some {
-            let new_set = unwrap this.new_finalizer_set
-            check new_set.count >= 1
-        }
+        // Validate new finalizer set if provided (all 4 or none).
+        check validate_new_finalizer_set(
+            this.new_finalizer1, this.new_finalizer2,
+            this.new_finalizer3, this.new_finalizer4,
+        )
 
         finish {
             create FinalizeRecord[
@@ -246,38 +246,25 @@ command Finalize {
             ]=>{}
 
             // Update finalizer set if a new one was provided.
-            if this.new_finalizer_set is Some {
-                let new_set = unwrap this.new_finalizer_set
-
-                // Remove all current finalizers.
-                for f in get_finalizers() {
-                    delete Finalizer[signing_key: f.signing_key]
-                }
-
-                // Add new finalizers.
-                for key in new_set {
-                    create Finalizer[signing_key: key]=>{}
-                }
-            }
+            update_finalizer_set(
+                this.new_finalizer1, this.new_finalizer2,
+                this.new_finalizer3, this.new_finalizer4,
+            )
         }
     }
-}
-
-struct FinalizerSignature {
-    signing_key bytes,
-    signature bytes,
 }
 
 fact FinalizeRecord[seq int]=>{}
 ```
 
-#### New Policy Functions
+#### New FFIs
 
-The following new built-in functions are required:
+The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, fact iteration):
 
-- **`is_finalizer(signing_key)`** -- Returns true if the given public key is in the current finalizer set (`exists Finalizer[signing_key: signing_key]`).
-- **`get_finalizers()`** -- Returns all entries in the current finalizer set. Used to determine the validator set and verify quorum size.
-- **`verify_signature(signing_key, signature, data)`** -- Verifies a cryptographic signature against a public key. Used to validate finalizer signatures on the Finalize command.
+- **`init_finalizer_set(f1, f2, f3, f4, envelope)`** -- Initializes the finalizer set from the `Init` command. If all 4 fields are provided, validates that all key IDs are unique and correspond to valid team devices, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID. Rejects partial specifications (some provided, some `None`).
+- **`verify_finalize_quorum(signatures)`** -- Deserializes the opaque `signatures` blob into individual (key ID, signature) pairs. Verifies each signature against the current finalizer set and the command content. Returns true if at least a quorum of valid, unique finalizer signatures are present.
+- **`validate_new_finalizer_set(f1, f2, f3, f4)`** -- Validates the new finalizer set fields. If all 4 are provided, checks that all key IDs are unique and correspond to valid team devices. If the current set has 4 members, all 4 must be provided (cannot downgrade to a single finalizer). Returns true if valid or if all fields are `None`. Rejects partial specifications.
+- **`update_finalizer_set(f1, f2, f3, f4)`** -- If all 4 fields are provided, deletes all existing `Finalizer` facts and creates new ones for each key ID. No-op if all fields are `None`.
 - **`seal_multi_sig(data)`** -- Seals a command where the command ID is computed from `data` (serialized fields excluding signatures). Different signature subsets produce the same command ID.
 - **`open_multi_sig(envelope)`** -- Opens a multi-signature envelope and returns the deserialized fields.
 
@@ -286,6 +273,21 @@ The following new built-in functions are required:
 This section defines the off-graph protocol that drives agreement among finalizers. The consensus protocol determines what to finalize and collects the signatures needed for the Finalize command. It does not directly interact with the graph -- it produces inputs that the finalization policy consumes.
 
 The protocol is based on Tendermint and integrated via the [malachite](https://github.com/circlefin/malachite) library, which provides a standalone Rust implementation of the Tendermint algorithm.
+
+### Library Selection
+
+Several Rust BFT consensus libraries were evaluated:
+
+| Library | Algorithm | Pros | Cons |
+|---|---|---|---|
+| [malachite](https://github.com/circlefin/malachite) | Tendermint | Standalone embeddable library with no runtime or networking opinions. Co-designed with TLA+ formal specs. Actively maintained (Informal Systems / Circle). Proven at scale (780ms finalization latency at 100 validators). | Tendermint's all-to-all voting has O(n^2) message complexity. |
+| [tendermint-rs](https://github.com/cometbft/tendermint-rs) | Tendermint | Mature ecosystem with light client support. | Client library for CometBFT, not a standalone consensus engine. Requires running an external CometBFT node and communicating via ABCI. Low development activity (last commit Nov 2025). |
+| [hotstuff_rs](https://github.com/parallelchain-io/hotstuff_rs) | HotStuff | Linear message complexity O(n). Dynamic validator sets built-in. Pluggable networking and storage. | Not actively maintained (last commit Dec 2024). Less battle-tested than Tendermint. Smaller community. |
+| [mysticeti](https://arxiv.org/pdf/2310.14821) | DAG-based BFT | Lowest theoretical latency (3 message rounds). Powers the Sui blockchain. | DAG-based consensus is significantly more complex to integrate. Designed for high-throughput blockchains, not embedded use. No standalone Rust library available. |
+| [raft-rs](https://github.com/tikv/raft-rs) | Raft | Actively maintained. Battle-tested (powers TiKV/TiDB). Standalone embeddable Rust library. | Crash fault tolerant (CFT) only, not Byzantine fault tolerant. Followers blindly trust the leader -- a compromised leader can commit arbitrary state. |
+| [etcd raft](https://github.com/etcd-io/raft) | Raft | Actively maintained. The most widely used Raft library in production (etcd, Kubernetes, CockroachDB). | Written in Go, not Rust. CFT only, not BFT. Would require FFI or a sidecar process. |
+
+**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over existing QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). Malachite is actively maintained by Informal Systems and Circle, with production use in Starknet sequencers, and its formal verification (TLA+ specs) provides confidence in correctness.
 
 ### Single Finalizer
 
@@ -298,12 +300,12 @@ This is safe because the finalizer set is always established by a single authori
 
 ### Triggering Finalization
 
-A finalizer initiates a round when:
+Any finalizer can initiate finalization when:
 
 1. There are unfinalized commands in the graph beyond the last Finalize command.
 2. The finalizer has synced with enough peers to have a reasonably complete view of the graph.
 
-The consensus protocol itself prevents duplicate or conflicting rounds at the same sequence number -- no on-graph gating command is needed. If multiple finalizers attempt to initiate rounds concurrently, the BFT protocol resolves the race through its proposer selection and voting mechanism.
+Initiation signals to the other finalizers that a finalization round should begin. The initiating finalizer does not become the proposer -- the BFT protocol's deterministic round-robin selects the proposer based on the current sequence number and round number. If multiple finalizers initiate concurrently, they converge on the same round since they all compute the same proposer independently.
 
 ### Consensus Round
 
@@ -322,11 +324,10 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 - **Seq** -- The finalization sequence number.
 - **Round** -- The round number within this sequence number (increments on timeout).
 - **Finalization point** -- The graph command up to which the weave is finalized.
-- **Parent seq** -- The last finalized sequence number (0 if no prior finalization).
 
-**Prevote.** Each finalizer receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
+**Prevote.** Every finalizer (including the proposer) receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal to all other finalizers. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
 
-Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized, or a proposal referencing an unknown parent. This allows the round to fail fast without waiting for the full timeout. If a quorum prevote nil, the round advances immediately to the next proposer.
+Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized or a finalization point the finalizer cannot verify. This allows the round to fail fast without waiting for the full timeout. If a quorum prevote nil, the round advances immediately to the next proposer. Nil prevotes include the finalizer's current graph head so the next proposer can make a better-informed proposal.
 
 **Precommit.** When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil.
 
@@ -334,9 +335,9 @@ Finalizers must prevote nil immediately for proposals that are obviously invalid
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command content from the agreed-upon proposal (seq, new_finalizer_set). Because the fields are deterministic given the proposal, every finalizer produces the same command content.
+Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command content from the agreed-upon proposal (seq, new finalizer fields if applicable). Because the fields are deterministic given the proposal, every finalizer produces the same command content.
 
-Each finalizer signs the command content and shares its signature with all other finalizers over QUIC. Finalizers collect signatures until they have at least a quorum (`(n * 2 / 3) + 1`).
+Each finalizer signs the command content and sends its signature to the other finalizers that request it. Finalizers collect signatures until they have at least a quorum.
 
 Different finalizers may end up with different subsets of signatures -- this is fine. Any valid quorum-sized subset proves consensus. The command ID is the same regardless of which signatures are attached.
 
@@ -367,12 +368,18 @@ The QUIC server reads the `MsgType` when accepting a stream and routes it to the
 
 Finalizer network addresses are configured at runtime via the client API:
 
-- **`add_finalizer_peer(signing_key, address)`** -- Registers a finalizer peer's network address. The local finalizer establishes (or reuses) a QUIC connection to this address for consensus communication.
-- **`remove_finalizer_peer(signing_key)`** -- Removes a finalizer peer.
+- **`add_finalizer_peer(pub_signing_key_id, address)`** -- Registers a finalizer peer's network address. The local finalizer establishes (or reuses) a QUIC connection to this address for consensus communication.
+- **`remove_finalizer_peer(pub_signing_key_id)`** -- Removes a finalizer peer.
 
-The on-graph finalizer set contains only public signing keys. Mapping keys to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
+The on-graph finalizer set contains only public signing key IDs. Mapping key IDs to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
+
+When the finalizer set changes (via a `Finalize` command with `new_finalizer_set`), peer configurations for finalizers no longer in the set are automatically removed. New finalizers must be configured by the operator before they can participate in consensus.
 
 Non-finalizer devices do not need to configure finalizer peers.
+
+**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. Each finalizer maintains connections to all other finalizers and sends messages directly -- there is no relay or gossip layer.
+
+**Address verification.** When receiving a consensus message, the recipient verifies that the sender's public signing key ID matches the key ID associated with the QUIC connection's address. Messages from unexpected key IDs are dropped.
 
 #### Consensus Message Types
 
@@ -397,13 +404,29 @@ Each consensus phase has a configurable timeout:
 | Prevote | 30s | Precommit nil |
 | Precommit | 30s | Advance to next round |
 
-Timeouts increase linearly with each successive round to accommodate network delays:
+Timeouts increase linearly with each successive round to accommodate network delays. This is standard Tendermint behavior -- longer timeouts give the network more time to deliver messages when earlier rounds fail. All timeout values are configurable per deployment.
 
 ```
 timeout(round) = base_timeout + round * timeout_increment
 ```
 
 Rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the round advances to the next proposer without waiting for any timeout.
+
+### Daemon Startup
+
+When a daemon starts (or restarts), it determines the current finalization state from its local FactDB:
+
+1. Query the highest `FinalizeRecord` seq to determine the last completed finalization.
+2. Check if this device is in the current finalizer set (query `Finalizer` facts).
+3. If a finalizer, connect to configured finalizer peers and join any in-progress consensus round. The Tendermint protocol handles late joiners -- the daemon participates in whatever round is currently active without needing prior round history.
+
+### Equivocation Detection
+
+Malachite detects equivocation -- when a finalizer sends conflicting votes (e.g., prevoting for two different proposals in the same round). When equivocation is detected:
+
+- The detecting finalizer logs the equivocation evidence (both conflicting votes with signatures).
+- The evidence can be used to justify removing the equivocating device from the finalizer set in a subsequent `Finalize` command's `new_finalizer_set`.
+- Equivocation does not halt consensus. The protocol continues as long as a quorum of honest finalizers are available.
 
 ### Partition Handling
 
@@ -433,9 +456,9 @@ The consensus protocol is implemented using the malachite library. The integrati
 | `Value` | Finalize command content (seq, finalization point) |
 | `ValueId` | Hash of the proposed Finalize command content |
 | `Height` | Finalization sequence number (seq) |
-| `Validator` | Finalizer device |
-| `ValidatorSet` | All devices in the finalizer set (equal voting power) |
-| `Address` | Device ID |
+| `Validator` | Finalizer device (each with voting power 1) |
+| `ValidatorSet` | Current finalizer set. Derived from `Finalizer` facts at the current seq. Updated when a `Finalize` command includes a `new_finalizer_set`. |
+| `Address` | Finalizer's `pub_signing_key_id` |
 | `Vote` | Prevote/precommit QUIC messages |
 | `Proposal` | Finalization proposal QUIC message |
 
@@ -446,6 +469,33 @@ The `Context` trait is implemented with:
 - **`select_proposer`** -- Deterministic selection from the sorted validator set using `seq + round` as index modulo validator count.
 - **`new_proposal`** -- Constructs a proposal containing the finalization point.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
+
+## Example: Full Finalization Round-Trip
+
+This example walks through a complete finalization round with 4 finalizers (A, B, C, D) performing finalization at seq 3.
+
+1. **Initiation.** Finalizer A determines there are unfinalized commands and signals the other finalizers that a round should begin.
+
+2. **Head exchange.** Each finalizer sends its current graph head to all others. A, B, and C have similar heads; D is slightly behind.
+
+3. **Proposer selection.** All finalizers independently compute the proposer: `sorted_finalizers[(3 + 0) % 4]` = B (for round 0 of seq 3).
+
+4. **Proposal.** B computes the common ancestor of the received heads and proposes it as the finalization point. B broadcasts the proposal (seq=3, round=0, finalization point) to A, C, and D.
+
+5. **Prevote.** Each finalizer verifies the proposal by computing the weave to the proposed finalization point:
+   - A, C: Can verify. Broadcast prevote for the proposal.
+   - B: Also prevotes for its own proposal.
+   - D: Missing some commands. Prevotes nil (includes its current head so the next proposer knows D's state).
+
+6. **Precommit.** A, B, and C each observe 3 prevotes for the proposal (quorum = `(4 * 2 / 3) + 1` = 3). Each broadcasts a precommit.
+
+7. **Decision.** All finalizers observe 3 precommits for the proposal. Agreement is reached.
+
+8. **Signature collection.** Each finalizer constructs the Finalize command content (seq=3, no new_finalizer_set), signs it, and shares the signature. Each collects at least 3 signatures.
+
+9. **Commit.** A, B, and C each assemble the Finalize command with their collected signatures and commit it to their local graph. Because the command ID excludes signatures, all three produce the same command ID. The first to be woven succeeds; duplicates are rejected by `!exists FinalizeRecord[seq: 3]`.
+
+10. **Sync.** D syncs with another finalizer, receives the Finalize command, and processes it. D's policy independently verifies the quorum of signatures and creates the `FinalizeRecord`. All ancestors of the Finalize command are now permanent on D's graph.
 
 ## Security Considerations
 
@@ -472,7 +522,7 @@ A compromised finalizer's blast radius is limited to disrupting or halting conse
 
 ### Minimum Validator Set
 
-Teams should maintain at least 4 finalizer devices to tolerate 1 Byzantine fault. The `Init` and `Finalize` commands enforce a minimum of 1 finalizer, but teams with fewer than 4 have no Byzantine fault tolerance.
+Teams should specify 4 finalizer devices to tolerate 1 Byzantine fault. A team with a single finalizer (the default) has no Byzantine fault tolerance. Once a team upgrades to a 4-member finalizer set, it cannot be downgraded back to a single finalizer.
 
 ## Future Work
 
@@ -480,4 +530,5 @@ Teams should maintain at least 4 finalizer devices to tolerate 1 Byzantine fault
 - **Merkle roots** -- Add weave and FactDB Merkle roots to the Finalize command. A Merkle root is a single hash at the top of a binary hash tree that uniquely represents an entire dataset. The weave Merkle tree would be built from command hashes in weave order; the facts Merkle tree from FactDB key-value entries. This enables divergence detection (devices can compare roots to verify identical state), pruning (retain only roots as compact proof of prior state), and light clients (verify finalized state without replaying the full weave).
 - **Pruning** -- Define a garbage collection strategy for finalized graph data. Requires Merkle roots to retain compact proofs of pruned state.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
+- **Larger finalizer sets** -- Support finalizer sets beyond 4 members, following the `3f + 1` progression (7, 10, 13, ...). This requires policy language support for collection types or additional FFI work to handle variable-length field lists.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
