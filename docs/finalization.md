@@ -85,6 +85,12 @@ This section defines the on-graph commands, facts, and policy rules that enforce
 
 The Finalize command uses multi-signature authentication instead of single-author authentication. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
 
+This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The multi-signature command type must support:
+
+- Computing the command ID from a subset of fields (excluding signatures).
+- Carrying multiple signatures from different devices in a single command.
+- Verifying a quorum of signatures instead of a single author signature.
+
 Key properties of multi-signature commands:
 
 - **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, new_finalizer fields) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
@@ -293,7 +299,21 @@ Several Rust BFT consensus libraries were evaluated:
 | [raft-rs](https://github.com/tikv/raft-rs) | Raft | Actively maintained. Battle-tested (powers TiKV/TiDB). Standalone embeddable Rust library. | Crash fault tolerant (CFT) only, not Byzantine fault tolerant. Followers blindly trust the leader -- a compromised leader can commit arbitrary state. |
 | [etcd raft](https://github.com/etcd-io/raft) | Raft | Actively maintained. The most widely used Raft library in production (etcd, Kubernetes, CockroachDB). | Written in Go, not Rust. CFT only, not BFT. Would require FFI or a sidecar process. |
 
-**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over existing QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). Malachite is actively maintained by Informal Systems and Circle, with production use in Starknet sequencers, and its formal verification (TLA+ specs) provides confidence in correctness.
+**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). Malachite is actively maintained by Informal Systems and Circle, with production use in Starknet sequencers, and its formal verification (TLA+ specs) provides confidence in correctness.
+
+### Architecture
+
+The BFT consensus protocol lives above `aranya-core`. The `aranya-core` runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
+
+The BFT consensus crate may live in the `aranya-core` repository for convenience, but it is not a dependency of the core runtime. It is consumed by the daemon or application layer, which is responsible for:
+
+- Running the consensus protocol (malachite integration).
+- Managing QUIC connections to finalizer peers.
+- Assembling and committing Finalize commands to the graph.
+
+### Initial Implementation
+
+The initial implementation uses the team owner as the sole finalizer (single-finalizer mode). This provides finalization and truncation support without the complexity of multi-party BFT consensus. Teams can upgrade to a 4-member finalizer set when BFT safety is needed.
 
 ### Single Finalizer
 
@@ -357,9 +377,9 @@ Consensus messages are sent off-graph between finalizers. The only on-graph comm
 
 #### Transport
 
-Consensus messages are multiplexed as separate QUIC streams on the existing QUIC connections used for sync. QUIC natively supports multiple independent streams on a single connection, so consensus and sync traffic coexist without interference. Finalizers open consensus streams only with other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
+Consensus messages are sent over QUIC connections between finalizers. These may be separate connections from sync, or multiplexed on the existing sync connections -- connection reuse is an optimization, not a requirement. If finalization rounds are fast enough, dedicated connections avoid the complexity of multiplexing.
 
-When a finalizer needs to send a consensus message, it opens a new stream on the existing QUIC connection to the target peer. Each stream begins with a `MsgType` enum value that identifies the protocol:
+If connections are shared, each stream begins with a `MsgType` enum value to distinguish protocols:
 
 ```rust
 enum MsgType {
@@ -369,6 +389,8 @@ enum MsgType {
 ```
 
 The QUIC server reads the `MsgType` when accepting a stream and routes it to the appropriate protocol handler. Streams with an unrecognized `MsgType` are closed immediately.
+
+Finalizers open consensus streams only with other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
 
 #### Finalizer Peer Configuration
 
