@@ -21,7 +21,6 @@ The `drop` endpoint is authenticated by validating that the certificate presente
 
 The onboarding server then stores this data for use with the `fetch` endpoint.
 
-The onboarding server MUST validate that the presented
 
 ### `fetch`
 
@@ -99,6 +98,32 @@ sequenceDiagram
     3. New device decrypts pairing/syncing info
     4. New device decrypts team ID
 4. New device publishes SelfJoinTeam command
+
+Admin MUST create a one time symmetric join key
+Admin MUST create a signed device certificate
+Admin MUST use a CSPRNG to create the 11 word phrase
+Admin MUST use diceware to generate the entropy for the 11 word phrase.
+Admin MUST derive a mailbox ID using TODO from the 11words
+Admin MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using TODO from the 11words
+Admin MUST derive an authenticator using TODO from the 11words
+Admin MUST encrypt the new device certificate and private key using the bundle key
+Admin MUST encrypt the one-time-use join keypair using the bundle key
+Admin MUST encrypt the pairing/syncing information using the bundle key 
+Admin MUST encrypt the team ID using the bundle key
+Admin MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
+Admin MUST calculate the HMAC(key=authenticator, value=mailbox ID)
+Admin MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
+Admin MUST send 11word phrase to new device
+New device MUST derive the mailbox ID using TODO from the 11 words
+New device MUST derive the bundle key using TODO from the 11 words
+New device MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
+Onboarding Server MUST validate the authenticator by calculating HMAC(authenticator, mailboxID) and comparing it to the valie received from Admin.
+New Device MUST decrypt the new device certificate and private key using the bundle key
+New Device MUST decrypt the one-time-use join keypair using the bundle key
+New Device MUST decrypt the pairing/syncing information using the bundle key 
+New Device MUST decrypt the team ID using the bundle key
+New Device MUST publish the SelfJoinTeam command using the one-time join key.
+
 
 
 
