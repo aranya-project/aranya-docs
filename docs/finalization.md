@@ -20,7 +20,7 @@ Finalization has two components:
 | Term | Definition |
 |---|---|
 | Finalizer | A device in the finalizer set, participating in finalization consensus |
-| Finalize command | A multi-signed graph command whose ancestors all become permanent |
+| Finalize command | A multi-author graph command whose ancestors all become permanent |
 | Consensus round | A single execution of the BFT protocol to agree on a finalization point |
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a finalization point for a given round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
@@ -81,23 +81,20 @@ This design ensures that:
 
 This section defines the on-graph commands, facts, and policy rules that enforce finalization. The policy is evaluated independently by every device -- it does not depend on or interact with the off-graph consensus protocol.
 
-### Multi-Signature Commands
+### Multi-Author Commands
 
-The Finalize command uses multi-signature authentication instead of single-author authentication. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
+The Finalize command uses multi-author authentication instead of single-author authentication. Each signature represents an author -- a finalizer that endorsed the command. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
 
-This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The multi-signature command type must support:
+This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The multi-author command type extends the envelope to carry multiple signatures instead of one.
 
-- Computing the command ID from a subset of fields (excluding signatures).
-- Carrying multiple signatures from different devices in a single command.
-- Verifying a quorum of signatures instead of a single author signature.
+Key properties of multi-author commands:
 
-Key properties of multi-signature commands:
-
-- **Command ID excludes signatures.** The command ID is computed over the serialized fields (seq, new_finalizer fields) but not the `signatures` field. This means different valid subsets of finalizer signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
-- **No single author.** The Finalize command has no `get_author()` check. Instead, the policy verifies that `signatures` contains a quorum of valid signatures from the current finalizer set.
-- **New FFI functions.** Multi-signature seal/open requires new envelope FFI:
-  - `seal_multi_sig(data)` -- Seals a command where the ID is computed from `data` (the serialized fields excluding signatures).
-  - `open_multi_sig(envelope)` -- Opens a multi-signature envelope and returns the deserialized fields.
+- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries multiple `(signing_key_id, signature)` pairs. The payload contains only the command fields (seq, new_finalizer fields). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Multiple authors.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is an author endorsing the command.
+- **New FFI functions.** Multi-author commands require new envelope FFI:
+  - `seal_multi_author(payload)` -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
+  - `open_multi_author(envelope)` -- Opens a multi-author envelope and returns the deserialized fields.
+  - `verify_finalize_quorum(envelope)` -- Reads the signatures from the envelope and verifies a quorum against the current finalizer set.
 
 ### Finalize Command
 
@@ -108,15 +105,15 @@ Properties:
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
   - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which round is in progress and lets any node query finalization progress without traversing the graph.
-  - `signatures` -- Opaque byte blob containing the signatures from finalizers that agreed to this finalization. Deserialized by FFI into individual (key ID, signature) pairs. Only finalizers that participated are included.
   - `new_finalizer1` through `new_finalizer4` -- Optional public signing key IDs. When all 4 are provided, they replace the current finalizer set at the next sequence number. When all are `None`, the current set is unchanged.
+- **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
-  - The `signatures` blob contains at least a quorum of valid signatures from unique members of the current finalizer set.
+  - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
   - No `FinalizeRecord` exists at this sequence number (prevents duplicates).
   - The sequence number is sequential (previous seq must be finalized, or seq is 1).
   - If new finalizer fields are provided: all 4 must be present, all unique key IDs, all valid team devices, and a majority of the new set must come from the current set.
 
-The multi-signature field serves as a compact proof of consensus. Any device can verify that a quorum of finalizers agreed to the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
+The envelope signatures serve as a compact proof of consensus. Any device can verify that a quorum of finalizers authored the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
 
 ### Finalize Ordering Guarantee
 
@@ -223,22 +220,22 @@ command Finalize {
 
     fields {
         seq int,
-        signatures bytes,
         new_finalizer1 optional bytes,
         new_finalizer2 optional bytes,
         new_finalizer3 optional bytes,
         new_finalizer4 optional bytes,
     }
 
-    // Command ID is computed from fields excluding signatures.
-    seal { return seal_multi_sig(serialize(this)) }
-    open { return deserialize(open_multi_sig(envelope)) }
+    // Signatures are in the envelope, not the payload.
+    // Command ID is computed from the payload as usual.
+    seal { return seal_multi_author(serialize(this)) }
+    open { return deserialize(open_multi_author(envelope)) }
 
     policy {
         check team_exists()
 
-        // Verify quorum of valid signatures from unique current finalizers.
-        check verify_finalize_quorum(this.signatures)
+        // Verify quorum of valid signatures from the envelope.
+        check verify_finalize_quorum(envelope)
 
         // Sequence number must be sequential.
         check exists FinalizeRecord[seq: this.seq - 1]
@@ -274,11 +271,11 @@ fact FinalizeRecord[seq int]=>{}
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, fact iteration):
 
 - **`init_finalizer_set(f1, f2, f3, f4, envelope)`** -- Initializes the finalizer set from the `Init` command. If all 4 fields are provided, validates that all key IDs are unique and correspond to valid team devices, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID. Rejects partial specifications (some provided, some `None`).
-- **`verify_finalize_quorum(signatures)`** -- Deserializes the opaque `signatures` blob into individual (key ID, signature) pairs. Verifies each signature against the current finalizer set and the command content. Returns true if at least a quorum of valid, unique finalizer signatures are present.
+- **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. Verifies each signature against the current finalizer set and the command content. Returns true if at least a quorum of valid, unique finalizer signatures are present.
 - **`validate_new_finalizer_set(f1, f2, f3, f4)`** -- Validates the new finalizer set fields. If all 4 are provided, checks that all key IDs are unique, correspond to valid team devices, and a majority of the new set comes from the current finalizer set. If the current set has 4 members, all 4 must be provided (cannot downgrade to a single finalizer). Returns true if valid or if all fields are `None`. Rejects partial specifications.
 - **`update_finalizer_set(f1, f2, f3, f4)`** -- If all 4 fields are provided, deletes all existing `Finalizer` facts and creates new ones for each key ID. No-op if all fields are `None`.
-- **`seal_multi_sig(data)`** -- Seals a command where the command ID is computed from `data` (serialized fields excluding signatures). Different signature subsets produce the same command ID.
-- **`open_multi_sig(envelope)`** -- Opens a multi-signature envelope and returns the deserialized fields.
+- **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
+- **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
 
 ## BFT Consensus Protocol
 
@@ -361,15 +358,15 @@ Finalizers must prevote nil immediately for proposals that are obviously invalid
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command content from the agreed-upon proposal (seq, new finalizer fields if applicable). Because the fields are deterministic given the proposal, every finalizer produces the same command content.
+Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command payload from the agreed-upon proposal (seq, new finalizer fields if applicable). Because the fields are deterministic given the proposal, every finalizer produces the same payload and therefore the same command ID.
 
-Each finalizer signs the command content and sends its signature to the other finalizers that request it. Finalizers collect signatures until they have at least a quorum.
+Each finalizer signs the payload and sends its signature to the other finalizers that request it. Finalizers collect signatures until they have at least a quorum.
 
-Different finalizers may end up with different subsets of signatures -- this is fine. Any valid quorum-sized subset proves consensus. The command ID is the same regardless of which signatures are attached.
+Different finalizers may end up with different subsets of signatures -- this is fine. Any valid quorum-sized subset proves consensus. The command ID is derived from the payload, so it is the same regardless of which signatures are in the envelope.
 
 #### Phase 3: Commit
 
-Any finalizer that has collected a quorum of signatures assembles the full Finalize command (fields + signatures) and commits it locally to the graph. Multiple finalizers may independently commit the same command with different subsets of signatures. Because the command ID excludes signatures, these are logically the same command -- they share the same command ID and are treated identically by the graph. The policy's `!exists FinalizeRecord[seq: this.seq]` check ensures only the first to be woven succeeds; subsequent copies are recognized as the same command and ignored.
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph. Multiple finalizers may independently commit the same command with different signature subsets in their envelopes. Because the command ID is derived from the payload (not the signatures), these are logically the same command -- they share the same command ID and are treated identically by the graph. The policy's `!exists FinalizeRecord[seq: this.seq]` check ensures only the first to be woven succeeds; subsequent copies are recognized as the same command and ignored.
 
 ### Consensus Communication
 
