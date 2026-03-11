@@ -19,14 +19,16 @@ Finalization has two components:
 
 | Term | Definition |
 |---|---|
-| Finalizer | A device in the finalizer set, participating in finalization consensus |
+| Finalizer set | The group of devices authorized to participate in finalization consensus |
+| Finalizer | A device in the finalizer set |
 | Finalize command | A multi-author graph command whose ancestors all become permanent |
-| Consensus round | A single execution of the BFT protocol to agree on a finalization point |
-| Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a finalization point for a given round |
+| Finalization round | The full process of producing a Finalize command for a specific sequence number. May contain multiple consensus rounds if proposals fail. |
+| Consensus round | A single propose-prevote-precommit cycle within a finalization round. If the proposal fails or times out, the round number increments and a new consensus round begins with the next proposer. |
+| Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a finalization point for a given consensus round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
 | Quorum | The minimum number of finalizers required for a consensus decision (q) |
-| Sequence number (seq) | The sequence number of a finalization round; increments with each successful Finalize command |
+| Sequence number (seq) | Identifies a finalization round; increments with each successful Finalize command |
 
 ### Formulas
 
@@ -71,7 +73,7 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 |---|---|---|
 | **Malicious proposer** | Proposes an invalid or self-serving finalization point | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
 | **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires q, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
-| **Equivocation** | Finalizer sends conflicting votes in the same round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
+| **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
 | **Compromised owner manipulates finalizer set** | Owner replaces finalizer set with devices they control | Owner is already the trust anchor (determines initial set in `Init`). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
 | **Non-owner finalizer set manipulation** | Byzantine finalizer tries to change the set | Only the owner can publish `UpdateFinalizerSet`. Non-owner finalizers cannot change the set. |
 | **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
@@ -146,7 +148,7 @@ Properties:
 
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
-  - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which round is in progress and lets any node query finalization progress without traversing the graph.
+  - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per finalization round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which finalization round is in progress and lets any node query finalization progress without traversing the graph.
   - `apply_finalizer_set_update` -- Optional command ID of the `UpdateFinalizerSet` command to apply. Set by the proposer when a quorum of finalizers agreed on the same `UpdateFinalizerSet` command ID during head exchange. When `None`, no finalizer set change is applied.
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
@@ -156,7 +158,7 @@ Properties:
   - If `apply_finalizer_set_update` is provided, a `PendingFinalizerSetUpdate` fact must exist with a matching command ID.
 - **Side effects**:
   - Creates a `FinalizeRecord` at this sequence number.
-  - If `apply_finalizer_set_update` is provided and matches the pending update's command ID, applies the update: deletes all current `Finalizer` facts, creates new ones from the `PendingFinalizerSetUpdate` fact, and deletes the `PendingFinalizerSetUpdate` fact. The new set takes effect for the next consensus round (seq + 1). If `apply_finalizer_set_update` is `None`, the current `Finalizer` facts and any pending update are left unchanged.
+  - If `apply_finalizer_set_update` is provided and matches the pending update's command ID, applies the update: deletes all current `Finalizer` facts, creates new ones from the `PendingFinalizerSetUpdate` fact, and deletes the `PendingFinalizerSetUpdate` fact. The new set takes effect for the next finalization round (seq + 1). If `apply_finalizer_set_update` is `None`, the current `Finalizer` facts and any pending update are left unchanged.
 
 The envelope signatures serve as a compact proof of consensus. Any device can verify that a quorum of finalizers authored the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
 
@@ -441,24 +443,24 @@ Any finalizer can initiate finalization when:
 1. There are unfinalized commands in the graph beyond the last Finalize command.
 2. The finalizer has synced with enough peers to have a reasonably complete view of the graph.
 
-Initiation signals to the other finalizers that a finalization round should begin. The initiating finalizer does not become the proposer -- the BFT protocol's deterministic round-robin selects the proposer based on the current sequence number and round number. If multiple finalizers initiate concurrently, they converge on the same round since they all compute the same proposer independently.
+Initiation signals to the other finalizers that a finalization round should begin. The initiating finalizer does not become the proposer -- the BFT protocol's deterministic round-robin selects the proposer based on the current sequence number and consensus round number. If multiple finalizers initiate concurrently, they converge on the same consensus round since they all compute the same proposer independently.
 
-### Consensus Round
+### Finalization Round
 
-A consensus round has three phases: agreement, signature collection, and commit.
+A finalization round produces a single Finalize command for a specific sequence number. It may span multiple consensus rounds if proposals fail. Each consensus round is a single propose-prevote-precommit cycle. The finalization round has three phases: agreement (which may take multiple consensus rounds), signature collection, and commit.
 
 #### Phase 1: Agreement
 
 The goal of this phase is for finalizers to agree on which graph head to finalize.
 
-**Proposer selection.** A deterministic function selects the proposer for each round based on the current sequence number and round number (round-robin over the sorted validator set). All finalizers compute the same proposer independently. If the selected proposer is offline, the round times out and advances to the next round with the next proposer in rotation.
+**Proposer selection.** A deterministic function selects the proposer for each consensus round based on the current sequence number and consensus round number (round-robin over the sorted validator set). All finalizers compute the same proposer independently. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
 **Head exchange.** When a round begins, each finalizer sends a head exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
 
 **Proposal.** The proposer collects the head exchange messages and computes the common ancestor of the participating finalizers' graph heads. The finalization point is this common ancestor -- the furthest point in the graph that all finalizers can verify. The proposer computes the weave from the last Finalize command (or graph root if none exists) to the finalization point. The proposal contains:
 
 - **Seq** -- The finalization sequence number.
-- **Round** -- The round number within this sequence number (increments on timeout).
+- **Round** -- The consensus round number within this finalization round (increments on timeout).
 - **Finalization point** -- The graph command up to which the weave is finalized.
 - **Apply finalizer set update** -- The command ID of the `UpdateFinalizerSet` command to apply, or `None`. The proposer includes the command ID only if a quorum of finalizers reported the same command ID during head exchange. This allows other finalizers to verify they have the same pending update before voting.
 
@@ -470,7 +472,7 @@ If a quorum prevote nil, the round advances immediately to the next proposer. Ni
 
 **Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil. All finalizers participate in both voting stages.
 
-**Decision.** When a quorum of precommits is observed for the same proposal, the round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the round number increments and a new proposer is selected. The process repeats from the head exchange step.
+**Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the head exchange step.
 
 #### Phase 2: Signature Collection
 
@@ -543,25 +545,25 @@ Each consensus phase has a configurable timeout:
 | Head Exchange | 30s | Proposer uses heads received so far |
 | Propose | 30s | Prevote nil |
 | Prevote | 30s | Precommit nil |
-| Precommit | 30s | Advance to next round |
+| Precommit | 30s | Advance to next consensus round |
 
-Timeouts increase linearly with each successive round to accommodate network delays. This is standard Tendermint behavior -- longer timeouts give the network more time to deliver messages when earlier rounds fail. All timeout values are configurable per deployment.
+Timeouts increase linearly with each successive consensus round to accommodate network delays. This is standard Tendermint behavior -- longer timeouts give the network more time to deliver messages when earlier consensus rounds fail. All timeout values are configurable per deployment.
 
 ```
 timeout(round) = base_timeout + round * timeout_increment
 ```
 
-Rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the round advances to the next proposer without waiting for any timeout.
+Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the consensus round advances to the next proposer without waiting for any timeout.
 
 ### Daemon Startup
 
-Consensus state is not persisted. All consensus messages (proposals, votes, signature shares) are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress consensus round that was not committed to the graph is simply abandoned -- there is nothing to recover.
+Consensus state is not persisted. All consensus messages (proposals, votes, signature shares) are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round that was not committed to the graph is simply abandoned -- there is nothing to recover.
 
 The daemon determines the current finalization state entirely from its local FactDB:
 
 1. Query the highest `FinalizeRecord` seq to determine the last completed finalization.
 2. Check if this device is in the current finalizer set (query `Finalizer` facts).
-3. If a finalizer, connect to configured finalizer peers. If other finalizers are already in a consensus round, the Tendermint protocol handles late joiners -- the daemon participates in whatever round is currently active without needing prior round history. If no round is active, the daemon waits for a finalizer to initiate one.
+3. If a finalizer, connect to configured finalizer peers. If other finalizers are already in a finalization round, the Tendermint protocol handles late joiners -- the daemon participates in whatever consensus round is currently active without needing prior history. If no finalization round is active, the daemon waits for a finalizer to initiate one.
 
 A daemon being offline does not block finalization. As long as a quorum of finalizers remains online, consensus rounds continue without the offline daemon. When the daemon comes back online, it syncs any Finalize commands it missed and can participate in or initiate the next finalization round.
 
@@ -569,9 +571,9 @@ A daemon being offline does not block finalization. As long as a quorum of final
 
 Finalizers must have visibility into how other finalizers voted during consensus rounds. This serves two purposes: detecting Byzantine behavior and informing the team owner about potential finalizer set changes.
 
-**Equivocation.** Malachite detects equivocation -- when a finalizer sends conflicting votes (e.g., prevoting for two different proposals in the same round). Equivocation does not halt consensus; the protocol continues as long as a quorum of honest finalizers are available.
+**Equivocation.** Malachite detects equivocation -- when a finalizer sends conflicting votes (e.g., prevoting for two different proposals in the same consensus round). Equivocation does not halt consensus; the protocol continues as long as a quorum of honest finalizers are available.
 
-**Vote logging.** Each finalizer logs the votes it observes from all other finalizers during each consensus round, including:
+**Vote logging.** Each finalizer logs the votes it observes from all other finalizers during each consensus round within a finalization round, including:
 
 - Which finalizers prevoted for the proposal vs. nil.
 - Which finalizers precommitted for the proposal vs. nil.
@@ -594,10 +596,10 @@ Finalizers that were partitioned and have a stale view of the graph will prevote
 The consensus protocol is resilient to finalizers going offline and coming back:
 
 - **Consensus messages** (head exchanges, proposals, votes, signature shares) are off-graph QUIC messages. They are not persisted. A returning finalizer does not need the prior consensus history.
-- **The Tendermint protocol handles late joiners.** A finalizer that comes back online reconnects to other finalizers over QUIC and joins whatever round is currently active. It can prevote and precommit in the current round without knowledge of prior rounds.
-- **Stalled rounds advance automatically.** If a round stalls because the proposer went offline, the timeout expires and the next proposer takes over. No manual intervention is needed.
+- **The Tendermint protocol handles late joiners.** A finalizer that comes back online reconnects to other finalizers over QUIC and joins whatever consensus round is currently active. It can prevote and precommit in the current consensus round without knowledge of prior consensus rounds.
+- **Stalled consensus rounds advance automatically.** If a consensus round stalls because the proposer went offline, the timeout expires and the next proposer takes over. No manual intervention is needed.
 
-If all finalizers go offline simultaneously and come back online, they restart the consensus protocol from scratch. Each finalizer independently determines the current sequence number (from the last `FinalizeRecord` in its FactDB) and begins a new round. The deterministic proposer rotation ensures they agree on which finalizer proposes first.
+If all finalizers go offline simultaneously and come back online, they restart the consensus protocol from scratch. Each finalizer independently determines the current sequence number (from the last `FinalizeRecord` in its FactDB) and begins a new finalization round. The deterministic proposer rotation ensures they agree on which finalizer proposes first.
 
 ### Integration with Malachite
 
@@ -618,19 +620,19 @@ The consensus protocol is implemented using the malachite library. The integrati
 
 The `Context` trait is implemented with:
 
-- **`select_proposer`** -- Deterministic selection from the sorted validator set using `seq + round` as index modulo validator count.
+- **`select_proposer`** -- Deterministic selection from the sorted validator set using `seq + consensus_round` as index modulo validator count.
 - **`new_proposal`** -- Constructs a proposal containing the finalization point.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
 
 ## Example: Full Finalization Round-Trip
 
-This example walks through a complete finalization round with 4 finalizers (A, B, C, D) performing finalization at seq 3.
+This example walks through a complete finalization round with 4 finalizers (A, B, C, D) performing finalization at seq 3. The round succeeds on the first consensus round (round 0).
 
-1. **Initiation.** Finalizer A determines there are unfinalized commands and signals the other finalizers that a round should begin.
+1. **Initiation.** Finalizer A determines there are unfinalized commands and signals the other finalizers that a finalization round should begin.
 
 2. **Head exchange.** Each finalizer sends its current graph head to all others. A, B, and C have similar heads; D is slightly behind.
 
-3. **Proposer selection.** All finalizers independently compute the proposer: `sorted_finalizers[(3 + 0) % 4]` = B (for round 0 of seq 3).
+3. **Proposer selection.** All finalizers independently compute the proposer: `sorted_finalizers[(3 + 0) % 4]` = B (for consensus round 0 of seq 3).
 
 4. **Proposal.** B computes the common ancestor of the received heads and proposes it as the finalization point. B broadcasts the proposal (seq=3, round=0, finalization point) to A, C, and D.
 
