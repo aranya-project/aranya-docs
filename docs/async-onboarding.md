@@ -79,19 +79,19 @@ sequenceDiagram
     2. Admin create signed device certificate
     3. Admin create onboarding bundle
         1. Admin creates 11 word phrase from CSPRNG
-        2. Admin derives mailbox ID (128bits)
-        3. Admin derives symmetric encryption key for onboarding bundle
-        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server
-        5. Admin encrypts certificate + private key
-        6. Admin encrypts one time join keypair
-        7. Admin encrypts pairing/syncing info
-        8. Admin encrypts team ID
+        2. Admin derives mailbox ID (128bits) using HKDF-SHA-512
+        3. Admin derives symmetric encryption key for onboarding bundle using HKDF-SHA-512
+        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF-SHA-512
+        5. Admin encrypts certificate + private key using the bundle key
+        6. Admin encrypts one time join keypair using the bundle key
+        7. Admin encrypts pairing/syncing info using the bundle key
+        8. Admin encrypts team ID using the bundle key
     4. Admin publishes one-time onboarding public key to graph (AllowSelfJoinTeam)
     5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
     6. send 11words to new user
 2. Admin sends 11 words to new device:
-    1. New device derives mailbox ID
-    2. New device derives symmetric encryption key for onboarding bundle
+    1. New device derives mailbox ID using HKDF-SHA-512
+    2. New device derives symmetric encryption key for onboarding bundle using HKDF-SHA-512
 3. New device fetches encrypted onboarding bundle using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server
     1. New device decrypts certificate + private key
     2. New device decrypts one time join keypair
@@ -113,7 +113,7 @@ Admin MUST encrypt the team ID using the bundle key
 Admin MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
 Admin MUST calculate the HMAC-SHA-512(key=authenticator, value=mailbox ID)
 Admin MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
-Admin MUST send 11word phrase to new device
+Admin MUST send 11word phrase to new device out of band
 
 
 New device MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
@@ -128,6 +128,13 @@ New Device MUST publish the SelfJoinTeam command using the one-time join key.
 
 Onboarding Server MUST authenticate users using a certificate when handling requests on the `drop` endpoint
 Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
+Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
+Onboarding Server MUST expose a `drop` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
+Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
 
+## Algorithms used
 
-
+- HKDF-SHA-512 for KDF
+- HMAC-SHA-512 for HMAC
+- AES-256-GCM for symmetric encryption
+- Ed25519 for asymmetric encryption
