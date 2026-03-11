@@ -45,10 +45,9 @@ Finalization applies to the **control plane only** -- the persistent commands on
 ## Design Goals
 
 1. **Safety** -- A Finalize command is only produced when a quorum of finalizers agree. No two conflicting Finalize commands can exist in the graph.
-2. **Liveness** -- As long as a quorum of finalizers are online and can communicate, finalization makes progress.
-3. **Offline tolerance** -- Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active. Finalization does not block graph operations.
-4. **On-demand** -- Finalization rounds are initiated by a finalizer, not on a fixed schedule. The BFT protocol selects the proposer automatically.
-5. **Deterministic verification** -- Any device can verify a Finalize command by checking its signatures against the current finalizer set.
+2. **Availability** -- Multi-party finalization extends availability beyond a single owner. As long as a quorum of finalizers are online and can communicate, finalization makes progress. Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active.
+3. **On-demand** -- Finalization rounds are initiated by a finalizer, not on a fixed schedule. The BFT protocol selects the proposer automatically.
+4. **Deterministic verification** -- Any device can verify a Finalize command by checking that its envelope contains a quorum of valid signatures from the current finalizer set. Different finalizers may collect different signature subsets, but all are valid as long as a quorum signed.
 
 ## Threat Model
 
@@ -138,7 +137,7 @@ The initial finalizer set is established in the team's `Init` command. The `Init
 
 ### Set Size and Quorum
 
-The maximum supported set size is 7. (Malachite refers to the finalizer set as the "validator set".)
+The maximum supported set size for the initial implementation is 7. The BFT algorithm supports any size, but the policy language's lack of collection types requires fixed fields (one per finalizer). 7 fields provides up to 2 Byzantine fault tolerance while keeping the policy definitions manageable. (Malachite refers to the finalizer set as the "validator set".)
 
 Consensus requires a quorum of the finalizer set (see terminology):
 
@@ -179,7 +178,7 @@ This requires a **new command type** in the `aranya-core` runtime. Existing comm
 
 Key properties of multi-author commands:
 
-- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries multiple `(signing_key_id, signature)` pairs. The payload contains only the command fields (seq, apply_finalizer_set_update). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (seq, apply_finalizer_set_update). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
 - **Multiple authors.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is an author endorsing the command.
 - **New FFI functions.** Multi-author commands require new envelope FFI:
   - `seal_multi_author(payload)` -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
@@ -232,7 +231,7 @@ Branches do not finalize in parallel. Parallel finalization would produce Finali
 
 Once a Finalize command is committed to the graph:
 
-- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible.
+- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this by preventing any future command from modifying facts established by finalized commands.
 - Commands on branches that conflict with the finalized weave are permanently recalled.
 - Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
@@ -276,13 +275,13 @@ The `Init` command is extended with 7 optional finalizer fields. The caller spec
 command Init {
     fields {
         // ... existing fields ...
-        finalizer1 optional bytes,
-        finalizer2 optional bytes,
-        finalizer3 optional bytes,
-        finalizer4 optional bytes,
-        finalizer5 optional bytes,
-        finalizer6 optional bytes,
-        finalizer7 optional bytes,
+        finalizer1_pub_sign_key optional id,
+        finalizer2_pub_sign_key optional id,
+        finalizer3_pub_sign_key optional id,
+        finalizer4_pub_sign_key optional id,
+        finalizer5_pub_sign_key optional id,
+        finalizer6_pub_sign_key optional id,
+        finalizer7_pub_sign_key optional id,
     }
 
     // ... existing seal/open ...
@@ -293,10 +292,11 @@ command Init {
         // Initialize finalizer set (1 to 7 finalizers).
         // If none provided, default to team owner as sole finalizer.
         check init_finalizer_set(
-            this.finalizer1, this.finalizer2,
-            this.finalizer3, this.finalizer4,
-            this.finalizer5, this.finalizer6,
-            this.finalizer7, envelope,
+            envelope,
+            this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
+            this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
+            this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
+            this.finalizer7_pub_sign_key,
         )
 
         // Create initial FinalizeRecord so seq 1 has a predecessor.
@@ -306,7 +306,7 @@ command Init {
     }
 }
 
-fact Finalizer[signing_key_id bytes]=>{}
+fact Finalizer[signing_key_id id]=>{}
 ```
 
 The `init_finalizer_set` FFI validates the specified finalizers (1 to 7). It checks that all key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. When none are provided, it creates a single `Finalizer` fact for the team owner's public signing key ID.
@@ -321,7 +321,7 @@ command Finalize {
 
     fields {
         seq int,
-        apply_finalizer_set_update optional bytes,
+        apply_finalizer_set_update optional id,
     }
 
     // Signatures are in the envelope, not the payload.
@@ -339,6 +339,8 @@ command Finalize {
         check exists FinalizeRecord[seq: this.seq - 1]
 
         // No conflicting Finalize at this sequence number.
+        // Note: checking this.seq + 1 is unnecessary -- if seq N+1 existed,
+        // seq N would already exist (it was checked when N+1 was created).
         check !exists FinalizeRecord[seq: this.seq]
 
         // If applying a finalizer set update, verify the pending
@@ -373,13 +375,13 @@ The `UpdateFinalizerSet` command allows the team owner to request a finalizer se
 ```policy
 command UpdateFinalizerSet {
     fields {
-        new_finalizer1 optional bytes,
-        new_finalizer2 optional bytes,
-        new_finalizer3 optional bytes,
-        new_finalizer4 optional bytes,
-        new_finalizer5 optional bytes,
-        new_finalizer6 optional bytes,
-        new_finalizer7 optional bytes,
+        new_finalizer1_pub_sign_key optional id,
+        new_finalizer2_pub_sign_key optional id,
+        new_finalizer3_pub_sign_key optional id,
+        new_finalizer4_pub_sign_key optional id,
+        new_finalizer5_pub_sign_key optional id,
+        new_finalizer6_pub_sign_key optional id,
+        new_finalizer7_pub_sign_key optional id,
     }
 
     seal { return seal(serialize(this)) }
@@ -394,10 +396,10 @@ command UpdateFinalizerSet {
 
         // Validate the new finalizer set (structural checks only).
         check validate_new_finalizer_set(
-            this.new_finalizer1, this.new_finalizer2,
-            this.new_finalizer3, this.new_finalizer4,
-            this.new_finalizer5, this.new_finalizer6,
-            this.new_finalizer7,
+            this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
+            this.new_finalizer3_pub_sign_key, this.new_finalizer4_pub_sign_key,
+            this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
+            this.new_finalizer7_pub_sign_key,
         )
 
         finish {
@@ -415,14 +417,14 @@ command UpdateFinalizerSet {
 }
 
 fact PendingFinalizerSetUpdate[]=> {
-    command_id bytes,
-    new_finalizer1 optional bytes,
-    new_finalizer2 optional bytes,
-    new_finalizer3 optional bytes,
-    new_finalizer4 optional bytes,
-    new_finalizer5 optional bytes,
-    new_finalizer6 optional bytes,
-    new_finalizer7 optional bytes,
+    command_id id,
+    new_finalizer1_pub_sign_key optional id,
+    new_finalizer2_pub_sign_key optional id,
+    new_finalizer3_pub_sign_key optional id,
+    new_finalizer4_pub_sign_key optional id,
+    new_finalizer5_pub_sign_key optional id,
+    new_finalizer6_pub_sign_key optional id,
+    new_finalizer7_pub_sign_key optional id,
 }
 ```
 
@@ -430,8 +432,8 @@ fact PendingFinalizerSetUpdate[]=> {
 
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, fact iteration):
 
-- **`init_finalizer_set(f1..f7, envelope)`** -- Initializes the finalizer set from the `Init` command. Accepts 1 to 7 finalizer fields (remaining fields `None`). Validates that all specified key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID.
-- **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. Verifies each signature against the current finalizer set and the command content. Returns true if at least a quorum of valid, unique finalizer signatures are present.
+- **`init_finalizer_set(envelope, f1..f7)`** -- Initializes the finalizer set from the `Init` command. Accepts 1 to 7 finalizer fields (remaining fields `None`). Validates that all specified key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID.
+- **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. For each signature, looks up the public signing key from the signing key ID (via the runtime's key store), verifies the signature against the current finalizer set and the command content. Stops once a quorum of valid, unique finalizer signatures is confirmed. Returns true once quorum is reached; returns false if all signatures are checked without reaching quorum.
 - **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all key IDs are unique, all correspond to valid signing key IDs, and the new set does not shrink below 4 if currently at 4+. Returns true if valid.
 - **`stage_pending_finalizer_set_update(command_id, f1..f7)`** -- Creates or replaces a `PendingFinalizerSetUpdate` fact with the command ID of the `UpdateFinalizerSet` command and the specified finalizer key IDs. If a pending update already exists, it is replaced.
 - **`apply_pending_finalizer_set_update()`** -- Reads the `PendingFinalizerSetUpdate` fact, deletes all current `Finalizer` facts, creates new `Finalizer` facts from the pending update's fields, and deletes the `PendingFinalizerSetUpdate` fact.
@@ -492,7 +494,7 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 
 **Proposer selection.** A deterministic function selects the proposer for each consensus round based on the current sequence number and consensus round number (round-robin over the sorted finalizer set). All finalizers compute the same proposer independently. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
-**State exchange.** When a round begins, each finalizer sends a state exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
+**State exchange.** When a round begins, each finalizer sends a state exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. All finalizers receive these messages (not just the proposer) because any finalizer may need to become the proposer in a subsequent consensus round if the current proposer times out. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
 
 **Proposal.** The proposer collects the state exchange messages and computes the common ancestor of the participating finalizers' graph heads. The finalization point is this common ancestor -- the furthest point in the graph that all finalizers can verify. The proposer computes the weave from the last Finalize command (or graph root if none exists) to the finalization point. The proposal contains:
 
@@ -515,7 +517,7 @@ If a quorum prevote nil, the round advances immediately to the next proposer. Ni
 
 Once agreement is reached on the finalization point, each finalizer deterministically constructs the Finalize command payload from the agreed-upon proposal (seq, apply_finalizer_set_update). Because the fields are deterministic given the proposal, every finalizer produces the same payload and therefore the same command ID.
 
-Each finalizer signs the payload and sends its signature to the other finalizers. Finalizers collect signatures until they have at least a quorum.
+Each finalizer signs the payload and requests signatures from the other finalizers. A finalizer stops requesting once it has collected at least a quorum of signatures.
 
 Different finalizers may end up with different subsets of signatures -- this is fine. Any valid quorum-sized subset proves consensus. The command ID is derived from the payload, so it is the same regardless of which signatures are in the envelope.
 
@@ -575,7 +577,7 @@ All consensus messages are signed by the sending finalizer's signing key. Recipi
 
 ### Timeouts
 
-Each consensus phase has a configurable timeout:
+A successful consensus round (no timeouts, no retries) is expected to complete in under a few seconds on a local network. Each consensus phase has a configurable timeout:
 
 | Phase | Default Timeout | Behavior on Expiry |
 |---|---|---|
@@ -642,7 +644,7 @@ If all finalizers go offline simultaneously and come back online, they restart t
 
 ### Integration with Malachite
 
-The consensus protocol is implemented using the malachite library. The integration maps Aranya concepts to malachite abstractions:
+The consensus protocol is implemented using the malachite library. The integration maps Aranya concepts (defined in [Terminology](#terminology) and [Formulas](#formulas)) to malachite abstractions:
 
 | Malachite Concept | Aranya Mapping |
 |---|---|
