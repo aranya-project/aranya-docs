@@ -90,9 +90,9 @@ In the future, finalizers may not need to be devices at all, since all that matt
 
 The initial finalizer set is established in the team's `Init` command. The `Init` command includes 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key ID. The caller specifies 1 to 7 finalizers. If none are specified, the team owner's public signing key ID is used as the sole initial finalizer.
 
-### Validator Set
+### Set Size and Quorum
 
-All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1. The maximum supported set size is 7.
+Each finalizer has equal voting power of 1. The maximum supported set size is 7. (Malachite refers to the finalizer set as the "validator set".)
 
 Consensus requires a quorum of the finalizer set (see terminology):
 
@@ -190,9 +190,9 @@ Once a Finalize command is committed to the graph:
 - Commands on branches that conflict with the finalized weave are permanently recalled.
 - Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
-### Validator Set Changes
+### Finalizer Set Changes
 
-The finalizer set is changed through the two-phase process described in [Changing the Finalizer Set](#changing-the-finalizer-set). The validator set for seq N is determined by the `Finalizer` facts at the time the `Finalize` command for seq N is evaluated. Because set changes are only applied atomically by `Finalize` commands, the validator set is always globally consistent -- all devices that have processed the same `Finalize` commands agree on the same set.
+The finalizer set is changed through the two-phase process described in [Changing the Finalizer Set](#changing-the-finalizer-set). The finalizer set for seq N is determined by the `Finalizer` facts at the time the `Finalize` command for seq N is evaluated. Because set changes are only applied atomically by `Finalize` commands, the finalizer set is always globally consistent -- all devices that have processed the same `Finalize` commands agree on the same set.
 
 When the owner publishes an `UpdateFinalizerSet` command:
 
@@ -404,14 +404,14 @@ Several Rust BFT consensus libraries were evaluated:
 
 | Library | Algorithm | Pros | Cons |
 |---|---|---|---|
-| [malachite](https://github.com/circlefin/malachite) | Tendermint | Standalone embeddable library with no runtime or networking opinions. Co-designed with TLA+ formal specs. Actively maintained (Informal Systems / Circle). Proven at scale (780ms finalization latency at 100 validators). | Tendermint's all-to-all voting has O(n^2) message complexity. |
+| [malachite](https://github.com/circlefin/malachite) | Tendermint | Standalone embeddable library with no runtime or networking opinions. Co-designed with TLA+ formal specs. Actively maintained (Informal Systems / Circle). Implements the same Tendermint algorithm used in production by 100+ Cosmos ecosystem blockchains (via CometBFT). | Tendermint's all-to-all voting has O(n^2) message complexity. Malachite itself is newer and does not have the same production track record as CometBFT. |
 | [tendermint-rs](https://github.com/cometbft/tendermint-rs) | Tendermint | Mature ecosystem with light client support. | Client library for CometBFT, not a standalone consensus engine. Requires running an external CometBFT node and communicating via ABCI. Low development activity (last commit Nov 2025). |
 | [hotstuff_rs](https://github.com/parallelchain-io/hotstuff_rs) | HotStuff | Linear message complexity O(n). Dynamic validator sets built-in. Pluggable networking and storage. | Not actively maintained (last commit Dec 2024). Less battle-tested than Tendermint. Smaller community. |
 | [mysticeti](https://arxiv.org/pdf/2310.14821) | DAG-based BFT | Lowest theoretical latency (3 message rounds). Powers the Sui blockchain. | DAG-based consensus is significantly more complex to integrate. Designed for high-throughput blockchains, not embedded use. No standalone Rust library available. |
 | [raft-rs](https://github.com/tikv/raft-rs) | Raft | Actively maintained. Battle-tested (powers TiKV/TiDB). Standalone embeddable Rust library. | Crash fault tolerant (CFT) only, not Byzantine fault tolerant. Followers blindly trust the leader -- a compromised leader can commit arbitrary state. |
 | [etcd raft](https://github.com/etcd-io/raft) | Raft | Actively maintained. The most widely used Raft library in production (etcd, Kubernetes, CockroachDB). | Written in Go, not Rust. CFT only, not BFT. Would require FFI or a sidecar process. |
 
-**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). Malachite is actively maintained by Informal Systems and Circle, with production use in Starknet sequencers, and its formal verification (TLA+ specs) provides confidence in correctness.
+**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). The underlying Tendermint algorithm is battle-tested across 100+ Cosmos ecosystem blockchains via CometBFT. Malachite itself is a newer Rust reimplementation by Informal Systems and Circle, but its co-design with TLA+ formal specs provides confidence in correctness despite its shorter production history.
 
 ### Architecture
 
@@ -453,7 +453,7 @@ A finalization round produces a single Finalize command for a specific sequence 
 
 The goal of this phase is for finalizers to agree on which graph head to finalize.
 
-**Proposer selection.** A deterministic function selects the proposer for each consensus round based on the current sequence number and consensus round number (round-robin over the sorted validator set). All finalizers compute the same proposer independently. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
+**Proposer selection.** A deterministic function selects the proposer for each consensus round based on the current sequence number and consensus round number (round-robin over the sorted finalizer set). All finalizers compute the same proposer independently. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
 **Head exchange.** When a round begins, each finalizer sends a head exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
 
@@ -522,7 +522,7 @@ Non-finalizer devices do not need to configure finalizer peers.
 
 **Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. Each finalizer maintains connections to all other finalizers and sends messages directly -- there is no relay or gossip layer.
 
-**Address verification.** When receiving a consensus message, the recipient verifies that the sender's public signing key ID matches the key ID associated with the QUIC connection's address. Messages from unexpected key IDs are dropped.
+**Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature, confirms the signing key ID belongs to a member of the current finalizer set, and checks that the key ID matches the expected key ID for the QUIC connection's source address (based on the configured finalizer peer mappings). Messages that fail any of these checks are dropped.
 
 #### Consensus Message Types
 
@@ -550,8 +550,10 @@ Each consensus phase has a configurable timeout:
 Timeouts increase linearly with each successive consensus round to accommodate network delays. This is standard Tendermint behavior -- longer timeouts give the network more time to deliver messages when earlier consensus rounds fail. All timeout values are configurable per deployment.
 
 ```
-timeout(round) = base_timeout + round * timeout_increment
+timeout(r) = base_timeout + r * timeout_increment
 ```
+
+Where `r` is the consensus round number (starting at 0). The first consensus round uses `base_timeout`; each subsequent consensus round adds `timeout_increment` to give the network more time to deliver messages.
 
 Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the consensus round advances to the next proposer without waiting for any timeout.
 
@@ -610,7 +612,7 @@ The consensus protocol is implemented using the malachite library. The integrati
 | `Value` | Finalize command content (seq, finalization point, apply_finalizer_set_update) |
 | `ValueId` | Hash of the proposed Finalize command content |
 | `Height` | Finalization sequence number (seq) |
-| `Validator` | Finalizer device (each with voting power 1) |
+| `Validator` | Finalizer device (each with voting power 1). Malachite uses "validator" for what Aranya calls a "finalizer". |
 | `ValidatorSet` | Current finalizer set. Derived from `Finalizer` facts. Updated atomically when a `Finalize` command applies a `PendingFinalizerSetUpdate`. |
 | `Address` | Finalizer's `pub_signing_key_id` |
 | `Vote` | Prevote/precommit QUIC messages |
@@ -620,7 +622,7 @@ The consensus protocol is implemented using the malachite library. The integrati
 
 The `Context` trait is implemented with:
 
-- **`select_proposer`** -- Deterministic selection from the sorted validator set using `seq + consensus_round` as index modulo validator count.
+- **`select_proposer`** -- Deterministic selection from the sorted finalizer set using `seq + consensus_round` as index modulo finalizer count.
 - **`new_proposal`** -- Constructs a proposal containing the finalization point.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
 
@@ -653,30 +655,11 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 ## Security Considerations
 
-### Byzantine Finalizers
+See [Threat Model](#threat-model) for the fault model, attack vectors, and mitigations. Key operational recommendations:
 
-The BFT consensus tolerates up to f < n/3 Byzantine finalizers. A Byzantine finalizer can:
-
-- Refuse to participate (equivalent to being offline -- affects liveness, not safety).
-- Send conflicting votes (equivocation). Malachite detects equivocation and provides evidence. The team owner can respond by removing the compromised device from the finalizer set via an `UpdateFinalizerSet` command.
-- Propose invalid finalization points. Honest finalizers will reject invalid proposals by prevoting nil immediately.
-
-A Byzantine finalizer cannot:
-
-- Cause an invalid Finalize command to be accepted (requires a quorum of honest verification).
-- Rewrite finalized history.
-- Prevent finalization indefinitely if a quorum of honest finalizers are online (liveness guarantee).
-- Change the finalizer set (only the team owner can do this).
-
-### Finalizer Set Management
-
-The finalizer set can only be changed by the team owner through the `UpdateFinalizerSet` command. This means the team owner is the trust anchor for the finalizer set -- a compromised owner could change the set to devices they control. However, the owner already determines the initial set in the `Init` command, so this does not introduce new attack surface.
-
-A compromised non-owner finalizer's blast radius is limited to disrupting or halting consensus. It cannot change the finalizer set or affect non-finalization operations (team membership, roles, AFC, etc.) unless it also has other permissions through its role.
-
-### Minimum Validator Set
-
-Teams should specify at least 4 finalizer devices to tolerate 1 Byzantine fault (7 for 2 faults). A team with fewer than 4 finalizers has no Byzantine fault tolerance. Once a team has 4 or more finalizers, it cannot shrink below 4.
+- Specify at least 4 finalizer devices to tolerate 1 Byzantine fault (7 for 2 faults). A team with fewer than 4 finalizers has no Byzantine fault tolerance. Once a team has 4 or more finalizers, it cannot shrink below 4.
+- Monitor vote logs for equivocation, consistent nil voting, and non-participation. The team owner can remove misbehaving finalizers via `UpdateFinalizerSet`.
+- Restrict access to the owner device, as it is the trust anchor for the finalizer set.
 
 ## Future Work
 
