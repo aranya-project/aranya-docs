@@ -49,36 +49,6 @@ Finalization applies to the **control plane only** -- the persistent commands on
 3. **On-demand** -- Finalization rounds are initiated by a finalizer, not on a fixed schedule. The BFT protocol selects the proposer automatically.
 4. **Deterministic verification** -- Any device can verify a Finalize command by checking that its envelope contains a quorum of valid signatures from the current finalizer set. Different finalizers may collect different signature subsets, but all are valid as long as a quorum signed.
 
-## Threat Model
-
-### Fault Model
-
-The consensus protocol assumes the standard BFT fault model: at most f of the n finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (q) of honest nodes can communicate.
-
-### Why Multi-Party Finalization
-
-Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus extends the owner's finalization authority to a larger set of devices. Because the owner controls the finalizer set via `UpdateFinalizerSet`, the security of multi-party finalization is bounded by the security of the owner -- a compromised owner can undermine the finalizer set in either model. The primary benefits of multi-party are availability and defense against compromised non-owner finalizers:
-
-| Concern | Single finalizer (owner) | Multi-party (BFT) |
-|---|---|---|
-| **Availability** | Owner offline = finalization halts | Owner delegates to finalizer set; finalization continues without the owner as long as a quorum of finalizers is online |
-| **Compromised owner** | Can finalize arbitrary state | Same -- owner can replace the finalizer set via `UpdateFinalizerSet`. Security is equivalent in both models. |
-| **Compromised non-owner finalizer** | N/A (no other finalizers) | Requires quorum agreement; single compromised finalizer limited to liveness disruption |
-| **Accountability** | No independent verification | Multiple independent verifications; misbehavior detectable via vote logs |
-
-### Attack Vectors and Mitigations
-
-| Attack | Description | Mitigation |
-|---|---|---|
-| **Malicious proposer** | Proposes an invalid or self-serving finalization point | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
-| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires q, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
-| **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
-| **Compromised owner manipulates finalizer set** | Owner replaces finalizer set with devices they control | Owner is already the trust anchor (determines initial set in `Init`). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
-| **Non-owner finalizer set manipulation** | Byzantine finalizer tries to change the set | Only the owner can publish `UpdateFinalizerSet`. Non-owner finalizers cannot change the set. |
-| **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
-| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
-| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates via `!exists FinalizeRecord[seq: this.seq]`. Payload-derived command ID means different signature subsets produce the same command. |
-
 ## Architecture
 
 The finalization system spans multiple layers of the Aranya stack. The aranya-core runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
@@ -118,12 +88,40 @@ The finalization system spans multiple layers of the Aranya stack. The aranya-co
 
 Key architectural boundaries:
 
-- **Consensus manager** orchestrates the finalization workflow in the daemon. It runs the BFT consensus protocol, relays consensus messages via QUIC transport, and commits the agreed-upon Finalize command to the graph via the finalization policy.
-- **Sync manager** orchestrates graph replication in the daemon. It runs the sync protocol and relays sync messages via QUIC transport.
+- **Consensus manager** and **sync manager** orchestrate their respective protocols and relay messages via QUIC transport. They are daemon-layer components.
 - **Consensus protocol** and **sync protocol** are separate crates in the `aranya-core` repository but are not part of the core runtime. Both depend on the runtime (e.g., consensus queries graph heads). Neither depends on QUIC transport directly.
-- **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime. The runtime evaluates it the same way it evaluates any other policy -- it is consensus-agnostic.
-- **Finalization FFIs** are an optional plugin within the aranya-core runtime. They implement operations the policy language cannot express directly: multi-author envelope handling, quorum verification, and finalizer set management.
-- **QUIC transport** provides networking for the daemon.
+- **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime.
+- **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (multi-author envelopes, quorum verification, finalizer set management).
+
+## Threat Model
+
+### Fault Model
+
+The consensus protocol assumes the standard BFT fault model: at most f of the n finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (q) of honest nodes can communicate.
+
+### Why Multi-Party Finalization
+
+Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus extends the owner's finalization authority to a larger set of devices. Because the owner controls the finalizer set via `UpdateFinalizerSet`, the security of multi-party finalization is bounded by the security of the owner -- a compromised owner can undermine the finalizer set in either model. The primary benefits of multi-party are availability and defense against compromised non-owner finalizers:
+
+| Concern | Single finalizer (owner) | Multi-party (BFT) |
+|---|---|---|
+| **Availability** | Owner offline = finalization halts | Owner delegates to finalizer set; finalization continues without the owner as long as a quorum of finalizers is online |
+| **Compromised owner** | Can finalize arbitrary state | Same -- owner can replace the finalizer set via `UpdateFinalizerSet`. Security is equivalent in both models. |
+| **Compromised non-owner finalizer** | N/A (no other finalizers) | Requires quorum agreement; single compromised finalizer limited to liveness disruption |
+| **Accountability** | No independent verification | Multiple independent verifications; misbehavior detectable via vote logs |
+
+### Attack Vectors and Mitigations
+
+| Attack | Description | Mitigation |
+|---|---|---|
+| **Malicious proposer** | Proposes an invalid or self-serving finalization point | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
+| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires q, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
+| **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
+| **Compromised owner manipulates finalizer set** | Owner replaces finalizer set with devices they control | Owner is already the trust anchor (determines initial set in `Init`). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
+| **Non-owner finalizer set manipulation** | Byzantine finalizer tries to change the set | Only the owner can publish `UpdateFinalizerSet`. Non-owner finalizers cannot change the set. |
+| **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
+| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
+| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates via `!exists FinalizeRecord[seq: this.seq]`. Payload-derived command ID means different signature subsets produce the same command. |
 
 ## Finalizer Set
 
@@ -139,7 +137,7 @@ The initial finalizer set is established in the team's `Init` command. The `Init
 
 The maximum supported set size for the initial implementation is 7. The BFT algorithm supports any size, but the policy language's lack of collection types requires fixed fields (one per finalizer). 7 fields provides up to 2 Byzantine fault tolerance while keeping the policy definitions manageable. (Malachite refers to the finalizer set as the "validator set".)
 
-Consensus requires a quorum of the finalizer set (see terminology):
+Quorum values for each set size (see [Formulas](#formulas)):
 
 | n | f | q |
 |---|---|---|
@@ -151,7 +149,7 @@ Consensus requires a quorum of the finalizer set (see terminology):
 | 6 | 1 | 5 |
 | 7 | 2 | 5 |
 
-Sizes following the `n = 3f + 1` formula (1, 4, 7) give maximum fault tolerance for the fewest nodes. Other sizes are allowed but provide the same fault tolerance as the previous `3f + 1` threshold.
+Sizes following `n = 3f + 1` (1, 4, 7) give maximum fault tolerance for the fewest nodes.
 
 ### Changing the Finalizer Set
 
@@ -164,7 +162,11 @@ This two-phase approach ensures that all finalizers have a globally consistent v
 
 The set can grow or shrink freely, but once a team has 4 or more finalizers it cannot shrink below 4. This prevents losing BFT safety once established.
 
-The owner already determines the initial finalizer set in the `Init` command, so restricting updates to the owner does not introduce new attack surface. Any finalizer node could previously propose a new set and get it approved by quorum (since honest nodes had no criteria to reject a structurally valid set). Restricting changes to the owner reduces the attack surface from any malicious finalizer to just the owner.
+Restricting updates to the owner does not introduce new attack surface -- the owner already determines the initial set in `Init`. See [Non-owner finalizer set manipulation](#attack-vectors-and-mitigations) in the threat model for further rationale.
+
+Because set changes are only applied atomically by `Finalize` commands, the finalizer set is always globally consistent -- all devices that have processed the same `Finalize` commands agree on the same set.
+
+**Known limitation:** Because finalizer set changes are applied through the `Finalize` command, a set change cannot proceed if finalization itself is stalled.
 
 ## Finalization Policy
 
@@ -194,7 +196,7 @@ Properties:
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
   - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per finalization round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which finalization round is in progress and lets any node query finalization progress without traversing the graph.
-  - `apply_finalizer_set_update` -- Optional command ID of the `UpdateFinalizerSet` command to apply. Set by the proposer when a quorum of finalizers agreed on the same `UpdateFinalizerSet` command ID during state exchange. When `None`, no finalizer set change is applied.
+  - `apply_finalizer_set_update` -- Optional command ID of the `UpdateFinalizerSet` command to apply (see [Changing the Finalizer Set](#changing-the-finalizer-set)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
@@ -203,9 +205,7 @@ Properties:
   - If `apply_finalizer_set_update` is provided, a `PendingFinalizerSetUpdate` fact must exist with a matching command ID.
 - **Side effects**:
   - Creates a `FinalizeRecord` at this sequence number.
-  - If `apply_finalizer_set_update` is provided and matches the pending update's command ID, applies the update: deletes all current `Finalizer` facts, creates new ones from the `PendingFinalizerSetUpdate` fact, and deletes the `PendingFinalizerSetUpdate` fact. The new set takes effect for the next finalization round (seq + 1). If `apply_finalizer_set_update` is `None`, the current `Finalizer` facts and any pending update are left unchanged.
-
-The envelope signatures serve as a compact proof of consensus. Any device can verify that a quorum of finalizers authored the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
+  - If `apply_finalizer_set_update` is provided, applies the pending finalizer set update atomically (see [Changing the Finalizer Set](#changing-the-finalizer-set)). The new set takes effect for seq + 1.
 
 ### Finalize Ordering Guarantee
 
@@ -214,7 +214,7 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 1. The BFT consensus protocol ensures only one Finalize command is produced per sequence number.
 2. The policy rejects duplicate Finalize commands at the same sequence number (`!exists FinalizeRecord[seq: this.seq]`).
 3. Sequential sequence number enforcement (`exists FinalizeRecord[seq: this.seq - 1]`) ensures each Finalize builds on the previous one. Since the previous `FinalizeRecord` is created by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-4. Because the command ID excludes signatures, multiple finalizers committing the same Finalize produce the same command -- the first succeeds and duplicates are rejected.
+4. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates are rejected.
 
 ### Finalization and Branches
 
@@ -235,41 +235,11 @@ Once a Finalize command is committed to the graph:
 - Commands on branches that conflict with the finalized weave are permanently recalled.
 - Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
-### Finalizer Set Changes
-
-The finalizer set is changed through the two-phase process described in [Changing the Finalizer Set](#changing-the-finalizer-set). The finalizer set for seq N is determined by the `Finalizer` facts at the time the `Finalize` command for seq N is evaluated. Because set changes are only applied atomically by `Finalize` commands, the finalizer set is always globally consistent -- all devices that have processed the same `Finalize` commands agree on the same set.
-
-When the owner publishes an `UpdateFinalizerSet` command:
-
-- The new set size must be between 1 and 7.
-- All specified key IDs must be unique.
-- All key IDs must be valid public signing key IDs.
-- Once the set has reached 4 or more members, it cannot shrink below 4.
-- The command creates a `PendingFinalizerSetUpdate` fact. The active `Finalizer` facts are not modified.
-- If a `PendingFinalizerSetUpdate` already exists (from a previous `UpdateFinalizerSet` that hasn't been applied yet), the new one replaces it.
-- The pending update is applied by the next `Finalize` command that is committed to the graph.
-
-If validation fails, the `UpdateFinalizerSet` command is rejected. No pending update is created.
-
-#### Consensus Validation of Finalizer Set Changes
-
-The proposer decides whether to include a finalizer set change based on state exchange data. During state exchange, each finalizer reports the command ID of the `UpdateFinalizerSet` command that created its `PendingFinalizerSetUpdate` fact (if any). The proposer checks whether a quorum of finalizers reported the same command ID. If so, the proposal includes that command ID in the `apply_finalizer_set_update` field. If not -- because finalizers have different pending updates, or not enough have synced the update yet -- the proposer leaves `apply_finalizer_set_update` as `None` and finalization proceeds normally without changing the set.
-
-This design ensures that:
-
-- **Finalization is never blocked by a pending set change.** If not enough finalizers have synced the `UpdateFinalizerSet` command, finalization proceeds without applying the update. The pending update remains for a future round.
-- **The old finalizer set is preserved until the change is confirmed.** The `Finalize` command only applies the pending update when `apply_finalizer_set_update` contains a command ID. If the proposer omits the set change or the round fails, the current `Finalizer` facts remain untouched.
-- **All finalizers agree on the same update.** By comparing command IDs rather than just checking for the existence of a pending update, finalizers ensure they are all applying the same `UpdateFinalizerSet` command. This prevents inconsistencies when the owner has published multiple `UpdateFinalizerSet` commands and different finalizers have synced different ones.
-
-Each finalizer that receives a proposal with `apply_finalizer_set_update` set independently verifies that its local `PendingFinalizerSetUpdate` fact has a matching command ID. If it doesn't match (or the finalizer has no pending update), it prevotes nil. Because the proposer only includes the command ID when a quorum already reported the same one during state exchange, this nil vote should be rare -- it only occurs if a finalizer's state changed between state exchange and prevote.
-
-**Known limitation:** Because finalizer set changes are applied through the `Finalize` command, a set change cannot proceed if finalization itself is stalled (e.g., finalizers cannot agree on a finalization point). In practice this is unlikely -- the proposer picks the common ancestor of all heads, so even with divergent graph views there is always some common ancestor to finalize. If this becomes a problem, a standalone consensus round for validator set changes (independent of finalization) could be added.
-
 ### Policy Definitions
 
 #### Init Command Changes
 
-The `Init` command is extended with 7 optional finalizer fields. The caller specifies 1 to 7 finalizers. If none are provided, the team owner is the sole finalizer. The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
+The `Init` command is extended with finalizer fields (see [Initialization](#initialization)). The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
 
 ```policy
 command Init {
@@ -309,7 +279,7 @@ command Init {
 fact Finalizer[signing_key_id id]=>{}
 ```
 
-The `init_finalizer_set` FFI validates the specified finalizers (1 to 7). It checks that all key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. When none are provided, it creates a single `Finalizer` fact for the team owner's public signing key ID.
+See [`init_finalizer_set`](#new-ffis) for validation details.
 
 #### Finalize Command
 
@@ -370,7 +340,7 @@ fact FinalizeRecord[seq int]=>{}
 
 #### UpdateFinalizerSet Command
 
-The `UpdateFinalizerSet` command allows the team owner to request a finalizer set change. It is a standard single-author command -- only the team owner is authorized to publish it. This command does not directly change the active finalizer set. Instead, it stages a pending update that the next `Finalize` command applies atomically.
+The `UpdateFinalizerSet` command stages a finalizer set change (see [Changing the Finalizer Set](#changing-the-finalizer-set)). Only the team owner is authorized to publish it.
 
 ```policy
 command UpdateFinalizerSet {
@@ -432,10 +402,10 @@ fact PendingFinalizerSetUpdate[]=> {
 
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, fact iteration):
 
-- **`init_finalizer_set(envelope, f1..f7)`** -- Initializes the finalizer set from the `Init` command. Accepts 1 to 7 finalizer fields (remaining fields `None`). Validates that all specified key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID.
+- **`init_finalizer_set(envelope, f1..f7)`** -- Initializes the finalizer set from the `Init` command. Validates that all specified key IDs are unique and valid, then creates a `Finalizer` fact for each. Defaults to the team owner if none are specified.
 - **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. For each signature, looks up the public signing key from the signing key ID (via the runtime's key store), verifies the signature against the current finalizer set and the command content. Stops once a quorum of valid, unique finalizer signatures is confirmed. Returns true once quorum is reached; returns false if all signatures are checked without reaching quorum.
 - **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all key IDs are unique, all correspond to valid signing key IDs, and the new set does not shrink below 4 if currently at 4+. Returns true if valid.
-- **`stage_pending_finalizer_set_update(command_id, f1..f7)`** -- Creates or replaces a `PendingFinalizerSetUpdate` fact with the command ID of the `UpdateFinalizerSet` command and the specified finalizer key IDs. If a pending update already exists, it is replaced.
+- **`stage_pending_finalizer_set_update(command_id, f1..f7)`** -- Creates or replaces the `PendingFinalizerSetUpdate` fact with the given command ID and finalizer key IDs.
 - **`apply_pending_finalizer_set_update()`** -- Reads the `PendingFinalizerSetUpdate` fact, deletes all current `Finalizer` facts, creates new `Finalizer` facts from the pending update's fields, and deletes the `PendingFinalizerSetUpdate` fact.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
@@ -444,23 +414,7 @@ The following new FFI functions are required. These handle operations that the p
 
 This section defines the off-graph protocol that drives agreement among finalizers. The consensus protocol determines what to finalize and collects the signatures needed for the Finalize command. It does not directly interact with the graph -- it produces inputs that the finalization policy consumes.
 
-The protocol is based on Tendermint and integrated via the [malachite](https://github.com/circlefin/malachite) library, which provides a standalone Rust implementation of the Tendermint algorithm.
-
-### Library Selection
-
-Several Rust BFT consensus libraries were evaluated:
-
-| Library | Algorithm | Pros | Cons |
-|---|---|---|---|
-| [malachite](https://github.com/circlefin/malachite) | Tendermint | Standalone embeddable library with no runtime or networking opinions. Co-designed with TLA+ formal specs. Actively maintained (Informal Systems / Circle). Implements the same Tendermint algorithm used in production by 100+ Cosmos ecosystem blockchains (via CometBFT). | Tendermint's all-to-all voting has O(n^2) message complexity. Malachite itself is newer and does not have the same production track record as CometBFT. |
-| [tendermint-rs](https://github.com/cometbft/tendermint-rs) | Tendermint | Mature ecosystem with light client support. | Client library for CometBFT, not a standalone consensus engine. Requires running an external CometBFT node and communicating via ABCI. Low development activity (last commit Nov 2025). |
-| [hotstuff_rs](https://github.com/parallelchain-io/hotstuff_rs) | HotStuff | Linear message complexity O(n). Dynamic validator sets built-in. Pluggable networking and storage. | Not actively maintained (last commit Dec 2024). Less battle-tested than Tendermint. Smaller community. |
-| [mysticeti](https://arxiv.org/pdf/2310.14821) | DAG-based BFT | Lowest theoretical latency (3 message rounds). Powers the Sui blockchain. | DAG-based consensus is significantly more complex to integrate. Designed for high-throughput blockchains, not embedded use. No standalone Rust library available. |
-| [raft-rs](https://github.com/tikv/raft-rs) | Raft | Actively maintained. Battle-tested (powers TiKV/TiDB). Standalone embeddable Rust library. | Crash fault tolerant (CFT) only, not Byzantine fault tolerant. Followers blindly trust the leader -- a compromised leader can commit arbitrary state. |
-| [etcd raft](https://github.com/etcd-io/raft) | Raft | Actively maintained. The most widely used Raft library in production (etcd, Kubernetes, CockroachDB). | Written in Go, not Rust. CFT only, not BFT. Would require FFI or a sidecar process. |
-
-**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). The underlying Tendermint algorithm is battle-tested across 100+ Cosmos ecosystem blockchains via CometBFT. Malachite itself is a newer Rust reimplementation by Informal Systems and Circle, but its co-design with TLA+ formal specs provides confidence in correctness despite its shorter production history.
-
+The protocol is based on Tendermint and integrated via the [malachite](https://github.com/circlefin/malachite) library, which provides a standalone Rust implementation of the Tendermint algorithm. See [Library Selection](#library-selection) for the rationale.
 
 ### Initial Implementation
 
@@ -482,7 +436,7 @@ Any finalizer can initiate finalization when:
 1. There are unfinalized commands in the graph beyond the last Finalize command.
 2. The finalizer has synced with enough peers to have a reasonably complete view of the graph.
 
-Initiation signals to the other finalizers that a finalization round should begin. The initiating finalizer does not become the proposer -- the BFT protocol's deterministic round-robin selects the proposer based on the current sequence number and consensus round number. If multiple finalizers initiate concurrently, they converge on the same consensus round since they all compute the same proposer independently.
+Initiation signals to the other finalizers that a finalization round should begin. The initiating finalizer does not necessarily become the proposer -- the proposer is selected deterministically (see [Agreement](#phase-1-agreement)).
 
 ### Finalization Round
 
@@ -503,9 +457,7 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 - **Finalization point** -- The graph command up to which the weave is finalized.
 - **Apply finalizer set update** -- The command ID of the `UpdateFinalizerSet` command to apply, or `None`. The proposer includes the command ID only if a quorum of finalizers reported the same command ID during state exchange. This allows other finalizers to verify they have the same pending update before voting.
 
-**Prevote.** Every finalizer (including the proposer) receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal to all other finalizers. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
-
-Finalizers must prevote nil immediately for proposals that are obviously invalid -- for example, a sequence number that has already been finalized, a finalization point that does not advance beyond the last Finalize command, or a finalization point the finalizer cannot verify. If the proposal includes an `apply_finalizer_set_update` command ID, a finalizer must also prevote nil if it does not have a `PendingFinalizerSetUpdate` fact with a matching command ID in its local FactDB. This ensures a finalizer set change only proceeds when the finalizers that voted for the proposal all agree on exactly which `UpdateFinalizerSet` command is being applied.
+**Prevote.** Every finalizer (including the proposer) receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: the sequence number has already been finalized, the finalization point does not advance beyond the last Finalize command, the finalizer cannot compute the weave to the proposed point (missing commands or different graph state), or the proposal includes an `apply_finalizer_set_update` command ID that does not match the finalizer's local `PendingFinalizerSetUpdate` fact.
 
 If a quorum prevote nil, the round advances immediately to the next proposer. Nil prevotes include the finalizer's current graph head so the next proposer can make a better-informed proposal.
 
@@ -519,11 +471,11 @@ Once agreement is reached on the finalization point, each finalizer deterministi
 
 Each finalizer signs the payload and requests signatures from the other finalizers. A finalizer stops requesting once it has collected at least a quorum of signatures.
 
-Different finalizers may end up with different subsets of signatures -- this is fine. Any valid quorum-sized subset proves consensus. The command ID is derived from the payload, so it is the same regardless of which signatures are in the envelope.
+Different finalizers may end up with different subsets of signatures -- any valid quorum-sized subset proves consensus.
 
 #### Phase 3: Commit
 
-Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph. Multiple finalizers may independently commit the same command with different signature subsets in their envelopes. Because the command ID is derived from the payload (not the signatures), these are logically the same command -- they share the same command ID and are treated identically by the graph. The policy's `!exists FinalizeRecord[seq: this.seq]` check ensures only the first to be woven succeeds; subsequent copies are recognized as the same command and ignored.
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph. Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
 
 ### Consensus Communication
 
@@ -573,8 +525,6 @@ Non-finalizer devices do not need to configure finalizer peers.
 | `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
 | `SignatureShare` | QUIC stream | Finalizer | Finalizer's signature over the agreed Finalize command content |
 
-All consensus messages are signed by the sending finalizer's signing key. Recipients verify the signature and that the sender is a member of the current finalizer set before processing.
-
 ### Timeouts
 
 A successful consensus round (no timeouts, no retries) is expected to complete in under a few seconds on a local network. Each consensus phase has a configurable timeout:
@@ -596,51 +546,30 @@ Where `r` is the consensus round number (starting at 0). The first consensus rou
 
 Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the consensus round advances to the next proposer without waiting for any timeout.
 
-### Daemon Startup
+### Daemon Startup and Fault Tolerance
 
-Consensus state is not persisted. All consensus messages (proposals, votes, signature shares) are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round that was not committed to the graph is simply abandoned -- there is nothing to recover.
-
-The daemon determines the current finalization state entirely from its local FactDB:
+Consensus state is not persisted -- all consensus messages are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB:
 
 1. Query the highest `FinalizeRecord` seq to determine the last completed finalization.
 2. Check if this device is in the current finalizer set (query `Finalizer` facts).
-3. If a finalizer, connect to configured finalizer peers. If other finalizers are already in a finalization round, the Tendermint protocol handles late joiners -- the daemon participates in whatever consensus round is currently active without needing prior history. If no finalization round is active, the daemon waits for a finalizer to initiate one.
+3. If a finalizer, connect to configured finalizer peers and join whatever consensus round is currently active. The Tendermint protocol handles late joiners without needing prior history.
 
-A daemon being offline does not block finalization. As long as a quorum of finalizers remains online, consensus rounds continue without the offline daemon. When the daemon comes back online, it syncs any Finalize commands it missed and can participate in or initiate the next finalization round.
-
-### Equivocation Detection and Vote Visibility
-
-Finalizers must have visibility into how other finalizers voted during consensus rounds. This serves two purposes: detecting Byzantine behavior and informing the team owner about potential finalizer set changes.
-
-**Equivocation.** Malachite detects equivocation -- when a finalizer sends conflicting votes (e.g., prevoting for two different proposals in the same consensus round). Equivocation does not halt consensus; the protocol continues as long as a quorum of honest finalizers are available.
-
-**Vote logging.** Each finalizer logs the votes it observes from all other finalizers during each consensus round within a finalization round, including:
-
-- Which finalizers prevoted for the proposal vs. nil.
-- Which finalizers precommitted for the proposal vs. nil.
-- Equivocation evidence (conflicting votes with signatures from the same finalizer).
-- Which finalizers did not respond within the timeout (potential offline or partitioned nodes).
-
-**Operator response.** Operators can review vote logs to identify finalizers that are consistently voting against the majority, equivocating, or failing to participate. This evidence can justify the team owner removing a compromised or faulty device from the finalizer set via an `UpdateFinalizerSet` command, or removing the device from the team entirely if its signing key is believed compromised.
+A daemon being offline does not block finalization -- as long as a quorum remains online, consensus continues. Stalled rounds advance automatically via timeout. If all finalizers restart simultaneously, they independently determine the current sequence number from FactDB and the deterministic proposer rotation ensures they agree on who proposes first.
 
 ### Partition Handling
 
 Finalization and normal graph operations are independent:
 
-- **During partitions**: Non-finalizer devices continue publishing commands and syncing with reachable peers. The graph branches as normal. If fewer than a quorum of finalizers can communicate, finalization halts but graph operations are unaffected.
-- **After partition heals**: Devices sync and merge branches. Once a quorum of finalizers can communicate again, finalization resumes. The next Finalize command will cover all commands accumulated during the partition.
+- **During partitions**: Non-finalizer devices continue publishing and syncing. If fewer than a quorum of finalizers can communicate, finalization halts but graph operations are unaffected.
+- **After partition heals**: Devices sync and merge branches. Finalization resumes once a quorum can communicate. Partitioned finalizers prevote nil until they sync enough state to verify proposals -- this affects liveness, not safety.
 
-Finalizers that were partitioned and have a stale view of the graph will prevote nil until they sync enough state to verify the proposal. This is safe -- it only affects liveness, not safety.
+### Equivocation Detection and Vote Visibility
 
-#### Fault Tolerance
+**Equivocation.** Malachite detects conflicting votes from the same finalizer. This does not halt consensus; the protocol continues with honest finalizers.
 
-The consensus protocol is resilient to finalizers going offline and coming back:
+**Vote logging.** Each finalizer logs votes observed during each consensus round: prevotes for/nil, precommits for/nil, equivocation evidence, and non-responsive nodes.
 
-- **Consensus messages** (state exchanges, proposals, votes, signature shares) are off-graph QUIC messages. They are not persisted. A returning finalizer does not need the prior consensus history.
-- **The Tendermint protocol handles late joiners.** A finalizer that comes back online reconnects to other finalizers over QUIC and joins whatever consensus round is currently active. It can prevote and precommit in the current consensus round without knowledge of prior consensus rounds.
-- **Stalled consensus rounds advance automatically.** If a consensus round stalls because the proposer went offline, the timeout expires and the next proposer takes over. No manual intervention is needed.
-
-If all finalizers go offline simultaneously and come back online, they restart the consensus protocol from scratch. Each finalizer independently determines the current sequence number (from the last `FinalizeRecord` in its FactDB) and begins a new finalization round. The deterministic proposer rotation ensures they agree on which finalizer proposes first.
+**Operator response.** Operators review vote logs to identify misbehaving finalizers. The team owner can remove them via `UpdateFinalizerSet`.
 
 ### Integration with Malachite
 
@@ -664,6 +593,21 @@ The `Context` trait is implemented with:
 - **`select_proposer`** -- Deterministic selection from the sorted finalizer set using `seq + consensus_round` as index modulo finalizer count.
 - **`new_proposal`** -- Constructs a proposal containing the finalization point.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
+
+### Library Selection
+
+Several Rust BFT consensus libraries were evaluated:
+
+| Library | Algorithm | Pros | Cons |
+|---|---|---|---|
+| [malachite](https://github.com/circlefin/malachite) | Tendermint | Standalone embeddable library with no runtime or networking opinions. Co-designed with TLA+ formal specs. Actively maintained (Informal Systems / Circle). Implements the same Tendermint algorithm used in production by 100+ Cosmos ecosystem blockchains (via CometBFT). | Tendermint's all-to-all voting has O(n^2) message complexity. Malachite itself is newer and does not have the same production track record as CometBFT. |
+| [tendermint-rs](https://github.com/cometbft/tendermint-rs) | Tendermint | Mature ecosystem with light client support. | Client library for CometBFT, not a standalone consensus engine. Requires running an external CometBFT node and communicating via ABCI. Low development activity (last commit Nov 2025). |
+| [hotstuff_rs](https://github.com/parallelchain-io/hotstuff_rs) | HotStuff | Linear message complexity O(n). Dynamic validator sets built-in. Pluggable networking and storage. | Not actively maintained (last commit Dec 2024). Less battle-tested than Tendermint. Smaller community. |
+| [mysticeti](https://arxiv.org/pdf/2310.14821) | DAG-based BFT | Lowest theoretical latency (3 message rounds). Powers the Sui blockchain. | DAG-based consensus is significantly more complex to integrate. Designed for high-throughput blockchains, not embedded use. No standalone Rust library available. |
+| [raft-rs](https://github.com/tikv/raft-rs) | Raft | Actively maintained. Battle-tested (powers TiKV/TiDB). Standalone embeddable Rust library. | Crash fault tolerant (CFT) only, not Byzantine fault tolerant. Followers blindly trust the leader -- a compromised leader can commit arbitrary state. |
+| [etcd raft](https://github.com/etcd-io/raft) | Raft | Actively maintained. The most widely used Raft library in production (etcd, Kubernetes, CockroachDB). | Written in Go, not Rust. CFT only, not BFT. Would require FFI or a sidecar process. |
+
+**Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). The underlying Tendermint algorithm is battle-tested across 100+ Cosmos ecosystem blockchains via CometBFT. Malachite itself is a newer Rust reimplementation by Informal Systems and Circle, but its co-design with TLA+ formal specs provides confidence in correctness despite its shorter production history.
 
 ## Example: Full Finalization Round-Trip
 
@@ -692,14 +636,6 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 10. **Sync.** D syncs with another finalizer, receives the Finalize command, and processes it. D's policy independently verifies the quorum of signatures and creates the `FinalizeRecord`. All ancestors of the Finalize command are now permanent on D's graph.
 
-## Security Considerations
-
-See [Threat Model](#threat-model) for the fault model, attack vectors, and mitigations. Key operational recommendations:
-
-- Specify at least 4 finalizer devices to tolerate 1 Byzantine fault (7 for 2 faults). A team with fewer than 4 finalizers has no Byzantine fault tolerance. Once a team has 4 or more finalizers, it cannot shrink below 4.
-- Monitor vote logs for equivocation, consistent nil voting, and non-participation. The team owner can remove misbehaving finalizers via `UpdateFinalizerSet`.
-- Restrict access to the owner device, as it is the trust anchor for the finalizer set.
-
 ## Future Work
 
 - **Delegating finalizer set management** -- Allow the owner to delegate the ability to update the finalizer set to other roles. This could be implemented by introducing a dedicated `UpdateFinalizerSet` permission that the owner can assign to trusted roles (e.g. a dedicated "Finalizer Admin" role). Currently, the `UpdateFinalizerSet` command is gated by the Owner role directly.
@@ -711,5 +647,4 @@ See [Threat Model](#threat-model) for the fault model, attack vectors, and mitig
 - **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
 - **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
-- **Graph head on nil prevote** -- Include the finalizer's latest graph head when prevoting nil. This gives the next proposer more up-to-date information in case they haven't synced the latest commands, potentially reducing the number of rounds needed to reach agreement.
 - **Finalizer set quorum validation** -- Validate that a new finalizer set can reach quorum before accepting the `UpdateFinalizerSet` command (e.g., verify that the specified devices are reachable and can participate in consensus). This is less critical while the owner can unilaterally change the set, but becomes more important if finalizer set management is delegated or consensus-based.
