@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Finalization
+title: BFT Consensus Finalization
 permalink: "/finalization/"
 ---
 
@@ -709,4 +709,5 @@ See [Threat Model](#threat-model) for the fault model, attack vectors, and mitig
 - **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
 - **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
+- **Graph head on nil prevote** -- Include the finalizer's latest graph head when prevoting nil. This gives the next proposer more up-to-date information in case they haven't synced the latest commands, potentially reducing the number of rounds needed to reach agreement.
 - **Finalizer set quorum validation** -- Validate that a new finalizer set can reach quorum before accepting the `UpdateFinalizerSet` command (e.g., verify that the specified devices are reachable and can participate in consensus). This is less critical while the owner can unilaterally change the set, but becomes more important if finalizer set management is delegated or consensus-based.
