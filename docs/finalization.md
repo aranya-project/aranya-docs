@@ -80,6 +80,52 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
 | **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates via `!exists FinalizeRecord[seq: this.seq]`. Payload-derived command ID means different signature subsets produce the same command. |
 
+## Architecture
+
+The finalization system spans multiple layers of the Aranya stack. The aranya-core runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
+
+```
+┌──────────────────────────────────────────────────┐
+│                  aranya-daemon                   │
+│                                                  │
+│  ┌───────────────────┐  ┌───────────────────┐    │
+│  │ Consensus Manager │  │   Sync Manager    │    │
+│  │                   │  │                   │    │
+│  │ ┌───────────────┐ │  │ ┌───────────────┐ │    │
+│  │ │  Consensus    │ │  │ │ Sync Protocol │ │    │
+│  │ │  Protocol     │ │  │ └───────────────┘ │    │
+│  │ └──────┬────────┘ │  │                   │    │
+│  │        │          │  │                   │    │
+│  │        ▼          │  │                   │    │
+│  │ ┌───────────────┐ │  │                   │    │
+│  │ │ Finalization  │ │  │                   │    │
+│  │ │ Policy        │ │  │                   │    │
+│  │ └───────────────┘ │  │                   │    │
+│  └────────┬──────────┘  └────────┬──────────┘    │
+│           │                      │               │
+│      ┌────┴──────────────────────┤               │
+│      ▼                           ▼               │
+│  ┌─────────────────┐  ┌─────────────────────┐    │
+│  │ aranya-core     │  │  QUIC Transport     │    │
+│  │ Runtime         │  └─────────────────────┘    │
+│  │                 │                             │
+│  │ ┌─────────────┐ │                             │
+│  │ │Finalization │ │                             │
+│  │ │FFIs (plugin)│ │                             │
+│  │ └─────────────┘ │                             │
+│  └─────────────────┘                             │
+└──────────────────────────────────────────────────┘
+```
+
+Key architectural boundaries:
+
+- **Consensus manager** orchestrates the finalization workflow in the daemon. It runs the BFT consensus protocol, relays consensus messages via QUIC transport, and commits the agreed-upon Finalize command to the graph via the finalization policy.
+- **Sync manager** orchestrates graph replication in the daemon. It runs the sync protocol and relays sync messages via QUIC transport.
+- **Consensus protocol** and **sync protocol** are separate crates in the `aranya-core` repository but are not part of the core runtime. Both depend on the runtime (e.g., consensus queries graph heads). Neither depends on QUIC transport directly.
+- **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime. The runtime evaluates it the same way it evaluates any other policy -- it is consensus-agnostic.
+- **Finalization FFIs** are an optional plugin within the aranya-core runtime. They implement operations the policy language cannot express directly: multi-author envelope handling, quorum verification, and finalizer set management.
+- **QUIC transport** provides networking for the daemon.
+
 ## Finalizer Set
 
 The finalizer set is the group of devices authorized to participate in finalization consensus. Finalizer devices do not need to be members of the team -- they only need a signing key to participate in consensus and can sync graph commands like any other device. The finalizer set can only be changed by the team owner through a dedicated `UpdateFinalizerSet` command.
@@ -413,51 +459,6 @@ Several Rust BFT consensus libraries were evaluated:
 
 **Decision: Malachite.** It is the only library that provides a standalone, embeddable Tendermint consensus engine without requiring an external process or specific networking stack. This is critical for Aranya because consensus must run inside the daemon process and communicate over QUIC connections. Tendermint's O(n^2) message complexity is acceptable for our small finalizer sets (1-13 members). The underlying Tendermint algorithm is battle-tested across 100+ Cosmos ecosystem blockchains via CometBFT. Malachite itself is a newer Rust reimplementation by Informal Systems and Circle, but its co-design with TLA+ formal specs provides confidence in correctness despite its shorter production history.
 
-### Architecture
-
-The BFT consensus protocol lives above `aranya-core`. The `aranya-core` runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    aranya-daemon                      │
-│                                                      │
-│  ┌─────────────────────────┐ ┌─────────────────────┐ │
-│  │    Consensus Manager    │ │    Sync Manager     │ │
-│  │                         │ │                     │ │
-│  │  ┌───────────────────┐  │ │  ┌───────────────┐  │ │
-│  │  │    Consensus      │  │ │  │ Sync Protocol │  │ │
-│  │  │    Protocol       │  │ │  └───────────────┘  │ │
-│  │  └─────────┬─────────┘  │ │                     │ │
-│  │            │            │ │                     │ │
-│  │            ▼            │ │                     │ │
-│  │  ┌───────────────────┐  │ │                     │ │
-│  │  │   Finalization    │  │ │                     │ │
-│  │  │      Policy       │  │ │                     │ │
-│  │  └───────────────────┘  │ │                     │ │
-│  └────────────┬────────────┘ └──────────┬──────────┘ │
-│               │                         │            │
-│          ┌────┴─────────────────────────┤            │
-│          ▼                              ▼            │
-│  ┌──────────────────┐  ┌────────────────────────┐   │
-│  │ aranya-core      │  │    QUIC Transport      │   │
-│  │ Runtime          │  │                        │   │
-│  │                  │  └────────────────────────┘   │
-│  │ ┌──────────────┐ │                               │
-│  │ │ Finalization │ │                               │
-│  │ │ FFIs (plugin)│ │                               │
-│  │ └──────────────┘ │                               │
-│  └──────────────────┘                               │
-└─────────────────────────────────────────────────────┘
-```
-
-Key architectural boundaries:
-
-- **Consensus manager** orchestrates the finalization workflow in the daemon. It runs the BFT consensus protocol, relays consensus messages via QUIC transport, and commits the agreed-upon Finalize command to the graph via the finalization policy. It depends on BFT consensus, finalization policy, aranya-core runtime, and QUIC transport.
-- **Sync manager** orchestrates graph replication in the daemon. It runs the sync protocol and relays sync messages via QUIC transport. It depends on the sync protocol, aranya-core runtime, and QUIC transport.
-- **BFT consensus** and **sync protocol** are separate crates in the `aranya-core` repository but are not part of the core runtime. Both depend on the runtime (e.g., consensus queries graph heads). Neither depends on the QUIC transport or finalization policy directly.
-- **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime. The runtime evaluates it the same way it evaluates any other policy -- it is consensus-agnostic.
-- **Finalization FFIs** are an optional plugin within the aranya-core runtime. They implement operations the policy language cannot express directly: multi-author envelope handling, quorum verification, and finalizer set management.
-- **QUIC transport** provides networking for the daemon.
 
 ### Initial Implementation
 
