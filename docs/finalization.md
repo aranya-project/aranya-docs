@@ -92,7 +92,7 @@ The initial finalizer set is established in the team's `Init` command. The `Init
 
 ### Set Size and Quorum
 
-Each finalizer has equal voting power of 1. The maximum supported set size is 7. (Malachite refers to the finalizer set as the "validator set".)
+The maximum supported set size is 7. (Malachite refers to the finalizer set as the "validator set".)
 
 Consensus requires a quorum of the finalizer set (see terminology):
 
@@ -113,7 +113,7 @@ Sizes following the `n = 3f + 1` formula (1, 4, 7) give maximum fault tolerance 
 The finalizer set is changed through a two-phase process:
 
 1. **Request phase.** The team owner publishes an `UpdateFinalizerSet` command on the graph. This does not immediately change the active finalizer set. Instead, it creates a `PendingFinalizerSetUpdate` fact that stages the new set along with the command ID of the `UpdateFinalizerSet` command that created it.
-2. **Apply phase.** A `Finalize` command can optionally apply a pending update. During consensus, finalizers exchange the command ID of the `UpdateFinalizerSet` they have (if any) during head exchange. If a quorum of finalizers report the same command ID, the proposer includes that command ID in the `Finalize` command's `apply_finalizer_set_update` field. The `Finalize` command then applies the update atomically -- deleting the old `Finalizer` facts, creating new ones from the pending update, and consuming the `PendingFinalizerSetUpdate` fact. If a quorum does not agree on the same command ID, the proposer leaves `apply_finalizer_set_update` as `None` and finalization proceeds without changing the finalizer set. The pending update remains for a future round.
+2. **Apply phase.** A `Finalize` command can optionally apply a pending update. During consensus, finalizers exchange the command ID of the `UpdateFinalizerSet` they have (if any) during state exchange. If a quorum of finalizers report the same command ID, the proposer includes that command ID in the `Finalize` command's `apply_finalizer_set_update` field. The `Finalize` command then applies the update atomically -- deleting the old `Finalizer` facts, creating new ones from the pending update, and consuming the `PendingFinalizerSetUpdate` fact. If a quorum does not agree on the same command ID, the proposer leaves `apply_finalizer_set_update` as `None` and finalization proceeds without changing the finalizer set. The pending update remains for a future round.
 
 This two-phase approach ensures that all finalizers have a globally consistent view of the finalizer set at each consensus round. If the `UpdateFinalizerSet` command directly modified `Finalizer` facts, different finalizers could have different views of the set depending on which graph commands they had synced, causing `verify_finalize_quorum` to produce inconsistent results across devices. By requiring a quorum to agree on the same `UpdateFinalizerSet` command ID before applying the change, finalization is never blocked by a pending set change that not enough finalizers have synced.
 
@@ -149,7 +149,7 @@ Properties:
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
   - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per finalization round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which finalization round is in progress and lets any node query finalization progress without traversing the graph.
-  - `apply_finalizer_set_update` -- Optional command ID of the `UpdateFinalizerSet` command to apply. Set by the proposer when a quorum of finalizers agreed on the same `UpdateFinalizerSet` command ID during head exchange. When `None`, no finalizer set change is applied.
+  - `apply_finalizer_set_update` -- Optional command ID of the `UpdateFinalizerSet` command to apply. Set by the proposer when a quorum of finalizers agreed on the same `UpdateFinalizerSet` command ID during state exchange. When `None`, no finalizer set change is applied.
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
@@ -208,7 +208,7 @@ If validation fails, the `UpdateFinalizerSet` command is rejected. No pending up
 
 #### Consensus Validation of Finalizer Set Changes
 
-The proposer decides whether to include a finalizer set change based on head exchange data. During head exchange, each finalizer reports the command ID of the `UpdateFinalizerSet` command that created its `PendingFinalizerSetUpdate` fact (if any). The proposer checks whether a quorum of finalizers reported the same command ID. If so, the proposal includes that command ID in the `apply_finalizer_set_update` field. If not -- because finalizers have different pending updates, or not enough have synced the update yet -- the proposer leaves `apply_finalizer_set_update` as `None` and finalization proceeds normally without changing the set.
+The proposer decides whether to include a finalizer set change based on state exchange data. During state exchange, each finalizer reports the command ID of the `UpdateFinalizerSet` command that created its `PendingFinalizerSetUpdate` fact (if any). The proposer checks whether a quorum of finalizers reported the same command ID. If so, the proposal includes that command ID in the `apply_finalizer_set_update` field. If not -- because finalizers have different pending updates, or not enough have synced the update yet -- the proposer leaves `apply_finalizer_set_update` as `None` and finalization proceeds normally without changing the set.
 
 This design ensures that:
 
@@ -216,7 +216,7 @@ This design ensures that:
 - **The old finalizer set is preserved until the change is confirmed.** The `Finalize` command only applies the pending update when `apply_finalizer_set_update` contains a command ID. If the proposer omits the set change or the round fails, the current `Finalizer` facts remain untouched.
 - **All finalizers agree on the same update.** By comparing command IDs rather than just checking for the existence of a pending update, finalizers ensure they are all applying the same `UpdateFinalizerSet` command. This prevents inconsistencies when the owner has published multiple `UpdateFinalizerSet` commands and different finalizers have synced different ones.
 
-Each finalizer that receives a proposal with `apply_finalizer_set_update` set independently verifies that its local `PendingFinalizerSetUpdate` fact has a matching command ID. If it doesn't match (or the finalizer has no pending update), it prevotes nil. Because the proposer only includes the command ID when a quorum already reported the same one during head exchange, this nil vote should be rare -- it only occurs if a finalizer's state changed between head exchange and prevote.
+Each finalizer that receives a proposal with `apply_finalizer_set_update` set independently verifies that its local `PendingFinalizerSetUpdate` fact has a matching command ID. If it doesn't match (or the finalizer has no pending update), it prevotes nil. Because the proposer only includes the command ID when a quorum already reported the same one during state exchange, this nil vote should be rare -- it only occurs if a finalizer's state changed between state exchange and prevote.
 
 **Known limitation:** Because finalizer set changes are applied through the `Finalize` command, a set change cannot proceed if finalization itself is stalled (e.g., finalizers cannot agree on a finalization point). In practice this is unlikely -- the proposer picks the common ancestor of all heads, so even with divergent graph views there is always some common ancestor to finalize. If this becomes a problem, a standalone consensus round for validator set changes (independent of finalization) could be added.
 
@@ -417,6 +417,56 @@ Several Rust BFT consensus libraries were evaluated:
 
 The BFT consensus protocol lives above `aranya-core`. The `aranya-core` runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
 
+```
+┌──────────────────────────────────────────────────────────┐
+│                       aranya-daemon                       │
+│                                                          │
+│  ┌──────────────────────┐  ┌───────────────────────────┐ │
+│  │    BFT Consensus     │  │      Sync Protocol        │ │
+│  │    (malachite)       │  │                           │ │
+│  │                      │  │  - Graph replication      │ │
+│  │  - State exchange    │  │  - Command delivery       │ │
+│  │  - Propose/vote      │  │                           │ │
+│  │  - Signature collect │  │                           │ │
+│  └──────────┬───────────┘  └─────────────┬─────────────┘ │
+│             │                            │               │
+│             ▼                            ▼               │
+│  ┌───────────────────────────────────────────────────┐   │
+│  │                 aranya-core Runtime                │   │
+│  │                                                   │   │
+│  │  - Graph (DAG)                                    │   │
+│  │  - FactDB                                        │   │
+│  │  - Policy evaluation                             │   │
+│  │                                                   │   │
+│  │  ┌─────────────────────┐  ┌─────────────────────┐ │   │
+│  │  │ Finalization Policy │  │  Finalization FFIs   │ │   │
+│  │  │                     │  │                      │ │   │
+│  │  │ - Finalize cmd      │  │ - seal/open_multi_   │ │   │
+│  │  │ - UpdateFinalizer   │  │   author             │ │   │
+│  │  │   Set cmd           │  │ - verify_finalize_   │ │   │
+│  │  │ - FinalizeRecord    │  │   quorum             │ │   │
+│  │  │ - PendingFinalizer  │  │ - init/validate/     │ │   │
+│  │  │   SetUpdate         │  │   stage/apply_       │ │   │
+│  │  │                     │  │   finalizer_set      │ │   │
+│  │  └─────────────────────┘  └─────────────────────┘ │   │
+│  └───────────────────────────────────────────────────┘   │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │               QUIC Transport                      │    │
+│  │                                                   │    │
+│  │  - Consensus messages (finalizer ↔ finalizer)     │    │
+│  │  - Sync messages (device ↔ device)                │    │
+│  └──────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────┘
+```
+
+Key architectural boundaries:
+
+- **aranya-core runtime** knows nothing about consensus. It evaluates the finalization policy (Finalize, UpdateFinalizerSet commands) the same way it evaluates any other policy.
+- **Finalization policy** defines the on-graph commands, facts, and rules. **Finalization FFIs** implement operations the policy language cannot express directly: multi-author envelope handling, quorum verification, and finalizer set management.
+- **BFT consensus** and **sync** are peer protocols in the daemon layer. Both interact with aranya-core: consensus produces Finalize commands, sync replicates them.
+- **QUIC transport** is shared between consensus and sync, distinguished by stream type.
+
 The BFT consensus crate may live in the `aranya-core` repository for convenience, but it is not a dependency of the core runtime. It is consumed by the daemon or application layer, which is responsible for:
 
 - Running the consensus protocol (malachite integration).
@@ -455,14 +505,14 @@ The goal of this phase is for finalizers to agree on which graph head to finaliz
 
 **Proposer selection.** A deterministic function selects the proposer for each consensus round based on the current sequence number and consensus round number (round-robin over the sorted finalizer set). All finalizers compute the same proposer independently. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
-**Head exchange.** When a round begins, each finalizer sends a head exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
+**State exchange.** When a round begins, each finalizer sends a state exchange message to all other finalizers containing its current graph head and, if it has a `PendingFinalizerSetUpdate` fact, the command ID of the `UpdateFinalizerSet` command that created it. This allows the proposer to determine a finalization point that all finalizers can agree on and whether a quorum agrees on the same pending finalizer set update.
 
-**Proposal.** The proposer collects the head exchange messages and computes the common ancestor of the participating finalizers' graph heads. The finalization point is this common ancestor -- the furthest point in the graph that all finalizers can verify. The proposer computes the weave from the last Finalize command (or graph root if none exists) to the finalization point. The proposal contains:
+**Proposal.** The proposer collects the state exchange messages and computes the common ancestor of the participating finalizers' graph heads. The finalization point is this common ancestor -- the furthest point in the graph that all finalizers can verify. The proposer computes the weave from the last Finalize command (or graph root if none exists) to the finalization point. The proposal contains:
 
 - **Seq** -- The finalization sequence number.
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
 - **Finalization point** -- The graph command up to which the weave is finalized.
-- **Apply finalizer set update** -- The command ID of the `UpdateFinalizerSet` command to apply, or `None`. The proposer includes the command ID only if a quorum of finalizers reported the same command ID during head exchange. This allows other finalizers to verify they have the same pending update before voting.
+- **Apply finalizer set update** -- The command ID of the `UpdateFinalizerSet` command to apply, or `None`. The proposer includes the command ID only if a quorum of finalizers reported the same command ID during state exchange. This allows other finalizers to verify they have the same pending update before voting.
 
 **Prevote.** Every finalizer (including the proposer) receives the proposal and independently verifies it by computing the weave from the same starting point to the proposed finalization point. If the finalizer can verify the proposal (it has all the commands and they produce a valid weave), it broadcasts a prevote for the proposal to all other finalizers. If it cannot verify the proposal (due to missing commands, different graph state, or invalid proposal), the finalizer prevotes nil.
 
@@ -472,7 +522,7 @@ If a quorum prevote nil, the round advances immediately to the next proposer. Ni
 
 **Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil. All finalizers participate in both voting stages.
 
-**Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the head exchange step.
+**Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the state exchange step.
 
 #### Phase 2: Signature Collection
 
@@ -528,7 +578,7 @@ Non-finalizer devices do not need to configure finalizer peers.
 
 | Message | Transport | Sender | Description |
 |---|---|---|---|
-| `HeadExchange` | QUIC stream | Finalizer | Current graph head and pending `UpdateFinalizerSet` command ID (if any) |
+| `StateExchange` | QUIC stream | Finalizer | Current graph head and pending `UpdateFinalizerSet` command ID (if any) |
 | `Proposal` | QUIC stream | Proposer | Proposed finalization point |
 | `Prevote` | QUIC stream | Finalizer | First-stage vote for or against a proposal |
 | `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
@@ -542,7 +592,7 @@ Each consensus phase has a configurable timeout:
 
 | Phase | Default Timeout | Behavior on Expiry |
 |---|---|---|
-| Head Exchange | 30s | Proposer uses heads received so far |
+| State Exchange | 30s | Proposer uses heads received so far |
 | Propose | 30s | Prevote nil |
 | Prevote | 30s | Precommit nil |
 | Precommit | 30s | Advance to next consensus round |
@@ -597,7 +647,7 @@ Finalizers that were partitioned and have a stale view of the graph will prevote
 
 The consensus protocol is resilient to finalizers going offline and coming back:
 
-- **Consensus messages** (head exchanges, proposals, votes, signature shares) are off-graph QUIC messages. They are not persisted. A returning finalizer does not need the prior consensus history.
+- **Consensus messages** (state exchanges, proposals, votes, signature shares) are off-graph QUIC messages. They are not persisted. A returning finalizer does not need the prior consensus history.
 - **The Tendermint protocol handles late joiners.** A finalizer that comes back online reconnects to other finalizers over QUIC and joins whatever consensus round is currently active. It can prevote and precommit in the current consensus round without knowledge of prior consensus rounds.
 - **Stalled consensus rounds advance automatically.** If a consensus round stalls because the proposer went offline, the timeout expires and the next proposer takes over. No manual intervention is needed.
 
@@ -612,7 +662,7 @@ The consensus protocol is implemented using the malachite library. The integrati
 | `Value` | Finalize command content (seq, finalization point, apply_finalizer_set_update) |
 | `ValueId` | Hash of the proposed Finalize command content |
 | `Height` | Finalization sequence number (seq) |
-| `Validator` | Finalizer device (each with voting power 1). Malachite uses "validator" for what Aranya calls a "finalizer". |
+| `Validator` | Finalizer device. Malachite uses "validator" for what Aranya calls a "finalizer". |
 | `ValidatorSet` | Current finalizer set. Derived from `Finalizer` facts. Updated atomically when a `Finalize` command applies a `PendingFinalizerSetUpdate`. |
 | `Address` | Finalizer's `pub_signing_key_id` |
 | `Vote` | Prevote/precommit QUIC messages |
@@ -632,7 +682,7 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 1. **Initiation.** Finalizer A determines there are unfinalized commands and signals the other finalizers that a finalization round should begin.
 
-2. **Head exchange.** Each finalizer sends its current graph head to all others. A, B, and C have similar heads; D is slightly behind.
+2. **State exchange.** Each finalizer sends its current graph head to all others. A, B, and C have similar heads; D is slightly behind.
 
 3. **Proposer selection.** All finalizers independently compute the proposer: `sorted_finalizers[(3 + 0) % 4]` = B (for consensus round 0 of seq 3).
 
@@ -672,3 +722,4 @@ See [Threat Model](#threat-model) for the fault model, attack vectors, and mitig
 - **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
 - **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
+- **Finalizer set quorum validation** -- Validate that a new finalizer set can reach quorum before accepting the `UpdateFinalizerSet` command (e.g., verify that the specified devices are reachable and can participate in consensus). This is less critical while the owner can unilaterally change the set, but becomes more important if finalizer set management is delegated or consensus-based.
