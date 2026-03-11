@@ -42,40 +42,43 @@ Finalization applies to the **control plane only** -- the persistent commands on
 
 ## Finalizer Set
 
-The finalizer set is the group of devices authorized to participate in finalization consensus. Unlike role-based permissions, the finalizer set is managed independently and can only be changed through consensus.
+The finalizer set is the group of devices authorized to participate in finalization consensus. Finalizer devices do not need to be members of the team -- they only need a signing key to participate in consensus and can sync graph commands like any other device. Unlike role-based permissions, the finalizer set is managed independently and can only be changed through consensus.
+
+In the future, finalizers may not need to be devices at all, since all that matters is a signing key. For MVP, finalizers are assumed to be devices.
 
 ### Initialization
 
-The initial finalizer set is established in the team's `Init` command. The `Init` command includes 4 optional finalizer fields (`finalizer1` through `finalizer4`), each containing a public signing key ID. If all 4 are specified, the team starts with a 4-member finalizer set and BFT safety. If none are specified, the team owner's public signing key ID is used as the sole initial finalizer.
+The initial finalizer set is established in the team's `Init` command. The `Init` command includes 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key ID. The caller specifies 1 to 7 finalizers. If none are specified, the team owner's public signing key ID is used as the sole initial finalizer.
 
 ### Validator Set
 
-All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1. The finalizer set is fixed at either 1 or 4 members.
+All devices in the finalizer set form the validator set. Each finalizer has equal voting power of 1. The maximum supported set size is 7.
 
 Consensus requires a quorum of the finalizer set (see terminology):
 
 | Finalizers (n) | Byzantine tolerance: f = (n - 1) / 3 | Quorum: q = (n * 2 / 3) + 1 |
 |---|---|---|
 | 1 | 0 | 1 |
+| 2 | 0 | 2 |
+| 3 | 0 | 3 |
 | 4 | 1 | 3 |
+| 5 | 1 | 4 |
+| 6 | 1 | 5 |
 | 7 | 2 | 5 |
-| 10 | 3 | 7 |
-| 13 | 4 | 9 |
 
-The supported set sizes follow the formula `n = 3f + 1`, which gives maximum fault tolerance for the fewest nodes. Adding nodes beyond `3f + 1` does not increase fault tolerance until the next threshold (7, 10, 13, ...).
-
-A single-finalizer team can finalize but has no Byzantine fault tolerance. A 4-member finalizer set is the smallest configuration that tolerates 1 Byzantine fault.
+Sizes following the `n = 3f + 1` formula (1, 4, 7) give maximum fault tolerance for the fewest nodes. Other sizes are allowed but provide the same fault tolerance as the previous `3f + 1` threshold.
 
 ### Changing the Finalizer Set
 
-The finalizer set can only be changed through a `Finalize` command that includes the optional `new_finalizer` fields. The Finalize command has 4 optional fields (`new_finalizer1` through `new_finalizer4`). When all are `None`, the current finalizer set is unchanged. When all 4 are provided, the complete new set of finalizer public signing key IDs replaces the current set at the next finalization sequence number.
+The finalizer set can only be changed through a `Finalize` command that includes the optional `new_finalizer` fields. The Finalize command has 7 optional fields (`new_finalizer1` through `new_finalizer7`). When all are `None`, the current finalizer set is unchanged. When provided, the caller specifies 1 to 7 new finalizer public signing key IDs. The new set replaces the current set at the next finalization sequence number.
+
+The set can grow or shrink freely, but once a team has 4 or more finalizers it cannot shrink below 4. This prevents losing BFT safety once established.
 
 This design ensures that:
 
 - Only a quorum of the current finalizers can authorize changes to the finalizer set.
 - An admin or owner cannot unilaterally add or remove finalizers, preserving BFT guarantees.
 - The finalizer set is always agreed upon by consensus, preventing split-brain scenarios where different devices have different views of who the finalizers are.
-- The finalizer set cannot be downgraded from 4 to 1 member. Once a team has a 4-member set, it must always have 4 finalizers.
 
 ## Finalization Policy
 
@@ -105,13 +108,13 @@ Properties:
 - **Priority**: 0 (processed before all non-ancestor commands in the weave).
 - **Fields**:
   - `seq` -- The finalization sequence number. Ensures at most one Finalize command succeeds per round, even if multiple are created concurrently on different branches. Also allows finalizers to coordinate off-graph on which round is in progress and lets any node query finalization progress without traversing the graph.
-  - `new_finalizer1` through `new_finalizer4` -- Optional public signing key IDs. When all 4 are provided, they replace the current finalizer set at the next sequence number. When all are `None`, the current set is unchanged.
+  - `new_finalizer1` through `new_finalizer7` -- Optional public signing key IDs. The caller specifies 1, 4, or 7 to set the new finalizer set, which takes effect at the next sequence number. When all are `None`, the current set is unchanged.
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
   - No `FinalizeRecord` exists at this sequence number (prevents duplicates).
   - The sequence number is sequential (previous seq must be finalized, or seq is 1).
-  - If new finalizer fields are provided: all 4 must be present, all unique key IDs, all valid team devices, and a majority of the new set must come from the current set.
+  - If new finalizer fields are provided: size between 1 and 7, all unique, all valid signing key IDs, cannot shrink below 4 once at 4+, and a majority of the new set must come from the current set.
 
 The envelope signatures serve as a compact proof of consensus. Any device can verify that a quorum of finalizers authored the finalization using only the Finalize command itself, without any knowledge of the off-graph consensus protocol.
 
@@ -149,30 +152,29 @@ The finalizer set can only be changed through the `Finalize` command's optional 
 
 When a `Finalize` command includes new finalizer fields:
 
-- All 4 fields (`new_finalizer1` through `new_finalizer4`) must be provided. Partial updates are not supported.
-- All key IDs must be unique.
-- All key IDs must correspond to valid devices on the team.
-- A majority of the new set must come from the current finalizer set (at most 1 member replaced per round).
+- The new set size must be between 1 and 7.
+- All specified key IDs must be unique.
+- All key IDs must be valid public signing key IDs.
+- A majority of the new set must come from the current finalizer set. This ensures a proper transfer of power where the previous finalizers maintain majority control in the new set.
+- Once the set has reached 4 or more members, it cannot shrink below 4.
 - The new set takes effect at the next finalization sequence number (N+1).
 - The current sequence number's consensus still uses the old set for quorum and signature verification.
 - All devices learn the new finalizer set when they process the `Finalize` command through sync.
-
-A single-finalizer team can upgrade to a 4-member set, but a 4-member set cannot be downgraded to a single finalizer. This prevents losing BFT safety once established.
 
 If validation fails, the entire `Finalize` command is rejected. The original finalizer set remains in effect and the sequence number is not consumed.
 
 Validation operates at two levels:
 
-1. **Policy validation** (structural) -- The on-graph policy checks that the new set is structurally valid: all 4 provided, unique key IDs, valid team devices, no downgrade from 4 to 1. Additionally, a majority of the new finalizer set must come from the previous set. With n=4, at least 3 of the new 4 members must be from the current set. This ensures a proper transfer of power where the previous finalizers maintain majority control in the new set, preserving continuity of trust. It also prevents a hostile takeover in a single round -- even if BFT assumptions are violated, an attacker can only swap 1 member per round, giving operators time to detect and respond.
-2. **Consensus validation** (semantic) -- During the BFT consensus round, each honest finalizer prevotes nil on any proposal that removes them from the finalizer set. This ensures a malicious proposer cannot get quorum to remove honest finalizers. Legitimate removal of a single member still works: the 3 remaining finalizers see themselves in the new set and prevote yes (meeting quorum), while the removed finalizer's nil vote does not block the change.
+1. **Policy validation** (structural) -- The on-graph policy checks that the new set is structurally valid: size between 1 and 7, unique key IDs, valid signing key IDs, cannot shrink below 4 once at 4+, and a majority of the new set comes from the previous set. The majority overlap preserves continuity of trust and prevents a hostile takeover in a single round -- even if BFT assumptions are violated, an attacker can only replace a minority of members per round, giving operators time to detect and respond.
+2. **Consensus validation** (semantic) -- During the BFT consensus round, each honest finalizer prevotes nil on any proposal that removes them from the finalizer set. This ensures a malicious proposer cannot get quorum to remove honest finalizers. Legitimate removal still works: the remaining finalizers see themselves in the new set and prevote yes, while removed finalizers' nil votes do not block the change as long as quorum is met.
 
-Together, these two levels ensure that adding, removing, or replacing finalizers requires a quorum of current finalizers to actively agree through consensus, the policy limits changes to at most 1 member per round, and no single administrator can change the finalizer set unilaterally.
+Together, these two levels ensure that adding, removing, or replacing finalizers requires a quorum of current finalizers to actively agree through consensus, the policy limits changes per round, and no single administrator can change the finalizer set unilaterally.
 
 ### Policy Definitions
 
 #### Init Command Changes
 
-The `Init` command is extended with 4 optional finalizer fields. If all 4 are provided, the team starts with a 4-member finalizer set. If none are provided, the team owner is the sole finalizer. The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
+The `Init` command is extended with 7 optional finalizer fields. The caller specifies 1 to 7 finalizers. If none are provided, the team owner is the sole finalizer. The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
 
 ```policy
 command Init {
@@ -182,6 +184,9 @@ command Init {
         finalizer2 optional bytes,
         finalizer3 optional bytes,
         finalizer4 optional bytes,
+        finalizer5 optional bytes,
+        finalizer6 optional bytes,
+        finalizer7 optional bytes,
     }
 
     // ... existing seal/open ...
@@ -189,13 +194,13 @@ command Init {
     policy {
         // ... existing init logic ...
 
-        // Initialize finalizer set.
-        // If all 4 finalizers provided, validate and create facts for each.
-        // Otherwise, default to team owner as sole finalizer.
+        // Initialize finalizer set (1 to 7 finalizers).
+        // If none provided, default to team owner as sole finalizer.
         check init_finalizer_set(
             this.finalizer1, this.finalizer2,
             this.finalizer3, this.finalizer4,
-            envelope,
+            this.finalizer5, this.finalizer6,
+            this.finalizer7, envelope,
         )
 
         // Create initial FinalizeRecord so seq 1 has a predecessor.
@@ -208,7 +213,7 @@ command Init {
 fact Finalizer[signing_key_id bytes]=>{}
 ```
 
-The `init_finalizer_set` FFI validates that either all 4 fields are provided or none are. When all 4 are provided, it checks that all key IDs are unique and correspond to valid team devices, then creates a `Finalizer` fact for each. When none are provided, it creates a single `Finalizer` fact for the team owner's public signing key ID.
+The `init_finalizer_set` FFI validates the specified finalizers (1 to 7). It checks that all key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. When none are provided, it creates a single `Finalizer` fact for the team owner's public signing key ID.
 
 #### Finalize Command
 
@@ -224,6 +229,9 @@ command Finalize {
         new_finalizer2 optional bytes,
         new_finalizer3 optional bytes,
         new_finalizer4 optional bytes,
+        new_finalizer5 optional bytes,
+        new_finalizer6 optional bytes,
+        new_finalizer7 optional bytes,
     }
 
     // Signatures are in the envelope, not the payload.
@@ -243,10 +251,12 @@ command Finalize {
         // No conflicting Finalize at this sequence number.
         check !exists FinalizeRecord[seq: this.seq]
 
-        // Validate new finalizer set if provided (all 4 or none).
+        // Validate new finalizer set if provided (1 to 7 members).
         check validate_new_finalizer_set(
             this.new_finalizer1, this.new_finalizer2,
             this.new_finalizer3, this.new_finalizer4,
+            this.new_finalizer5, this.new_finalizer6,
+            this.new_finalizer7,
         )
 
         finish {
@@ -258,6 +268,8 @@ command Finalize {
             update_finalizer_set(
                 this.new_finalizer1, this.new_finalizer2,
                 this.new_finalizer3, this.new_finalizer4,
+                this.new_finalizer5, this.new_finalizer6,
+                this.new_finalizer7,
             )
         }
     }
@@ -270,10 +282,10 @@ fact FinalizeRecord[seq int]=>{}
 
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, fact iteration):
 
-- **`init_finalizer_set(f1, f2, f3, f4, envelope)`** -- Initializes the finalizer set from the `Init` command. If all 4 fields are provided, validates that all key IDs are unique and correspond to valid team devices, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID. Rejects partial specifications (some provided, some `None`).
+- **`init_finalizer_set(f1..f7, envelope)`** -- Initializes the finalizer set from the `Init` command. Accepts 1 to 7 finalizer fields (remaining fields `None`). Validates that all specified key IDs are unique and correspond to valid signing key IDs, then creates a `Finalizer` fact for each. If all are `None`, creates a single `Finalizer` fact for the team owner's public signing key ID.
 - **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. Verifies each signature against the current finalizer set and the command content. Returns true if at least a quorum of valid, unique finalizer signatures are present.
-- **`validate_new_finalizer_set(f1, f2, f3, f4)`** -- Validates the new finalizer set fields. If all 4 are provided, checks that all key IDs are unique, correspond to valid team devices, and a majority of the new set comes from the current finalizer set. If the current set has 4 members, all 4 must be provided (cannot downgrade to a single finalizer). Returns true if valid or if all fields are `None`. Rejects partial specifications.
-- **`update_finalizer_set(f1, f2, f3, f4)`** -- If all 4 fields are provided, deletes all existing `Finalizer` facts and creates new ones for each key ID. No-op if all fields are `None`.
+- **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all key IDs are unique, all correspond to valid signing key IDs, a majority of the new set comes from the current set, and the new set does not shrink below 4 if currently at 4+. Returns true if valid or if all fields are `None`.
+- **`update_finalizer_set(f1..f7)`** -- If any fields are provided, deletes all existing `Finalizer` facts and creates new ones for each specified key ID. No-op if all fields are `None`.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
 
@@ -310,7 +322,7 @@ The BFT consensus crate may live in the `aranya-core` repository for convenience
 
 ### Initial Implementation
 
-The initial implementation uses the team owner as the sole finalizer (single-finalizer mode). This provides finalization and truncation support without the complexity of multi-party BFT consensus. Teams can upgrade to a 4-member finalizer set when BFT safety is needed.
+The initial implementation uses the team owner as the sole finalizer (single-finalizer mode). This provides finalization and truncation support without the complexity of multi-party BFT consensus. Teams can upgrade to a larger finalizer set (up to 7) when BFT safety is needed.
 
 ### Single Finalizer
 
@@ -558,7 +570,7 @@ A compromised finalizer's blast radius is limited to disrupting or halting conse
 
 ### Minimum Validator Set
 
-Teams should specify 4 finalizer devices to tolerate 1 Byzantine fault. A team with a single finalizer (the default) has no Byzantine fault tolerance. Once a team upgrades to a 4-member finalizer set, it cannot be downgraded back to a single finalizer.
+Teams should specify at least 4 finalizer devices to tolerate 1 Byzantine fault (7 for 2 faults). A team with fewer than 4 finalizers has no Byzantine fault tolerance. Once a team has 4 or more finalizers, it cannot shrink below 4.
 
 ## Future Work
 
@@ -566,5 +578,6 @@ Teams should specify 4 finalizer devices to tolerate 1 Byzantine fault. A team w
 - **Merkle roots** -- Add weave and FactDB Merkle roots to the Finalize command. A Merkle root is a single hash at the top of a binary hash tree that uniquely represents an entire dataset. The weave Merkle tree would be built from command hashes in weave order; the facts Merkle tree from FactDB key-value entries. This enables divergence detection (devices can compare roots to verify identical state), truncation (retain only roots as compact proof of prior state), and light clients (verify finalized state without replaying the full weave).
 - **Truncation** -- Define a garbage collection strategy for finalized graph data. Requires Merkle roots to retain compact proofs of truncated state.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
-- **Larger finalizer sets** -- Support finalizer sets beyond 4 members, following the `3f + 1` progression (7, 10, 13, ...). This requires policy language support for collection types or additional FFI work to handle variable-length field lists. Variable-size sets introduce a new attack vector: an adversary could shrink the set to reduce the majority requirement, then pack it with compromised devices. Any variable-size design must prevent reducing the set size or enforce that the new set retains a majority from the previous set.
+- **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
+- **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
 - **Finalization metrics** -- Monitoring and alerting for finalization latency and participation rates.
