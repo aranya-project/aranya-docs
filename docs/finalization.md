@@ -25,8 +25,16 @@ Finalization has two components:
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a finalization point for a given round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
-| Quorum | The minimum number of finalizers required for a consensus decision: `(n * 2 / 3) + 1` where n is the finalizer set size |
+| Quorum | The minimum number of finalizers required for a consensus decision (q) |
 | Sequence number (seq) | The sequence number of a finalization round; increments with each successful Finalize command |
+
+### Formulas
+
+| Variable | Formula | Description |
+|---|---|---|
+| n | | Finalizer set size (1 to 7) |
+| f | (n - 1) / 3 | Maximum number of Byzantine (malicious or faulty) finalizers the protocol can tolerate |
+| q | (n * 2 / 3) + 1 | Quorum size -- the minimum number of finalizers required for a consensus decision. Ensures safety as long as at most f finalizers are Byzantine. |
 
 ## Scope
 
@@ -44,7 +52,7 @@ Finalization applies to the **control plane only** -- the persistent commands on
 
 ### Fault Model
 
-The consensus protocol assumes the standard BFT fault model: at most f < n/3 of the n finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum of honest nodes can communicate.
+The consensus protocol assumes the standard BFT fault model: at most f of the n finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (q) of honest nodes can communicate.
 
 ### Why Multi-Party Finalization
 
@@ -62,12 +70,12 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | Attack | Description | Mitigation |
 |---|---|---|
 | **Malicious proposer** | Proposes an invalid or self-serving finalization point | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
-| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires 2f + 1, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
+| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires q, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
 | **Equivocation** | Finalizer sends conflicting votes in the same round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
 | **Compromised owner manipulates finalizer set** | Owner replaces finalizer set with devices they control | Owner is already the trust anchor (determines initial set in `Init`). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
 | **Non-owner finalizer set manipulation** | Byzantine finalizer tries to change the set | Only the owner can publish `UpdateFinalizerSet`. Non-owner finalizers cannot change the set. |
 | **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
-| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum (2f + 1) ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
+| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
 | **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates via `!exists FinalizeRecord[seq: this.seq]`. Payload-derived command ID means different signature subsets produce the same command. |
 
 ## Finalizer Set
@@ -86,7 +94,7 @@ All devices in the finalizer set form the validator set. Each finalizer has equa
 
 Consensus requires a quorum of the finalizer set (see terminology):
 
-| Finalizers (n) | Byzantine tolerance: f = (n - 1) / 3 | Quorum: q = (n * 2 / 3) + 1 |
+| n | f | q |
 |---|---|---|
 | 1 | 0 | 1 |
 | 2 | 0 | 2 |
