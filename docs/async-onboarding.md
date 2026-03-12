@@ -106,38 +106,38 @@ sequenceDiagram
 5. New device syncs with the peering point to get the graph
 6. New device publishes SelfJoinTeam command
 
-Admin MUST create a one time symmetric join key
-Admin MUST create a signed device certificate
-Admin MUST use a CSPRNG to create the 11 word phrase
-Admin MUST use diceware to generate the entropy for the 11 word phrase.
-Admin MUST derive a mailbox ID using HKDF-SHA-512 from the 11words
-Admin MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF-SHA-512 from the 11words
-Admin MUST derive an authenticator using HKDF-SHA-512 from the 11words
-Admin MUST encrypt the new device certificate and private key using the bundle key
-Admin MUST encrypt the one-time-use join keypair using the bundle key
-Admin MUST encrypt the pairing/syncing information using the bundle key 
-Admin MUST encrypt the team ID using the bundle key
-Admin MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
-Admin MUST calculate the HMAC-SHA-512(key=authenticator, value=mailbox ID)
-Admin MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
-Admin MUST send 11word phrase to new device out of band
+- Admin MUST create a one time symmetric join key
+- Admin MUST create a signed device certificate
+- Admin MUST use a CSPRNG to create the 11 word phrase
+- Admin MUST use diceware to generate the entropy for the 11 word phrase.
+- Admin MUST derive a mailbox ID using HKDF-SHA-512 from the 11words
+- Admin MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF-SHA-512 from the 11words
+- Admin MUST derive an authenticator using HKDF-SHA-512 from the 11words
+- Admin MUST encrypt the new device certificate and private key using the bundle key
+- Admin MUST encrypt the one-time-use join keypair using the bundle key
+- Admin MUST encrypt the pairing/syncing information using the bundle key 
+- Admin MUST encrypt the team ID using the bundle key
+- Admin MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
+- Admin MUST calculate the HMAC-SHA-512(key=authenticator, value=mailbox ID)
+- Admin MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
+- Admin MUST send 11word phrase to new device out of band
 
 
-New device MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
-New device MUST derive the bundle key using HKDF-SHA-512 from the 11 words
-New device MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
-New Device MUST decrypt the new device certificate and private key using the bundle key
-New Device MUST decrypt the one-time-use join keypair using the bundle key
-New Device MUST decrypt the pairing/syncing information using the bundle key 
-New Device MUST decrypt the team ID using the bundle key
-New Device MUST publish the SelfJoinTeam command using the one-time join key.
+- New device MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
+- New device MUST derive the bundle key using HKDF-SHA-512 from the 11 words
+- New device MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
+- New Device MUST decrypt the new device certificate and private key using the bundle key
+- New Device MUST decrypt the one-time-use join keypair using the bundle key
+- New Device MUST decrypt the pairing/syncing information using the bundle key 
+- New Device MUST decrypt the team ID using the bundle key
+- New Device MUST publish the SelfJoinTeam command using the one-time join key.
 
 
-Onboarding Server MUST authenticate users using a certificate when handling requests on the `drop` endpoint
-Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
-Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
-Onboarding Server MUST expose a `drop` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
-Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
+- Onboarding Server MUST authenticate users using a certificate when handling requests on the `drop` endpoint
+- Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
+- Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
+- Onboarding Server MUST expose a `drop` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
+- Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
 
 ## Algorithms used
 
@@ -153,21 +153,23 @@ We need to add two commands:
 ```policy
 
 // holds the self join keys,
-fact SelfJoinKey[keyid id]=>{key bytes, used bool}
+fact DeviceSelfJoinPubKey[keyid id]=>{key bytes, used bool, created_by id}
 
 command AllowSelfJoinTeam {
 	fields {
 		// the public key bytes of the key used to open
 		pubkey bytes
-
 	}
 
-	seal {
-		// normal seal
-	}
+	seal { /* normal seal */ }
 
-	open {
-		// normal open
+	open { /* normal open */ }
+
+	policy {
+		// get author ID
+		// check permissions
+		// derive key ID
+		create DeviceSelfJoinPubKey[keyid]=>{key: this.pubkey, used: false, created_by: author_id}
 	}
 }
 
@@ -182,11 +184,12 @@ command SelfJoinTeam {
 	}
 
 	open {
-		// fetch key from SelfJoinKey fact
+		// fetch key from DeviceSelfJoinPubKey fact
 		// try to use to open
 	}
 
 	policy {
+		// mark the key used, fail if already used
 		// normal device setup
 	}
 }
@@ -196,8 +199,10 @@ command SelfJoinTeam {
 function seal_command_selfjoin(payload bytes) struct Envelope {
     let parent_id = perspective::head_id()
     let author_id = device::current_device_id()
-    // TODO update
-    let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
+    // Get the one time key, and use it here.
+    // TODO: how to get key ID?
+    let author_sign = check_unwrap query DeviceSelfJoinPubKey[device_id: key_id]
+    let author_sign_pk = author_sign.key
     let author_sign_key_id = idam::derive_sign_key_id(author_sign_pk.key)
 
     let signed = crypto::sign(author_sign_key_id, payload)
@@ -219,7 +224,8 @@ function seal_command_selfjoin(payload bytes) struct Envelope {
 function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
     let author_id = envelope::author_id(sealed_envelope)
     // TODO update
-    let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
+    let author_sign_pk = check_unwrap query DeviceSelfJoinPubKey[device_id: author_id]
+    let author_sign_pk = 
 
     let verified_command = crypto::verify(
         author_sign_pk.key,
