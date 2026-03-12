@@ -60,6 +60,7 @@ Generate a GitHub issue checklist for tracking release progress. This reads the 
 4. Each checklist item should be a `- [ ]` checkbox derived from the `(manual)` steps in the doc. Omit `(automated)` steps since they do not require human action, but include the manual verification/approval steps that follow automated steps.
 5. Output the checklist as a fenced markdown block the user can copy, or offer to create the GitHub issue directly using `gh issue create`
 
+
 ### Documentation Update (`/release docs`)
 
 For post-release documentation tasks:

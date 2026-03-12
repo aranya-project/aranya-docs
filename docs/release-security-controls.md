@@ -23,6 +23,7 @@ All items below are tracked under [aranya#730](https://github.com/aranya-project
 | [Release Environment Protections](#release-environment-protections) | Reference `environment: release` in release workflow jobs | repo (workflow) | aranya, aranya-core |
 | [Secrets Management](#secrets-management) | Store `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in `release` environment | env-level: `release` | aranya, aranya-core |
 
+
 ## Branch Protections
 
 Default branch protection rules are configured at the **org level** ([aranya-project org rulesets](https://github.com/organizations/aranya-project/settings/rules)) and apply to all repos. Repo-level overrides or additional rules can be configured per repo under Settings > Rules > Rulesets.
@@ -112,5 +113,6 @@ Release credentials are scoped to the `release` environment rather than stored a
 | `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` | env-level: `release` | [`release.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/release.yml) (aranya), [`release-plz.yml`](https://github.com/aranya-project/aranya-core/blob/main/.github/workflows/release-plz.yml) (aranya-core) | Settings > Environments > [`release`](https://github.com/aranya-project/aranya/settings/environments) > Environment secrets in each repo |
 
 `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` is stored in the `release` environment in both repos ([aranya](https://github.com/aranya-project/aranya/settings/environments), [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments)). The workflows reference this secret as `secrets.ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY`. Because org-level environments are not available, the secret is configured separately in each repo's `release` environment.
+
 
 - The crates.io API key is rotated after each release to limit the window of exposure if a key is compromised (see [Post-Release Checklist](/release-process/#post-release-checklist)).

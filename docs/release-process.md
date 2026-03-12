@@ -21,6 +21,7 @@ Throughout this document, tasks are marked to indicate their level of automation
 
 See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
 
+
 ## Pre-Release Checklist
 
 ### Week 1
@@ -47,10 +48,6 @@ The main branch should always be in a releasable state. In general, whatever is 
 ## PR Merge Deadline (2 days before release)
 
 Any PRs the team wants to incorporate into the release should be merged at least 2 days before the scheduled release date. This ensures all intended changes land before the code freeze begins.
-
-### Assumptions
-
-Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features.
 
 ## Aranya-Core Release Process (1 day before Aranya release)
 
