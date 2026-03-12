@@ -97,7 +97,9 @@ sequenceDiagram
     2. New device decrypts one time join keypair
     3. New device decrypts pairing/syncing info
     4. New device decrypts team ID
-4. New device publishes SelfJoinTeam command
+4. New device adds team using decrypted team ID
+5. New device syncs with the peering point to get the graph
+6. New device publishes SelfJoinTeam command
 
 Admin MUST create a one time symmetric join key
 Admin MUST create a signed device certificate
@@ -138,3 +140,92 @@ Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and t
 - HMAC-SHA-512 for HMAC
 - AES-256-GCM for symmetric encryption
 - Ed25519 for asymmetric encryption
+
+## Aranya policy changes
+
+We need to add two commands:
+
+```policy
+
+// holds the self join keys,
+fact SelfJoinKey[keyid id]=>{key bytes, used bool}
+
+command AllowSelfJoinTeam {
+	fields {
+		// the public key bytes of the key used to open
+		pubkey bytes
+
+	}
+
+	seal {
+		// normal seal
+	}
+
+	open {
+		// normal open
+	}
+}
+
+command SelfJoinTeam {
+	fields {
+		// TODO, AddDevice fields here
+	}
+
+	seal {
+		// use the private onboarding key to seal
+		// how does this work?
+	}
+
+	open {
+		// fetch key from SelfJoinKey fact
+		// try to use to open
+	}
+
+	policy {
+		// normal device setup
+	}
+}
+
+// Signs the payload using the current device's Device Signing
+// Key, then packages the data and signature into an `Envelope`.
+function seal_command_selfjoin(payload bytes) struct Envelope {
+    let parent_id = perspective::head_id()
+    let author_id = device::current_device_id()
+    // TODO update
+    let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
+    let author_sign_key_id = idam::derive_sign_key_id(author_sign_pk.key)
+
+    let signed = crypto::sign(author_sign_key_id, payload)
+    return envelope::new(
+        parent_id,
+        author_id,
+        signed.command_id,
+        signed.signature,
+        payload,
+    )
+}
+
+// Opens an envelope using the author's public Device Signing
+// Key.
+//
+// If verification succeeds, it returns the serialized basic
+// command data. Otherwise, if verification fails, it raises
+// a check error.
+function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
+    let author_id = envelope::author_id(sealed_envelope)
+    // TODO update
+    let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
+
+    let verified_command = crypto::verify(
+        author_sign_pk.key,
+        envelope::parent_id(sealed_envelope),
+        envelope::payload(sealed_envelope),
+        envelope::command_id(sealed_envelope),
+        envelope::signature(sealed_envelope),
+    )
+    return verified_command
+}
+
+
+```
+
