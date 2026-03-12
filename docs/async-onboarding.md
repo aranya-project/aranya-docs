@@ -44,13 +44,16 @@ sequenceDiagram
     participant Server as Onboarding Server
     participant New as New Device
 
-    Note over Admin: Generate 11-word phrase from CSPRNG
-    Note over Admin: Derive mailbox ID (128 bits)
-    Note over Admin: Derive symmetric encryption key
-    Note over Admin: Derive authenticator
     Note over Admin: Create one-time join keypair
     Note over Admin: Create signed device certificate
-    Note over Admin: Encrypt bundle:<br/>cert + private key,<br/>one-time join keypair,<br/>pairing/syncing info,<br/>team ID
+    Note over Admin: Generate 11-word phrase from CSPRNG
+    Note over Admin: Derive mailbox ID (128 bits)<br/>using HKDF-SHA-512
+    Note over Admin: Derive symmetric encryption key<br/>using HKDF-SHA-512
+    Note over Admin: Derive authenticator<br/>using HKDF-SHA-512
+    Note over Admin: Encrypt cert + private key<br/>using the bundle key
+    Note over Admin: Encrypt one-time join keypair<br/>using the bundle key
+    Note over Admin: Encrypt pairing/syncing info<br/>using the bundle key
+    Note over Admin: Encrypt team ID<br/>using the bundle key
 
     Admin->>Graph: Publish one-time onboarding public key<br/>(AllowSelfJoinTeam)
     Admin->>Server: drop(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
@@ -58,9 +61,9 @@ sequenceDiagram
 
     Admin-->>New: Send 11-word phrase (out of band)
 
-    Note over New: Derive mailbox ID
-    Note over New: Derive symmetric encryption key
-    Note over New: Derive authenticator
+    Note over New: Derive mailbox ID<br/>using HKDF-SHA-512
+    Note over New: Derive symmetric encryption key<br/>using HKDF-SHA-512
+    Note over New: Derive authenticator<br/>using HKDF-SHA-512
 
     New->>Server: fetch(mailbox ID, authenticator)
     Note over Server: Validate HMAC(authenticator, mailbox ID)
@@ -71,6 +74,8 @@ sequenceDiagram
     Note over New: Decrypt pairing/syncing info
     Note over New: Decrypt team ID
 
+    Note over New: Add team using decrypted team ID
+    New->>Graph: Sync with peering point to get graph
     New->>Graph: SelfJoinTeam (using one-time join key)
 ```
 
