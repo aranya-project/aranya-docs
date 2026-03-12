@@ -36,6 +36,7 @@ Actors:
 - Admin - the privileged device capable and authorized to initiate the asynchronous onboarding proceedure. 
 - Onboarding Server - the server that stores the onboarding bundle and validates the credentials provided for requests.
 - New Device - the device that is being onboarded to the team.
+- Onboarding Client - a client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
 
 ```mermaid
 sequenceDiagram
@@ -146,9 +147,13 @@ sequenceDiagram
 - AES-256-GCM for symmetric encryption
 - Ed25519 for asymmetric encryption
 
-## Aranya policy changes
+## Aranya changes
 
-We need to add two commands:
+In order to support this onboarding process, changes must be made to the policy and an additional rust tool written to utilize the one-time-use join key. Two policy commands need to be added: AllowSelfJoinTeam and SelfJoinTeam.
+
+The extra rust code will be needed to work around a policy limitation. In order to utilize the join key, the device must start an Aranya ClientState with a different keybundle than normal that contains the self join key in place of the device ID. This is required to get the self join key ID into the seal and open blocks. With this workaround, the seal and open functions for the SelfJoinTeam command can use the author ID to properly identify the key to use from the SelfJoinTeamPubKey fact.
+
+
 
 ```policy
 
@@ -194,48 +199,6 @@ command SelfJoinTeam {
 	}
 }
 
-// Signs the payload using the current device's Device Signing
-// Key, then packages the data and signature into an `Envelope`.
-function seal_command_selfjoin(payload bytes) struct Envelope {
-    let parent_id = perspective::head_id()
-    let author_id = device::current_device_id()
-    // Get the one time key, and use it here.
-    // TODO: how to get key ID?
-    let author_sign = check_unwrap query DeviceSelfJoinPubKey[device_id: key_id]
-    let author_sign_pk = author_sign.key
-    let author_sign_key_id = idam::derive_sign_key_id(author_sign_pk.key)
-
-    let signed = crypto::sign(author_sign_key_id, payload)
-    return envelope::new(
-        parent_id,
-        author_id,
-        signed.command_id,
-        signed.signature,
-        payload,
-    )
-}
-
-// Opens an envelope using the author's public Device Signing
-// Key.
-//
-// If verification succeeds, it returns the serialized basic
-// command data. Otherwise, if verification fails, it raises
-// a check error.
-function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
-    let author_id = envelope::author_id(sealed_envelope)
-    // TODO update
-    let author_sign_pk = check_unwrap query DeviceSelfJoinPubKey[device_id: author_id]
-    let author_sign_pk = 
-
-    let verified_command = crypto::verify(
-        author_sign_pk.key,
-        envelope::parent_id(sealed_envelope),
-        envelope::payload(sealed_envelope),
-        envelope::command_id(sealed_envelope),
-        envelope::signature(sealed_envelope),
-    )
-    return verified_command
-}
 
 
 ```
