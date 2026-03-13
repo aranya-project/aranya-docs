@@ -114,7 +114,7 @@ The aranya code freeze begins when the aranya release starts and ends after the 
 9. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
 10. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/technical-apis/c-api/
 11. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. (release lead)
-12. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. Release notes must be approved before publishing. (product manager)
+12. **(manual)** Have a product owner, team lead, release lead, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. Release notes must be approved before publishing. (product manager)
 13. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
 14. **(manual)** Schedule a product release retrospective for release process improvements.
