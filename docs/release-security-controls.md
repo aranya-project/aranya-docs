@@ -17,8 +17,8 @@ All items below are tracked under [aranya#730](https://github.com/aranya-project
 | [Branch Protections](#branch-protections) | Add `release/**/*` wildcard branch protection rule | org | all |
 | [Branch Protections](#branch-protections) | Enable "Require review from Code Owners" at org level | org | all |
 | [CI/CD](#cicd) | Update [`release.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/release.yml) trigger to include `branches: release/**/*` | repo (workflow) | aranya |
-| [CI/CD](#cicd) | Update [`publish.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/publish.yml) trigger to include `push: release/**/*` | repo (workflow) | aranya |
-| [CI/CD](#cicd) | Update [`release-plz.yml`](https://github.com/aranya-project/aranya-core/blob/main/.github/workflows/release-plz.yml) trigger to include `push: release/**/*` | repo (workflow) | aranya-core |
+| [CI/CD](#cicd) | Update [`publish.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/publish.yml) trigger to include `branches: release/**/*` | repo (workflow) | aranya |
+| [CI/CD](#cicd) | Update [`release-plz.yml`](https://github.com/aranya-project/aranya-core/blob/main/.github/workflows/release-plz.yml) trigger to include `branches: release/**/*` | repo (workflow) | aranya-core |
 | [Release Environment Protections](#release-environment-protections) | Configure `release` environment with required reviewers and deployment branch restrictions | env-level: `release` | aranya, aranya-core |
 | [Release Environment Protections](#release-environment-protections) | Reference `environment: release` in release workflow jobs | repo (workflow) | aranya, aranya-core |
 | [Secrets Management](#secrets-management) | Store `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in `release` environment | env-level: `release` | aranya, aranya-core |
