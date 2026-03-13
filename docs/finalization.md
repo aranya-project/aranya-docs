@@ -27,7 +27,7 @@ Finalization has two components:
 | Finalization round | The full process of producing a Finalize command for a specific sequence number. May contain multiple consensus rounds if proposals fail. |
 | Consensus round | A single propose-prevote-precommit cycle within a finalization round. If the proposal fails or times out, the round number increments and a new consensus round begins with the next proposer. |
 | Parent of the Finalize command | The graph command that the Finalize command is appended to. All ancestors of the Finalize command become permanent. Consensus decides this. |
-| FactDB Merkle root | A hash over the entire FactDB state at a given point in the graph. Agreement on the Merkle root implies agreement on all derived state (sequence number, finalizer set, pending updates). |
+| FactDB Merkle root | A hash over the entire FactDB state at a given point in the graph, represented in policy as the built-in `factroot` type. Agreement on the Merkle root implies agreement on all derived state (sequence number, finalizer set, pending updates). |
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a parent for the Finalize command for a given consensus round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
@@ -125,17 +125,20 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
 | **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
 | **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
-| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates because the `FinalizeRecord` at the derived seq already exists. Payload-derived command ID means different signature subsets produce the same command. |
+| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates at the same seq because the `FinalizeRecord` already exists. Payload-derived command ID means different signature subsets produce the same command. |
+| **Non-finalizer impersonation** | A non-finalizer node sends consensus messages to influence voting | All consensus messages are signed by the sender's signing key and verified against the current finalizer set. Messages from non-finalizers are dropped. |
 
 ## Finalizer Set
 
-The finalizer set is the group of devices authorized to participate in finalization consensus. Finalizer devices do not need to be members of the team -- they only need a signing key to participate in consensus and can sync graph commands like any other device. This allows dedicated finalization infrastructure that is separate from the team's member devices. The team creator (or owner, for later updates) must know the finalizer's public signing key ID at the time the finalizer is added to the set. The finalizer set can only be changed by devices with the `UpdateFinalizerSet` permission through a dedicated `UpdateFinalizerSet` command.
+The finalizer set is the group of devices authorized to participate in finalization consensus. Finalizer devices do not need to be members of the team -- they only need a signing key to participate in consensus and can sync graph commands like any other device. This allows dedicated finalization infrastructure that is separate from the team's member devices. The team creator (or owner, for later updates) must know the finalizer's public signing key at the time the finalizer is added to the set. The finalizer set can only be changed by devices with the `UpdateFinalizerSet` permission through a dedicated `UpdateFinalizerSet` command.
 
 In the future, finalizers may not need to be devices at all, since all that matters is a signing key. For MVP, finalizers are assumed to be devices.
 
 ### Initialization
 
-The initial finalizer set is established in the team's `Init` command. The `Init` command includes 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key ID. The caller specifies 1 to 7 finalizers. If none are specified, the team owner's public signing key ID is used as the sole initial finalizer.
+The initial finalizer set is established in the team's `Init` command. The `Init` command includes 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key. The caller specifies 1 to 7 finalizers. If none are specified, the team owner's public signing key is used as the sole initial finalizer.
+
+Public signing keys (not key IDs) are stored on-graph because they are required for signature verification during consensus.
 
 ### Set Size and Quorum
 
@@ -186,7 +189,7 @@ This requires a **new command type** in the `aranya-core` runtime. Existing comm
 
 Key properties of multi-author commands:
 
-- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (parent_id, factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
 - **Multiple authors.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is an author endorsing the command.
 - **New FFI functions.** Multi-author commands require new envelope FFI:
   - `seal_multi_author(payload)` -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
@@ -199,9 +202,10 @@ The `Finalize` command makes all of its ancestors permanent. It is the only grap
 
 Properties:
 
-- **Priority**: 0 (processed before all non-ancestor commands in the weave). Other commands may be appended to the same parent as siblings. Priority 0 ensures the Finalize command is ordered before these siblings in the weave, so finalization takes effect first.
+- **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the weave -- higher than any numeric priority value any other command can hold. This is enforced by the runtime, not by a numeric value. It ensures the Finalize command is ordered before all sibling commands in the weave so finalization takes effect first. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
 - **Fields**:
-  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only field. Everything else is either implicit in the DAG (parent command) or derivable from the FactDB state that the Merkle root certifies (sequence number from `FinalizeRecord` facts, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)).
+  - `parent_id` -- The command ID of the parent of the Finalize command. Because each command ID is a hash of its content and its own parent's ID, `parent_id` is effectively a Merkle root of the entire graph up to that point -- it uniquely and cryptographically identifies the full chain of commands being finalized. All ancestors of this command become permanent.
+  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. In theory, the same `parent_id` should always produce identical FactDB state -- the two are redundant in a correct implementation. This field is included during initial development so that finalizers can detect graph/FactDB divergence before voting, surfacing any such bugs in pre-production. Once unit tests confirm that `parent_id` always implies a consistent FactDB state, this field is a candidate for removal as a production optimization (see [Future Work](#future-work)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
@@ -210,6 +214,7 @@ Properties:
 - **Side effects**:
   - Creates a `FinalizeRecord` at the next sequence number (derived from existing records).
   - If a `PendingFinalizerSetUpdate` fact exists, applies it atomically (see [Changing the Finalizer Set](#changing-the-finalizer-set)). The Merkle root check guarantees all finalizers agree on whether a pending update exists.
+  - Emits an effect if the device's own finalizer set membership has changed (added or removed), so the daemon can immediately update its consensus participation state.
 
 ### Finalize Ordering Guarantee
 
@@ -217,7 +222,7 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
 2. The sequence number is derived from the FactDB (`next_finalize_seq()`), so each Finalize command deterministically creates the next `FinalizeRecord` in sequence. Since the `FinalizeRecord` is created by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates are rejected because the `FinalizeRecord` already exists.
+3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates at the same seq are rejected because the `FinalizeRecord` already exists.
 
 ### Finalization and Branches
 
@@ -240,6 +245,8 @@ Once a Finalize command is committed to the graph:
 
 ### FactDB Merkle Root Verification
 
+The Finalize command payload has two fields: `parent_id` (the command ID of the parent, which is effectively a Merkle root of the graph up to that point) and `factdb_merkle_root` (the FactDB Merkle root at that parent). In a correct implementation these are redundant -- the same `parent_id` should always imply the same FactDB state. `factdb_merkle_root` is included during initial development to detect any divergence between graph and FactDB state before it reaches production. Once unit tests confirm the invariant, it is a candidate for removal.
+
 The `verify_factdb_merkle_root` FFI computes the FactDB Merkle root at the current evaluation point and compares it to the expected value. This is an FFI because the policy language cannot access the FactDB's internal hash structure directly.
 
 Before consensus, each finalizer validates the proposal using an ephemeral command that verifies the Merkle root without persisting anything to the graph:
@@ -247,7 +254,7 @@ Before consensus, each finalizer validates the proposal using an ephemeral comma
 ```policy
 ephemeral command VerifyFinalizationProposal {
     fields {
-        factdb_merkle_root bytes,
+        factdb_merkle_root factroot,
     }
 
     seal { return seal(serialize(this)) }
@@ -274,13 +281,13 @@ The `Init` command is extended with finalizer fields (see [Initialization](#init
 command Init {
     fields {
         // ... existing fields ...
-        finalizer1_pub_sign_key optional id,
-        finalizer2_pub_sign_key optional id,
-        finalizer3_pub_sign_key optional id,
-        finalizer4_pub_sign_key optional id,
-        finalizer5_pub_sign_key optional id,
-        finalizer6_pub_sign_key optional id,
-        finalizer7_pub_sign_key optional id,
+        finalizer1_pub_sign_key optional bytes,
+        finalizer2_pub_sign_key optional bytes,
+        finalizer3_pub_sign_key optional bytes,
+        finalizer4_pub_sign_key optional bytes,
+        finalizer5_pub_sign_key optional bytes,
+        finalizer6_pub_sign_key optional bytes,
+        finalizer7_pub_sign_key optional bytes,
     }
 
     // ... existing seal/open ...
@@ -305,7 +312,7 @@ command Init {
     }
 }
 
-fact Finalizer[signing_key_id id]=>{}
+fact Finalizer[pub_sign_key bytes]=>{}
 ```
 
 See [`init_finalizer_set`](#new-ffis) for validation details.
@@ -315,11 +322,12 @@ See [`init_finalizer_set`](#new-ffis) for validation details.
 ```policy
 command Finalize {
     attributes {
-        priority: 0
+        Finalization
     }
 
     fields {
-        factdb_merkle_root bytes,
+        parent_id id,
+        factdb_merkle_root factroot,
     }
 
     // Signatures are in the envelope, not the payload.
@@ -332,6 +340,9 @@ command Finalize {
 
         // Verify quorum of valid signatures from the envelope.
         check verify_finalize_quorum(envelope)
+
+        // Verify parent_id matches the actual parent of this command.
+        check this.parent_id == get_parent_id(envelope)
 
         // Verify the FactDB Merkle root matches the locally computed root.
         check verify_factdb_merkle_root(this.factdb_merkle_root)
@@ -359,6 +370,9 @@ command Finalize {
                 // Consume the pending update.
                 delete PendingFinalizerSetUpdate[]
             }
+
+            // Emit an effect if this device's finalizer set membership changed.
+            emit_finalizer_membership_change_if_needed()
         }
     }
 }
@@ -373,13 +387,13 @@ The `UpdateFinalizerSet` command stages a finalizer set change (see [Changing th
 ```policy
 command UpdateFinalizerSet {
     fields {
-        new_finalizer1_pub_sign_key optional id,
-        new_finalizer2_pub_sign_key optional id,
-        new_finalizer3_pub_sign_key optional id,
-        new_finalizer4_pub_sign_key optional id,
-        new_finalizer5_pub_sign_key optional id,
-        new_finalizer6_pub_sign_key optional id,
-        new_finalizer7_pub_sign_key optional id,
+        new_finalizer1_pub_sign_key optional bytes,
+        new_finalizer2_pub_sign_key optional bytes,
+        new_finalizer3_pub_sign_key optional bytes,
+        new_finalizer4_pub_sign_key optional bytes,
+        new_finalizer5_pub_sign_key optional bytes,
+        new_finalizer6_pub_sign_key optional bytes,
+        new_finalizer7_pub_sign_key optional bytes,
     }
 
     seal { return seal(serialize(this)) }
@@ -421,13 +435,13 @@ command UpdateFinalizerSet {
 }
 
 fact PendingFinalizerSetUpdate[]=> {
-    new_finalizer1_pub_sign_key optional id,
-    new_finalizer2_pub_sign_key optional id,
-    new_finalizer3_pub_sign_key optional id,
-    new_finalizer4_pub_sign_key optional id,
-    new_finalizer5_pub_sign_key optional id,
-    new_finalizer6_pub_sign_key optional id,
-    new_finalizer7_pub_sign_key optional id,
+    new_finalizer1_pub_sign_key optional bytes,
+    new_finalizer2_pub_sign_key optional bytes,
+    new_finalizer3_pub_sign_key optional bytes,
+    new_finalizer4_pub_sign_key optional bytes,
+    new_finalizer5_pub_sign_key optional bytes,
+    new_finalizer6_pub_sign_key optional bytes,
+    new_finalizer7_pub_sign_key optional bytes,
 }
 ```
 
@@ -435,15 +449,16 @@ fact PendingFinalizerSetUpdate[]=> {
 
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, multi-author envelopes, fact iteration over unbounded sets):
 
-- **`init_finalizer_set(envelope, f1..f7)`** -- Initializes the finalizer set from the `Init` command. Validates that all specified key IDs are unique and valid, then creates a `Finalizer` fact for each. Defaults to the team owner if none are specified.
-- **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. For each signature, looks up the public signing key from the signing key ID (via the runtime's key store), verifies the signature against the current finalizer set and the command content. Stops once a quorum of valid, unique finalizer signatures is confirmed. Returns true once quorum is reached; returns false if all signatures are checked without reaching quorum.
-- **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all key IDs are unique, all correspond to valid signing key IDs, and the new set does not shrink below 4 if currently at 4+. Returns true if valid.
+- **`init_finalizer_set(envelope, f1..f7)`** -- Initializes the finalizer set from the `Init` command. Validates that all specified public signing keys are unique and valid, then creates a `Finalizer` fact for each. Defaults to the team owner if none are specified.
+- **`verify_finalize_quorum(envelope)`** -- Reads the signatures from the multi-author envelope. For each signature, looks up the corresponding public signing key from the `Finalizer` facts (keyed by the signing key ID in the envelope), verifies the signature against the command content. Stops once a quorum of valid, unique finalizer signatures is confirmed. Returns true once quorum is reached; returns false if all signatures are checked without reaching quorum.
+- **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all public signing keys are unique and valid, and the new set does not shrink below 4 if currently at 4+. Returns true if valid.
 - **`delete_all_finalizers()`** -- Deletes all current `Finalizer` facts. Required as an FFI because the policy language cannot iterate over an unbounded set of keyed facts.
 - **`create_finalizers_from_pending(pending)`** -- Creates `Finalizer` facts from the fields of a `PendingFinalizerSetUpdate` value.
 - **`latest_finalize_record()`** -- Returns the `FinalizeRecord` with the highest seq. Required as an FFI because the policy language cannot query for the maximum key value.
 - **`verify_factdb_merkle_root(expected_root)`** -- Computes the FactDB Merkle root at the current evaluation point and returns true if it matches the expected root. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
+- **`emit_finalizer_membership_change_if_needed()`** -- Emits an effect if the current device's membership in the finalizer set has changed as a result of this `Finalize` command applying a `PendingFinalizerSetUpdate`. The daemon listens for this effect to immediately update its consensus participation state without re-querying the FactDB.
 
 ## BFT Consensus Protocol
 
@@ -457,7 +472,7 @@ The initial implementation uses the team owner as the sole finalizer (single-fin
 
 ### Single Finalizer
 
-When the finalizer set contains exactly one member, the BFT consensus protocol is skipped. The sole finalizer publishes a `Finalize` command directly with its own signature, which satisfies the quorum check (quorum of 1 is 1).
+When the finalizer set contains exactly one member, the BFT consensus protocol is skipped. The sole finalizer publishes a `Finalize` command directly using the generalized multi-author command type with a single signature. This satisfies the quorum check (quorum of 1 is 1) and keeps the command type consistent regardless of finalizer set size.
 
 This is safe because the finalizer set is always established by a single authoritative source -- the `Init` command or a prior `Finalize` command that applied a pending update. Two devices cannot independently believe they are the sole finalizer at the same sequence number:
 
@@ -469,10 +484,10 @@ This is safe because the finalizer set is always established by a single authori
 Finalization is triggered in three ways:
 
 1. **Periodic scheduling.** The `Init` command emits an effect that schedules the first finalization after a configured delay. Each successful `Finalize` command emits an effect scheduling the next one. Scheduling uses a delay (not wall clock time) -- the daemon tracks the delay locally. Only one finalization can be scheduled at a time; a shorter delay overwrites the current schedule.
-2. **Daemon restart.** When a finalizer daemon comes back online, it attempts to trigger finalization. The daemon skips the attempt if it knows the last finalization was too recent based on its local delay tracking. If the daemon doesn't know (e.g. all finalizers were offline), it proceeds -- redundant proposals are harmless since consensus picks one.
-3. **On-demand.** Any finalizer can initiate a round by signaling other finalizers via the off-graph consensus protocol.
+2. **Daemon restart.** When a finalizer daemon comes back online, it always attempts to trigger finalization. The daemon does not try to determine whether the last finalization was recent -- it proceeds unconditionally and relies on other finalizers to prevote nil if finalization was too recent. This avoids the daemon needing to persist scheduling state across restarts.
+3. **On-demand.** Any finalizer can initiate a finalization round on-demand by signaling other finalizers via the off-graph consensus protocol.
 
-In all cases, the initiating finalizer does not necessarily become the proposer -- the proposer is selected deterministically (see [Agreement](#phase-1-agreement)). If multiple finalizers trigger concurrently, consensus resolves to a single proposal.
+In all cases, the initiating finalizer does not necessarily become the proposer -- the proposer is selected deterministically by the BFT algorithm's proposer rotation (see [Agreement](#phase-1-agreement)). If multiple finalizers trigger concurrently, consensus resolves to a single proposal.
 
 ### Finalization Round
 
@@ -487,7 +502,7 @@ Finalizers that do not have the proposed parent sync with the proposer to obtain
 1. **Computes the FactDB Merkle root** at the proposed parent from its local graph and FactDB.
 2. **Verifies it matches** the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
 3. **Checks the finalization epoch** -- The proposed parent must be after the last Finalize command (not re-finalizing already-finalized history).
-4. **Checks the proposer** -- The proposing device must be in the current finalizer set.
+4. **Checks the proposer** -- The proposing device must be in the current finalizer set. The proposal is signed by the proposer's signing key; the recipient verifies the signature against the `Finalizer` facts to confirm membership.
 
 Only after successful validation does the finalizer proceed to vote in consensus. The Finalize command itself is not constructed until after consensus reaches agreement (see [Signature Collection](#phase-2-signature-collection)).
 
@@ -515,9 +530,9 @@ If a quorum prevote nil, the round advances immediately to the next proposer.
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon FactDB Merkle root. Because the Merkle root is deterministic given the parent, every finalizer produces the same payload and therefore the same command ID.
+Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon parent command ID and FactDB Merkle root. Because both values are determined by consensus, every finalizer produces the same payload and therefore the same command ID.
 
-Each finalizer signs the payload and requests signatures from the other finalizers. A finalizer stops requesting once it has collected at least a quorum of signatures.
+Each finalizer signs the payload. To avoid unnecessary work, a finalizer MAY defer signing until it receives its first signature request from another finalizer (lazy signing). The signed payload MUST be cached so subsequent requests for the same payload can be served without re-signing. A finalizer then requests signatures from the other finalizers and stops once it has collected at least a quorum.
 
 Different finalizers may end up with different subsets of signatures -- any valid quorum-sized subset proves consensus.
 
@@ -553,15 +568,15 @@ Finalizer network addresses are configured at runtime via the client API:
 - **`add_finalizer_peer(pub_signing_key_id, address)`** -- Registers a finalizer peer's network address. The local finalizer establishes (or reuses) a QUIC connection to this address for consensus communication.
 - **`remove_finalizer_peer(pub_signing_key_id)`** -- Removes a finalizer peer.
 
-The on-graph finalizer set contains only public signing key IDs. Mapping key IDs to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
+The on-graph finalizer set contains full public signing keys. Mapping signing keys to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
 
 When the finalizer set changes (via an `UpdateFinalizerSet` command), peer configurations for finalizers no longer in the set are automatically removed. New finalizers must be configured by the operator before they can participate in consensus.
 
 Non-finalizer devices do not need to configure finalizer peers.
 
-**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. Each finalizer maintains connections to all other finalizers and sends messages directly -- there is no relay or gossip layer.
+**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Connections that are no longer needed MAY be dropped between rounds and re-established when the next round begins -- persistent connections to all finalizers are not required.
 
-**Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature, confirms the signing key ID belongs to a member of the current finalizer set, and checks that the key ID matches the expected key ID for the QUIC connection's source address (based on the configured finalizer peer mappings). Messages that fail any of these checks are dropped.
+**Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature, confirms the public signing key belongs to a member of the current finalizer set (by looking it up in the `Finalizer` facts), and checks that the key matches the expected key for the QUIC connection's source address (based on the configured finalizer peer mappings). Messages that fail any of these checks are dropped.
 
 #### Consensus Message Types
 
@@ -589,7 +604,7 @@ Timeouts increase linearly with each successive consensus round to accommodate n
 timeout(r) = base_timeout + r * timeout_increment
 ```
 
-Where `r` is the consensus round number (starting at 0). The first consensus round uses `base_timeout`; each subsequent consensus round adds `timeout_increment` to give the network more time to deliver messages.
+Where `r` is the consensus round number (starting at 0). The default `timeout_increment` is 50% of `base_timeout` (e.g., if `base_timeout` is 30s, each successive round adds 15s). The first consensus round uses `base_timeout`; each subsequent round adds `timeout_increment`. All timeout values are configurable per deployment.
 
 Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the consensus round advances to the next proposer without waiting for any timeout.
 
@@ -598,7 +613,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 Consensus state is not persisted -- all consensus messages are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
 
 1. Query the highest `FinalizeRecord` seq to determine the last completed finalization.
-2. Check if this device is in the current finalizer set (query `Finalizer` facts).
+2. Check if this device is in the current finalizer set (query `Finalizer` facts). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its membership state by listening for the `emit_finalizer_membership_change_if_needed` effect emitted by `Finalize` commands.
 3. If a finalizer, connect to configured finalizer peers and join whatever consensus round is currently active. The Tendermint protocol handles late joiners without needing prior history.
 
 A daemon being offline does not block finalization -- as long as a quorum remains online, consensus continues. Stalled rounds advance automatically via timeout. If all finalizers restart simultaneously, they independently determine the current sequence number from FactDB and the deterministic proposer rotation ensures they agree on who proposes first.
@@ -624,8 +639,8 @@ The consensus protocol is implemented using the malachite library. The integrati
 
 | Malachite Concept | Aranya Mapping |
 |---|---|
-| `Value` | Finalize command content (factdb_merkle_root) and proposed parent |
-| `ValueId` | Hash of the proposed Finalize command content (the FactDB Merkle root) |
+| `Value` | Finalize command payload (parent_id, factdb_merkle_root) |
+| `ValueId` | Hash of the Finalize command payload (parent_id + factdb_merkle_root) |
 | `Height` | Finalization sequence number (derived from FactDB) |
 | `Validator` | Finalizer device. Malachite uses "validator" for what Aranya calls a "finalizer". |
 | `ValidatorSet` | Current finalizer set. Derived from `Finalizer` facts. Updated atomically when a `Finalize` command applies a `PendingFinalizerSetUpdate`. |
@@ -675,7 +690,7 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 6. **Decision.** All finalizers observe 4 precommits for the proposal. Agreement is reached.
 
-7. **Signature collection.** Each finalizer constructs the Finalize command content (factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
+7. **Signature collection.** Each finalizer constructs the Finalize command payload (parent_id=&lt;agreed parent&gt;, factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
 
 8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it to their local graph. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `FinalizeRecord[seq: 3]` already exists.
 
@@ -723,11 +738,11 @@ The initial finalizer set MUST be established in the team's `Init` command.
 
 #### FSET-002
 
-The `Init` command MUST support 1 to 7 optional finalizer fields, each containing a public signing key ID.
+The `Init` command MUST support 1 to 7 optional finalizer fields, each containing a public signing key.
 
 #### FSET-003
 
-If no finalizers are specified in `Init`, the team owner's public signing key ID MUST be used as the sole initial finalizer.
+If no finalizers are specified in `Init`, the team owner's public signing key MUST be used as the sole initial finalizer.
 
 #### FSET-004
 
@@ -759,7 +774,7 @@ If a second `UpdateFinalizerSet` is published before the next finalization, the 
 
 #### FSET-011
 
-All specified finalizer key IDs in an `UpdateFinalizerSet` or `Init` command MUST be unique and valid.
+All specified finalizer keys in an `UpdateFinalizerSet` or `Init` command MUST be unique and valid public signing keys.
 
 ### Multi-Author Commands
 
@@ -779,11 +794,11 @@ Different valid subsets of author signatures MUST produce the same command ID fo
 
 #### FPOL-001
 
-The Finalize command MUST have priority 0.
+The Finalize command MUST carry the `Finalization` attribute, giving it the highest priority in the weave. This priority is not a numeric value -- it is enforced by the runtime as an absolute ordering above all other commands.
 
 #### FPOL-002
 
-The Finalize command MUST contain exactly one field: `factdb_merkle_root` (the FactDB Merkle root at the parent of the Finalize command).
+The Finalize command payload MUST contain `parent_id` (the command ID of the parent of the Finalize command, which commits to the full graph chain up to that point). During initial development, the payload MUST also contain `factdb_merkle_root` (typed as `factroot`) to validate graph/FactDB consistency. Once unit tests confirm that `parent_id` always implies consistent FactDB state, `factdb_merkle_root` MAY be removed as a production optimization.
 
 #### FPOL-003
 
@@ -803,11 +818,15 @@ If a `PendingFinalizerSetUpdate` fact exists when the Finalize command is evalua
 
 #### FPOL-007
 
-Policy MUST reject duplicate Finalize commands because the `FinalizeRecord` at the derived seq already exists.
+Policy MUST reject Finalize commands with a duplicate sequence number. Multiple Finalize commands MAY exist in the graph as part of the finalization chain, but no two MAY share the same seq.
 
 #### FPOL-008
 
 The `Init` command MUST create an initial `FinalizeRecord` at seq 0 so the first Finalize command's sequential check has no special case.
+
+#### FPOL-009
+
+The Finalize command MUST emit an effect if the evaluating device's finalizer set membership changed as a result of applying a `PendingFinalizerSetUpdate`.
 
 ### Pre-Consensus Validation
 
@@ -829,7 +848,7 @@ The proposed parent MUST be after the last Finalize command (the proposed parent
 
 #### VAL-005
 
-The proposing device MUST be a member of the current finalizer set.
+The proposing device MUST be a member of the current finalizer set. The proposal MUST be signed by the proposer's signing key, and the recipient MUST verify this signature against the `Finalizer` facts before accepting the proposal.
 
 #### VAL-006
 
@@ -871,17 +890,17 @@ If precommit quorum is not reached (nil quorum or timeout), the consensus round 
 
 #### CONS-009
 
-When the finalizer set contains exactly one member, the BFT consensus protocol MUST be skipped. The sole finalizer MUST publish a Finalize command directly with its own signature.
+When the finalizer set contains exactly one member, the BFT consensus protocol MUST be skipped. The sole finalizer MUST publish a Finalize command directly using the generalized multi-author command type with a single signature.
 
 ### Signature Collection
 
 #### SIG-001
 
-After agreement, each finalizer MUST deterministically construct the Finalize command payload from the agreed-upon FactDB Merkle root.
+After agreement, each finalizer MUST deterministically construct the Finalize command payload from the agreed-upon parent command ID and FactDB Merkle root.
 
 #### SIG-002
 
-Each finalizer MUST sign the payload and request signatures from the other finalizers.
+Each finalizer MUST sign the payload. A finalizer MAY defer signing until it receives its first signature request (lazy signing). The signed payload MUST be cached to avoid re-signing for subsequent requests.
 
 #### SIG-003
 
@@ -895,7 +914,7 @@ Any finalizer that has collected a quorum of signatures MUST attach them to the 
 
 #### CMT-002
 
-The policy MUST ensure only the first Finalize command to be woven succeeds; duplicates MUST be rejected because the `FinalizeRecord` already exists.
+The policy MUST ensure only the first Finalize command at a given seq to be woven succeeds; duplicates MUST be rejected because the `FinalizeRecord` already exists.
 
 ### Triggering Finalization
 
@@ -913,19 +932,19 @@ Finalization scheduling MUST use a delay (not wall clock time). The daemon MUST 
 
 #### TRIG-004
 
-When a finalizer daemon starts or restarts, it MUST attempt to trigger finalization.
+When a finalizer daemon starts or restarts, it MUST attempt to trigger finalization unconditionally. The daemon MUST NOT skip the attempt based on local delay state -- it relies on other finalizers to prevote nil if finalization was too recent.
 
 #### TRIG-005
 
-The daemon SHOULD skip the finalization attempt if it knows the last finalization was too recent based on its local delay tracking. If the daemon does not know when the last finalization occurred, it MUST proceed with the attempt.
+If multiple finalizers trigger concurrently, the consensus protocol MUST resolve to a single proposal. Redundant trigger attempts are harmless.
 
 #### TRIG-006
 
-Any finalizer MUST be able to initiate a round on-demand by signaling other finalizers via the off-graph consensus protocol.
+Any finalizer MUST be able to initiate a finalization round on-demand by signaling other finalizers via the off-graph consensus protocol.
 
 #### TRIG-007
 
-The initiating finalizer MUST NOT necessarily become the proposer. The proposer MUST be selected by the deterministic rotation.
+The initiating finalizer MUST NOT necessarily become the proposer. The proposer MUST be selected by the deterministic proposer rotation of the BFT algorithm.
 
 ### Consensus Communication
 
@@ -947,7 +966,7 @@ When the finalizer set changes, peer configurations for finalizers no longer in 
 
 #### COMM-005
 
-Consensus messages (proposals, votes, signature shares) MUST be pushed to all configured finalizer peers. Each finalizer MUST maintain connections to all other finalizers.
+Consensus messages (proposals, votes, signature shares) MUST be pushed to all configured finalizer peers. Finalizers connect to peers on demand at the start of each finalization round. Connections MAY be dropped between rounds and re-established when the next round begins.
 
 #### COMM-006
 
@@ -955,7 +974,7 @@ Each consensus message MUST be signed by the sender's signing key.
 
 #### COMM-007
 
-The recipient MUST verify the signature, confirm the signing key ID belongs to a member of the current finalizer set, and check that the key ID matches the expected key ID for the QUIC connection's source address. Messages that fail any check MUST be dropped.
+The recipient MUST verify the signature, confirm the public signing key belongs to a member of the current finalizer set (by looking it up in the `Finalizer` facts), and check that the key matches the expected key for the QUIC connection's source address. Messages that fail any check MUST be dropped.
 
 ### Timeouts
 
@@ -965,7 +984,7 @@ Each consensus phase (propose, sync, prevote, precommit) MUST have a configurabl
 
 #### TMOUT-002
 
-Timeouts MUST increase linearly with each successive consensus round: `timeout(r) = base_timeout + r * timeout_increment`.
+Timeouts MUST increase linearly with each successive consensus round: `timeout(r) = base_timeout + r * timeout_increment`. The default `timeout_increment` SHOULD be 50% of `base_timeout`.
 
 #### TMOUT-003
 
@@ -979,7 +998,7 @@ Consensus state MUST NOT be persisted. When a daemon starts or restarts, any in-
 
 #### FAULT-002
 
-On startup, the daemon MUST determine finalization state from its local FactDB by querying the highest `FinalizeRecord` seq and checking if the device is in the current finalizer set.
+On startup, the daemon MUST determine finalization state from its local FactDB by querying the highest `FinalizeRecord` seq and checking if the device is in the current finalizer set. Subsequently, the daemon MUST maintain its membership state by listening for the effect emitted by FPOL-009.
 
 #### FAULT-003
 
@@ -1003,10 +1022,10 @@ Each finalizer MUST log votes observed during each consensus round, including eq
 
 ## Future Work
 
+- **FactDB Merkle root consistency** -- The `factdb_merkle_root` field in the Finalize command is included during initial development to validate that the same `parent_id` always produces identical FactDB state across all nodes. Once unit tests confirm this invariant, `factdb_merkle_root` can be dropped from the Finalize command payload as a production optimization, leaving `parent_id` as the sole payload field.
 - **Role-based finalizer set management** -- The `UpdateFinalizerSet` permission can be delegated to roles other than Owner. Future work could add additional governance controls (e.g. requiring multiple approvals or time-delayed updates).
 - **Graph-based consensus transport** -- Relay consensus messages as graph commands instead of requiring direct QUIC connections between finalizers. This would allow consensus to work through the existing sync topology without finalizers needing to know each other's network addresses. Requires graph support for non-permanent commands (e.g. truncation or branch-level garbage collection).
-- **Weave Merkle root** -- Add a weave Merkle root alongside the FactDB Merkle root in the Finalize command. The weave Merkle tree would be built from command hashes in weave order. This enables truncation (retain only roots as compact proof of prior state) and light clients (verify finalized state without replaying the full weave). The FactDB Merkle root is already included in the Finalize command.
-- **Truncation** -- Define a garbage collection strategy for finalized graph data. Requires Merkle roots to retain compact proofs of truncated state.
+- **Truncation** -- Define a garbage collection strategy for finalized graph data. The `parent_id` field in the Finalize command already serves as a Merkle root of the graph up to that point and can function as a compact proof of prior graph state, without requiring a separate weave Merkle root.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
 - **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
 - **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
