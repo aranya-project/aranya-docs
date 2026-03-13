@@ -202,7 +202,7 @@ The `Finalize` command makes all of its ancestors permanent. It is the only grap
 
 Properties:
 
-- **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the weave -- higher than any numeric priority value any other command can hold. This is enforced by the runtime, not by a numeric value. It ensures the Finalize command is ordered before all sibling commands in the weave so finalization takes effect first. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
+- **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the weave -- higher than any numeric priority value any other command can hold. The runtime's weave ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the weave construction code. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
 - **Fields**:
   - `parent_id` -- The command ID of the parent of the Finalize command. Because each command ID is a hash of its content and its own parent's ID, `parent_id` is effectively a Merkle root of the entire graph up to that point -- it uniquely and cryptographically identifies the full chain of commands being finalized. All ancestors of this command become permanent.
   - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. In theory, the same `parent_id` should always produce identical FactDB state -- the two are redundant in a correct implementation. This field is included during initial development so that finalizers can detect graph/FactDB divergence before voting, surfacing any such bugs in pre-production. Once unit tests confirm that `parent_id` always implies a consistent FactDB state, this field is a candidate for removal as a production optimization (see [Future Work](#future-work)).
@@ -239,7 +239,7 @@ Branches do not finalize in parallel. Parallel finalization would produce Finali
 
 Once a Finalize command is committed to the graph:
 
-- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this by preventing any future command from modifying facts established by finalized commands.
+- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this through weave ordering rather than by rejecting new commands. The `Finalization` attribute ensures the Finalize command is always ordered before any siblings in the weave, and any new command must be appended to the Finalize command or one of its descendants -- never before it. This means new commands can only extend the graph forward from the finalized point, never insert before it.
 - Commands on branches that conflict with the finalized weave are permanently recalled.
 - Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
@@ -724,7 +724,7 @@ Branches MUST NOT finalize in parallel.
 
 #### FIN-007
 
-The runtime MUST prevent any future command from modifying facts established by finalized commands.
+The runtime MUST ensure that finalized commands can never be preceded by new commands in the weave. This is enforced by the `Finalization` attribute's weave ordering guarantee combined with the requirement that new commands can only be appended to the Finalize command or its descendants.
 
 #### FIN-008
 
