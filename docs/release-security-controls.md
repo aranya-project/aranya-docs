@@ -81,7 +81,7 @@ Release workflows ([`release.yml`](https://github.com/aranya-project/aranya/blob
 | Setting | Value | Level | Workflow files | Notes |
 |---|---|---|---|---|
 | Deployment branches | `main` and `release/**/*` | env-level: `release` | -- | Restricts which branches can deploy to this environment |
-| Required reviewers | At least 1 team lead or release manager | env-level: `release` | -- | Human approval gate before release workflows proceed |
+| Required reviewers | At least 1 team lead or release lead | env-level: `release` | -- | Human approval gate before release workflows proceed |
 | Workflow `environment: release` | Referenced in release jobs | repo (workflow) | [`release.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/release.yml) (aranya), [`release-plz.yml`](https://github.com/aranya-project/aranya-core/blob/main/.github/workflows/release-plz.yml) (aranya-core) | Required for environment protections to take effect |
 
 The `release` environment is configured in both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments). The release workflow jobs in both repos reference it:
