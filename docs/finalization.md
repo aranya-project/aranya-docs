@@ -103,7 +103,7 @@ The consensus protocol assumes the standard BFT fault model: at most f of the n 
 
 ### Why Multi-Party Finalization
 
-Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus extends the owner's finalization authority to a larger set of devices. Because the owner controls the finalizer set via `UpdateFinalizerSet`, the security of multi-party finalization is bounded by the security of the owner -- a compromised owner can undermine the finalizer set in either model. The primary benefits of multi-party are availability and defense against compromised non-owner finalizers:
+Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus does not improve the security of finalization beyond what's available if the owner is the sole finalizer -- it improves availability by distributing the owner's finalization authority equally across a set of finalizers. Because the owner controls the finalizer set via `UpdateFinalizerSet`, the security of multi-party finalization is bounded by the security of the owner -- a compromised owner can undermine the finalizer set in either model.
 
 | Concern | Single finalizer (owner) | Multi-party (BFT) |
 |---|---|---|
