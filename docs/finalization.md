@@ -424,7 +424,7 @@ Finalization is triggered in three ways:
 
 1. **Periodic scheduling.** The `Init` command emits an effect that schedules the first finalization after a configured delay. Each successful `Finalize` command emits an effect scheduling the next one. Scheduling uses a delay (not wall clock time) -- the daemon tracks the delay locally. Only one finalization can be scheduled at a time; a shorter delay overwrites the current schedule.
 2. **Daemon restart.** When a finalizer daemon comes back online, it attempts to trigger finalization. The daemon skips the attempt if it knows the last finalization was too recent based on its local delay tracking. If the daemon doesn't know (e.g. all finalizers were offline), it proceeds -- redundant proposals are harmless since consensus picks one.
-3. **On-demand.** Any finalizer can publish a start-finalization command to initiate a round.
+3. **On-demand.** Any finalizer can initiate a round by signaling other finalizers via the off-graph consensus protocol.
 
 In all cases, the initiating finalizer does not necessarily become the proposer -- the proposer is selected deterministically (see [Agreement](#phase-1-agreement)). If multiple finalizers trigger concurrently, consensus resolves to a single proposal.
 
