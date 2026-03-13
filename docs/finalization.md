@@ -199,7 +199,7 @@ Properties:
 
 - **Priority**: 0 (processed before all non-ancestor commands in the weave). Other commands may be appended to the same finalization point as siblings. Priority 0 ensures the Finalize command is ordered before these siblings in the weave, so finalization takes effect first.
 - **Fields**:
-  - `factdb_merkle_root` -- Hash of the FactDB Merkle root at the finalization point. This is the only field. Everything else is either implicit in the DAG (parent command) or derivable from the FactDB state that the Merkle root certifies (sequence number from `FinalizeRecord` facts, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches during ephemeral branch validation before consensus.
+  - `factdb_merkle_root` -- Hash of the FactDB Merkle root at the finalization point. This is the only field. Everything else is either implicit in the DAG (parent command) or derivable from the FactDB state that the Merkle root certifies (sequence number from `FinalizeRecord` facts, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
@@ -432,18 +432,18 @@ In all cases, the initiating finalizer does not necessarily become the proposer 
 
 A finalization round produces a single Finalize command for a specific sequence number. It may span multiple consensus rounds if proposals fail. Each consensus round is a single propose-prevote-precommit cycle. The finalization round has three phases: agreement (which may take multiple consensus rounds), signature collection, and commit.
 
-#### Pre-Consensus Validation (Ephemeral Branch)
+#### Pre-Consensus Validation
 
-Before signing any consensus vote, each finalizer validates the proposed Finalize command on an ephemeral branch. This ensures that signatures certify a policy-validated finalization, not just trust in the proposer. Without this step, a finalizer would blindly sign a command it hasn't verified, defeating the purpose of multi-party consensus.
+Before voting in consensus, each finalizer independently validates the proposal by verifying the FactDB Merkle root. This ensures that signatures certify verified state agreement, not just trust in the proposer. Without this step, a finalizer would blindly sign a state it hasn't verified, defeating the purpose of multi-party consensus.
 
-The proposer is elected first and broadcasts a proposal with a finalization point and FactDB Merkle root. Finalizers that do not have the proposed finalization point sync with the proposer to obtain it. Each finalizer then evaluates the proposed Finalize command on an ephemeral branch (not committed to the graph) and checks:
+Finalizers that do not have the proposed finalization point sync with the proposer to obtain it. Each finalizer then:
 
-1. **FactDB Merkle root matches** -- The finalizer computes the FactDB Merkle root at the proposed finalization point and verifies it matches the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
-2. **Correct finalization epoch** -- The proposed finalization point is after the last finalization point (not re-finalizing already-finalized history).
-3. **Proposer is a valid finalizer** -- The proposing device is in the current finalizer set.
-4. **Policy passes** -- The command passes all policy checks (quorum, Merkle root, etc.).
+1. **Computes the FactDB Merkle root** at the proposed finalization point from its local graph and FactDB.
+2. **Verifies it matches** the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
+3. **Checks the finalization epoch** -- The proposed finalization point must be after the last finalization point (not re-finalizing already-finalized history).
+4. **Checks the proposer** -- The proposing device must be in the current finalizer set.
 
-Only after successful ephemeral validation does the finalizer proceed to vote in consensus.
+Only after successful validation does the finalizer proceed to vote in consensus. The Finalize command itself is not constructed until after consensus reaches agreement (see [Signature Collection](#phase-2-signature-collection)).
 
 #### Phase 1: Agreement
 
@@ -457,9 +457,9 @@ The goal of this phase is for finalizers to agree on a finalization point -- the
 - **Finalization point** -- The graph command that the Finalize command is appended to (its parent in the DAG). This is not a payload field -- it is the position in the graph where the Finalize command is placed. All ancestors of the Finalize command become permanent.
 - **FactDB Merkle root** -- Hash of the FactDB Merkle root at the finalization point. Agreement on the Merkle root implies agreement on the sequence number, finalizer set, and any pending updates -- all are derivable from the FactDB.
 
-**Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed finalization point in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the finalization point, it performs ephemeral branch validation (see [Pre-Consensus Validation](#pre-consensus-validation-ephemeral-branch)).
+**Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed finalization point in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the finalization point, it validates the proposal by computing and comparing the FactDB Merkle root (see [Pre-Consensus Validation](#pre-consensus-validation)).
 
-**Prevote.** If ephemeral validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: ephemeral validation fails, the finalization point does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
+**Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: validation fails, the finalization point does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
 
 If a quorum prevote nil, the round advances immediately to the next proposer.
 
@@ -621,7 +621,7 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 3. **Proposal.** B selects a finalization point from its local graph, computes the FactDB Merkle root at that point, and broadcasts the proposal (round=0, finalization point, factdb_merkle_root) to A, C, and D.
 
 4. **Sync and validate.** Each finalizer receives the proposal and validates it:
-   - A, C: Have the finalization point. Ephemeral validation passes (Merkle roots match). Broadcast prevote.
+   - A, C: Have the finalization point. Validation passes (Merkle roots match). Broadcast prevote.
    - B: Also prevotes for its own proposal.
    - D: Missing the finalization point. Syncs with B to obtain it, then validates. Merkle roots match. Broadcasts prevote.
 
