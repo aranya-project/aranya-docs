@@ -106,7 +106,7 @@ The aranya code freeze begins when the aranya release starts and ends after the 
    - Publish crates to crates.io
    - Publish C API Doxygen docs to the gh-pages branch
    The release workflow pauses at the environment approval gate before accessing the crates.io publish credential.
-5. **(manual)** Approve the release environment deployment in the GitHub Actions UI. A team lead or release manager must approve access to the `release` environment before the workflow can publish crates and create the release. See [Release Environment Protections](/release-security-controls/#release-environment-protections) for details.
+5. **(manual)** Approve the release environment deployment in the GitHub Actions UI. A team lead or release lead must approve access to the `release` environment before the workflow can publish crates and create the release. See [Release Environment Protections](/release-security-controls/#release-environment-protections) for details.
 6. **(manual)** Verify that all CI/CD workflows succeeded on the `main` branch after merging.
 7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
