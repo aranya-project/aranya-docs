@@ -11,7 +11,7 @@ name: release
 description: Assist with the Aranya release process including version bumps, changelogs, patch releases, and documentation updates
 disable-model-invocation: true
 user-invocable: true
-argument-hint: [release-type] [version]
+argument-hint: [release-type] [version|checklist]
 allowed-tools: Read, Grep, Glob, Bash(git *), Bash(cargo *), Edit, Write
 ---
 
@@ -24,7 +24,7 @@ You are assisting with the Aranya release process. Before proceeding, read the f
 
 ## Arguments
 
-- `$0` - Release type: `major`, `minor`, `patch`, or `docs`
+- `$0` - Release type: `major`, `minor`, `patch`, `docs`, or `checklist`
 - `$1` - Version number (e.g., `5.1.0`) or vulnerability ID for patches (e.g., `RUSTSEC-2026-0007`)
 
 ## Release Types
@@ -44,6 +44,22 @@ For security patch releases:
 3. Help cherry-pick fixes from main
 4. Bump the patch version (X.Y.Z → X.Y.(Z+1), or (X+1).Y.Z if breaking)
 5. Generate release notes explaining the vulnerability
+
+### Release Checklist (`/release checklist [version]`)
+
+Generate a GitHub issue checklist for tracking release progress. This reads the steps directly from `docs/release-process.md` so the checklist always reflects the current process.
+
+1. Read `docs/release-process.md` to get the current release steps
+2. Ask the user for the version, release date, and release lead (GitHub username) if not provided
+3. Generate a markdown checklist issue body structured as:
+   - **Code Freeze (1 day before release)** -- manual steps from "Aranya-Core Release Steps"
+   - **Release Day / Pre-Merge** -- steps up through merging the release PR and approving the environment deployment from "Aranya Release Steps"
+   - **Release Day / Post-Merge Verification** -- verification steps from "Aranya Release Steps"
+   - **Announcements** -- announcement and retrospective steps
+   - **Post-Release** -- steps from "Post-Release Checklist"
+4. Each checklist item should be a `- [ ]` checkbox derived from the `(manual)` steps in the doc. Omit `(automated)` steps since they do not require human action, but include the manual verification/approval steps that follow automated steps.
+5. Output the checklist as a fenced markdown block the user can copy, or offer to create the GitHub issue directly using `gh issue create`
+
 
 ### Documentation Update (`/release docs`)
 

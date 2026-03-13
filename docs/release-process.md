@@ -10,22 +10,17 @@ permalink: "/release-process/"
 
 Major releases will generally occur on a 6-week cadence. Special releases or patch releases may also occur between major releases to include certain feature sets or address security vulnerabilities and critical bugs.
 
-### Assumptions
-
-#### Release Security
-
-See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
-
-#### Development Assumptions
-
-Code merged into main (or any protected branch we plan to release from) that is not behind a feature flag is assumed to be a completed feature from the perspective of the release process. Completeness is determined by the development team during PR review, which evaluates code quality and test coverage. Incomplete or unstable features should be staged on feature branches or hidden behind feature flags (e.g., `preview` for APIs approaching stability, `experimental` for early-stage work). This allows the aranya repo to run `cargo update` to get the latest versions of all aranya-core crates without incorporating partially implemented features. It also means we can release from a protected branch at any time without a case-by-case assessment of whether the code is release-worthy, since this is guaranteed by the development process itself.
-
 ## Automation Markers
 
 Throughout this document, tasks are marked to indicate their level of automation:
 
 - **(manual)** - Requires human action with no automation support
 - **(automated)** - Fully automated by CI/CD workflows; human action is limited to verification
+
+## Release Security
+
+See [Release Security Controls](/release-security-controls/) for detailed documentation of branch protections, CI/CD workflows, environment protections, and secrets management that secure the release pipeline. These controls also serve as our automated QA process: peer review ensures test coverage on PRs, CI runs automated tests on every PR and release, and required status checks and approvals must pass before merging.
+
 
 ## Pre-Release Checklist
 
@@ -86,11 +81,13 @@ A code freeze prevents new changes from landing while a release is in progress. 
 
 4. **(manual)** Merge the aranya-core release PR into `main`.
 
-5. **(automated)** CI automatically publishes new crates or crates with updated versions to crates.io after the release PR is merged.
+5. **(automated)** CI automatically publishes new crates or crates with updated versions to crates.io after the release PR is merged. The release workflow pauses at the environment approval gate before accessing the crates.io publish credential.
 
-6. **(manual)** Verify that the release workflow passed and that the updated crates are visible on crates.io. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow.
+6. **(manual)** Approve the release environment deployment in the GitHub Actions UI. A team lead or release manager must approve access to the `release` environment before the workflow can publish crates. See [Release Environment Protections](/release-security-controls/#release-environment-protections) for details.
 
-7. **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
+7. **(manual)** Verify that the release workflow passed and that the updated crates are visible on crates.io. If release-plz indicates a crate could not be published due to an "authentication error", contact DevOps to refresh the credential and update `CARGO_REGISTRY_TOKEN` in the GitHub actions workflow.
+
+8. **(manual)** Verify aranya builds successfully with the newly released aranya-core crates. (release lead)
 
 ## Aranya Release Process (release day)
 
@@ -108,17 +105,19 @@ The aranya code freeze begins when the aranya release starts and ends after the 
    - Upload artifacts (executables, libraries, C headers, Rust docs, Doxygen docs) to the GitHub release
    - Publish crates to crates.io
    - Publish C API Doxygen docs to the gh-pages branch
-5. **(manual)** Verify that all CI/CD workflows succeeded on the `main` branch after merging.
-6. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
+   The release workflow pauses at the environment approval gate before accessing the crates.io publish credential.
+5. **(manual)** Approve the release environment deployment in the GitHub Actions UI. A team lead or release lead must approve access to the `release` environment before the workflow can publish crates and create the release. See [Release Environment Protections](/release-security-controls/#release-environment-protections) for details.
+6. **(manual)** Verify that all CI/CD workflows succeeded on the `main` branch after merging.
+7. **(manual)** Verify that expected aranya-* crates were released on crates.io: https://crates.io/search?q=aranya
    - See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates that should have been released.
-7. **(manual)** Verify that release artifacts were attached to the GitHub release.
-8. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
-9. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/technical-apis/c-api/
-10. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. (release lead)
-11. **(manual)** Have a product owner, team lead, release manager, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. Release notes must be approved before publishing. (product manager)
-12. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
+8. **(manual)** Verify that release artifacts were attached to the GitHub release.
+9. **(manual)** Verify that docs.rs pages built correctly for all Aranya crates. See [aranya/crates](https://github.com/aranya-project/aranya/tree/main/crates) for a list of crates to verify. If docs are not yet available, check the [docs.rs build queue](https://docs.rs/releases/queue).
+10. **(manual)** Update C API docs landing page URLs with the newly released Doxygen docs (verify existing links are correct). The landing page lives in the [aranya-project.github.io](https://github.com/aranya-project/aranya-project.github.io) repo at https://aranya-project.github.io/technical-apis/c-api/
+11. **(manual)** Add release notes using GitHub's autogenerate feature. Include anything special about the release that end users should know. (release lead)
+12. **(manual)** Have a product owner, team lead, release lead, and/or product engineer review the release: release notes, CI workflows, published docs, uploaded artifacts, and crates.io listings. Release notes must be approved before publishing. (product manager)
+13. **(manual)** Announce the release internally to the entire company and all leadership stakeholders. (release lead)
     - Example: "Aranya v[VERSION] released. [1-2 sentence summary]. Release notes: [LINK]"
-13. **(manual)** Schedule a product release retrospective for release process improvements.
+14. **(manual)** Schedule a product release retrospective for release process improvements.
 
 ### Release PR Guidelines
 
@@ -174,7 +173,7 @@ Occasionally, release-related CI or workflow issues need to be fixed separately 
 
 ## Post-Release Checklist
 
-- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub repo secrets for both [aranya](https://github.com/aranya-project/aranya/settings/secrets/actions) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/secrets/actions).
+- **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub environment secrets for both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
 
 ## Patch Releases
 
@@ -222,8 +221,30 @@ Once the issue is identified:
 
 6. **(manual)** Bump the version to X.Y.Z and update changelogs.
 
-7. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch.
+7. **(manual)** Open a PR targeting the base branch with the version bump and cherry-picked fixes. Once approved, merge the patch release branch into the base branch. **Note:** Release base branches (`release/**/*`) should be configured as protected branches. See [Release Security Controls](/release-security-controls/) for details.
 
 8. **(manual)** Follow the [Aranya Release Steps](#aranya-release-steps) to complete the release from the base branch.
 
 9. **(manual)** Document the release with clear notes explaining the vulnerability and why the patch was issued, even if the codebase wasn't directly affected.
+
+
+## Future Improvements
+
+The following improvements have been identified but not yet implemented:
+
+### Process Gaps
+
+- **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes.
+- **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through.
+
+### Automation Opportunities
+
+- **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo. In the meantime, use `/release checklist [version]` to generate a checklist issue from the current release steps.
+- **Automate verification tasks** - Steps 6-8 (verifying workflows succeeded, crates published, artifacts attached) could be automated with a script.
+- **Calendar blocking** - Could be partially automated with a calendar integration or template invite.
+- **Rustdocs warning check** - Could be automated as a CI check rather than a manual pre-release task.
+
+### Risk Mitigation
+
+- **Credential expiration monitoring** - Add recurring reminders or automated alerts for credential expiration instead of relying on manual calendar entries.
+- **Release checklist sign-off** - Add a sign-off step where the release lead confirms all items are complete before announcing.
