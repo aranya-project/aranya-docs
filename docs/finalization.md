@@ -632,7 +632,7 @@ Consensus messages are sent off-graph between finalizers. The only on-graph comm
 
 The consensus protocol is transport-agnostic -- it produces and consumes messages that are delivered by an external transport layer, similarly to how the sync protocol is implemented. The daemon polls the consensus protocol for outgoing messages and delivers incoming messages to it.
 
-The initial daemon implementation uses QUIC connections between finalizers. These may be separate connections from sync, or multiplexed on the existing sync connections. If connections are shared, each stream begins with a protocol discriminant to route to the appropriate handler.
+The daemon reuses the existing QUIC transport that it already uses for the sync protocol to deliver consensus messages between finalizers. Consensus and sync streams are multiplexed on the same QUIC connections, with each stream beginning with a protocol discriminant to route to the appropriate handler. This is a convenience of the current daemon implementation, not a requirement of the consensus protocol.
 
 Finalizers send consensus messages only to other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
 
