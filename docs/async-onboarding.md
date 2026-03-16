@@ -151,52 +151,92 @@ sequenceDiagram
 
 In order to support this onboarding process, changes must be made to the policy and an additional rust tool written to utilize the one-time-use join key. Two policy commands need to be added: AllowSelfJoinTeam and SelfJoinTeam.
 
-The extra rust code will be needed to work around a policy limitation. In order to utilize the join key, the device must start an Aranya ClientState with a different keybundle than normal that contains the self join key in place of the device ID. This is required to get the self join key ID into the seal and open blocks. With this workaround, the seal and open functions for the SelfJoinTeam command can use the author ID to properly identify the key to use from the SelfJoinTeamPubKey fact.
+The extra rust code will be needed to work around a policy limitation. In order to utilize the join key, the device must start an Aranya ClientState with a different keystore that contains the self join key in place of the device ID. This is required to allow the one-time-use key to be used as the device identity and expose the key ID to the seal and open blocks. With this workaround, the seal and open functions for the SelfJoinTeam command can use the author ID to properly identify the key to use from the DeviceSelfJoinPubKey fact.
 
 
 
 ```policy
 
 // holds the self join keys,
-fact DeviceSelfJoinPubKey[keyid id]=>{key bytes, used bool, created_by id}
+fact DeviceSelfJoinPubKey[key_id id]=>{key bytes, used bool, created_by id, rank int}
 
 command AllowSelfJoinTeam {
 	fields {
 		// the public key bytes of the key used to open
-		pubkey bytes
+		pubkey bytes,
+		// the rank to set for the new device
+		rank int,
 	}
 
-	seal { /* normal seal */ }
-
-	open { /* normal open */ }
+	seal { return seal_command(serialize(this)) }
+	open { return deserialize(open_envelope(envelope)) }
 
 	policy {
 		// get author ID
 		// check permissions
+		// check rank
 		// derive key ID
-		create DeviceSelfJoinPubKey[keyid]=>{key: this.pubkey, used: false, created_by: author_id}
+		// create fact
+		create DeviceSelfJoinPubKey[keyid]=>{key: this.pubkey, used: false, created_by: author_id, rank: this.rank}
 	}
 }
 
 command SelfJoinTeam {
 	fields {
-		// TODO, AddDevice fields here
+		// The new device's public Device Keys.
+		device_keys struct PublicKeyBundle,
+
 	}
 
-	seal {
-		// use the private onboarding key to seal
-		// how does this work?
-	}
+	seal { return seal_command_selfjoin(serialize(this)) }
+	open { return deserialize(open_envelope_selfjoin(envelope)) }
 
-	open {
-		// fetch key from DeviceSelfJoinPubKey fact
-		// try to use to open
-	}
 
 	policy {
 		// mark the key used, fail if already used
 		// normal device setup
 	}
+}
+
+// Signs the payload using the single use self join key,
+// then packages the data and signature into an `Envelope`.
+function seal_command_selfjoin(payload bytes) struct Envelope {
+    let parent_id = perspective::head_id()
+    // the author_id here is actually (should be) the ID of the single-use join key because
+    // we injected a different keystore into the ClientState
+    let author_id = device::current_device_id()
+    let author_sign_pk = check_unwrap query DeviceSelfJoinPubKey[key_id: author_id]
+    let author_sign_key_id = idam::derive_sign_key_id(author_sign_pk.key)
+
+    let signed = crypto::sign(author_sign_key_id, payload)
+    return envelope::new(
+        parent_id,
+        author_id,
+        signed.command_id,
+        signed.signature,
+        payload,
+    )
+}
+
+// Opens an envelope using the single time use self join key.
+//
+// If verification succeeds, it returns the serialized basic
+// command data. Otherwise, if verification fails, it raises
+// a check error.
+function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
+    // the author_id here is actually (should be) the ID of the single-use join key because
+    // we injected a different keystore into the ClientState
+    let author_id = envelope::author_id(sealed_envelope)
+    let author_sign_pk = check_unwrap query DeviceSelfJoinPubKey[key_id: author_id]
+
+    let verified_command = crypto::verify(
+        author_sign_pk.key,
+        envelope::parent_id(sealed_envelope),
+        envelope::payload(sealed_envelope),
+        envelope::command_id(sealed_envelope),
+        envelope::signature(sealed_envelope),
+    )
+    return verified_command
 }
 
 
