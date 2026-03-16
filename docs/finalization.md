@@ -562,7 +562,7 @@ Finalizers that do not have the proposed parent sync with the proposer to obtain
 
 1. **Computes the FactDB Merkle root** at the proposed parent via the `verify_factdb_merkle_root` FFI.
 2. **Verifies it matches** the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
-3. **Checks the finalization epoch** -- The proposed parent must be after the last Finalize command (not re-finalizing already-finalized history).
+3. **Checks the finalization epoch** -- The finalizer derives the sequence number from `LatestFinalizeSeq` at the proposed parent (the sequence number is not included in the proposal — it is computed locally). It then checks that `LatestFinalizeSeq` at its own head has not advanced past this value. If it has, another Finalize command was already committed and this proposal is stale. This prevents re-finalizing already-finalized history.
 4. **Checks the proposer** -- The proposing device must be in the current finalizer set. The proposal is signed by the proposer's signing key; the recipient verifies the signature against the `FinalizerSet` fact to confirm membership.
 
 Only after successful validation does the finalizer proceed to vote in consensus. The Finalize command itself is not constructed until after consensus reaches agreement (see [Signature Collection](#phase-2-signature-collection)).
@@ -909,7 +909,7 @@ Each finalizer MUST compute the FactDB Merkle root at the proposed parent and ve
 
 #### VAL-004
 
-The proposed parent MUST be after the last Finalize command (the proposed parent MUST NOT re-finalize already-finalized history).
+The finalizer MUST derive the sequence number from `LatestFinalizeSeq` at the proposed parent and verify that `LatestFinalizeSeq` at its own head has not advanced past this value. If it has, the proposal is stale and the finalizer MUST prevote nil.
 
 #### VAL-005
 
