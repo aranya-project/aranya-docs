@@ -506,7 +506,7 @@ In all cases, the initiating finalizer does not necessarily become the proposer 
 
 ### Finalization Round
 
-A finalization round produces a single Finalize command for a specific sequence number. It may span multiple consensus rounds if proposals fail. Each consensus round is a single propose-prevote-precommit cycle. The finalization round has two phases: agreement (which may take multiple consensus rounds, with signatures collected during precommit) and commit.
+A finalization round produces a single Finalize command for a specific sequence number. It may span multiple consensus rounds if proposals fail. Each consensus round is a single propose-prevote-precommit cycle. The finalization round has three phases: agreement (which may take multiple consensus rounds), signature collection, and commit.
 
 #### Pre-Consensus Validation
 
@@ -537,21 +537,25 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 **Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: validation fails, the proposed parent does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
 
-**Precommit with signature.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it deterministically constructs the Finalize command payload from the agreed-upon FactDB Merkle root, signs it, and broadcasts a precommit that includes both the vote and its signature over the Finalize command payload. If a quorum of nil prevotes is observed, the finalizer precommits nil immediately (advancing the round without waiting for the timeout). If the prevote timeout expires without any quorum (neither for the proposal nor for nil), the finalizer also precommits nil. All finalizers participate in both voting stages.
-
-Combining signatures with precommits eliminates a separate signature collection phase. There are two trade-offs: (1) signature computation is wasted when consensus fails (the finalizer signed the payload but the round didn't reach agreement), and (2) all finalizers receive all signatures via broadcast, using roughly 30% more bandwidth than a targeted collection approach where each finalizer stops requesting after reaching quorum. Both are acceptable given the small finalizer set (max 7) and that consensus succeeds in the common case.
-
-The two-phase voting structure (prevote then precommit) is inherent to the Tendermint algorithm. The prevote phase establishes that a quorum considers the proposal valid (soft lock). The precommit phase establishes that a quorum has observed this agreement (hard lock). This two-phase structure prevents deadlock: because any two quorums overlap in at least one honest node, if a quorum precommits value v, no other value can have received a quorum of prevotes, which guarantees safety even across round boundaries.
+**Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, the finalizer precommits nil immediately (advancing the round without waiting for the timeout). If the prevote timeout expires without any quorum (neither for the proposal nor for nil), the finalizer also precommits nil. All finalizers participate in both voting stages.
 
 Note: Standard Tendermint (as implemented by Malachite) requires a full quorum of nil prevotes to advance immediately. A smaller number of nil prevotes (e.g. `n - q + 1`, which would make proposal quorum mathematically impossible) does not trigger early advancement — the round waits for the timeout in that case. This is conservative but avoids giving a minority the ability to accelerate round advancement.
 
-**Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. Each finalizer that observes a precommit quorum collects the signatures from the precommit messages. Because the Merkle root is deterministic given the parent, every finalizer produces the same payload and therefore the same command ID. Different finalizers may collect different subsets of signatures — any valid quorum-sized subset proves consensus.
+**Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the proposal step with the new proposer.
 
-If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the proposal step with the new proposer.
+#### Phase 2: Signature Collection
 
-#### Phase 2: Commit
+Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon FactDB Merkle root. Because the Merkle root is deterministic given the parent, every finalizer produces the same payload and therefore the same command ID.
 
-Any finalizer that has collected a quorum of signatures from precommit messages attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
+Signature collection is intentionally separate from the consensus voting phases. Signing after consensus means each signature attests that the finalizer both approves the command and believes a quorum agreed on it. This is a stronger claim than signing during precommit (which would only attest to approval). It also avoids wasting signature computation on failed rounds and reduces bandwidth — each finalizer requests signatures only until it has a quorum, rather than broadcasting to all peers.
+
+Each finalizer signs the payload. To avoid unnecessary work, a finalizer MAY defer signing until it receives its first signature request from another finalizer (lazy signing). The signed payload MUST be cached so subsequent requests for the same payload can be served without re-signing. A finalizer then requests signatures from the other finalizers and stops once it has collected at least a quorum.
+
+Different finalizers may end up with different subsets of signatures -- any valid quorum-sized subset proves consensus.
+
+#### Phase 3: Commit
+
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
 
 ### Consensus Communication
 
@@ -587,7 +591,7 @@ When the finalizer set changes (via an `UpdateFinalizerSet` command), peer confi
 
 Non-finalizer devices do not need to configure finalizer peers.
 
-**Broadcast pattern.** Consensus messages (proposals, votes) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Connections that are no longer needed MAY be dropped between rounds and re-established when the next round begins -- persistent connections to all finalizers are not required.
+**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Connections that are no longer needed MAY be dropped between rounds and re-established when the next round begins -- persistent connections to all finalizers are not required.
 
 **Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature, confirms the public signing key belongs to a member of the current finalizer set (by looking it up in the `Finalizer` facts), and checks that the key matches the expected key for the QUIC connection's source address (based on the configured finalizer peer mappings). Messages that fail any of these checks are dropped.
 
@@ -597,7 +601,8 @@ Non-finalizer devices do not need to configure finalizer peers.
 |---|---|---|---|
 | `Proposal` | QUIC stream | Proposer | Proposed parent for the Finalize command and FactDB Merkle root |
 | `Prevote` | QUIC stream | Finalizer | First-stage vote for or against a proposal |
-| `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal. Includes the finalizer's signature over the Finalize command payload when voting for (not nil). |
+| `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
+| `SignatureShare` | QUIC stream | Finalizer | Finalizer's signature over the agreed Finalize command content |
 
 ### Timeouts
 
@@ -698,11 +703,13 @@ This example walks through a complete finalization round with 4 finalizers (A, B
    - B: Also prevotes for its own proposal.
    - D: Missing the proposed parent. Syncs with B to obtain it, then validates. Merkle roots match. Broadcasts prevote.
 
-5. **Precommit with signature.** All finalizers observe 4 prevotes for the proposal (quorum = `(4 * 2 / 3) + 1` = 3). Each constructs the Finalize command payload (factdb_merkle_root=&lt;agreed root&gt;), signs it, and broadcasts a precommit that includes the signature.
+5. **Precommit.** All finalizers observe 4 prevotes for the proposal (quorum = `(4 * 2 / 3) + 1` = 3). Each broadcasts a precommit.
 
-6. **Decision.** All finalizers observe 4 precommits for the proposal. Agreement is reached. Each finalizer collects at least 3 signatures from the precommit messages.
+6. **Decision.** All finalizers observe 4 precommits for the proposal. Agreement is reached.
 
-7. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `LatestFinalizeSeq.seq` has already advanced past 3.
+7. **Signature collection.** Each finalizer constructs the Finalize command payload (factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
+
+8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `LatestFinalizeSeq.seq` has already advanced past 3.
 
 ## Requirements
 
@@ -906,21 +913,21 @@ When the finalizer set contains exactly one member, the BFT consensus protocol M
 
 #### SIG-001
 
-When a finalizer observes a quorum of prevotes for a proposal, it MUST deterministically construct the Finalize command payload from the agreed-upon FactDB Merkle root and sign it before broadcasting its precommit.
+After agreement, each finalizer MUST deterministically construct the Finalize command payload from the agreed-upon FactDB Merkle root.
 
 #### SIG-002
 
-Each precommit vote for a proposal (not nil) MUST include the finalizer's signature over the Finalize command payload.
+Each finalizer MUST sign the payload. A finalizer MAY defer signing until it receives its first signature request (lazy signing). The signed payload MUST be cached to avoid re-signing for subsequent requests.
 
 #### SIG-003
 
-When a finalizer observes a quorum of precommits for the same proposal, it MUST collect the signatures from those precommit messages. Any quorum-sized subset of valid signatures is sufficient.
+A finalizer MUST stop requesting signatures once it has collected at least a quorum of signatures.
 
 ### Commit
 
 #### CMT-001
 
-Any finalizer that has collected a quorum of signatures from precommit messages MUST attach them to the envelope and commit the Finalize command locally to the graph.
+Any finalizer that has collected a quorum of signatures MUST attach them to the envelope and commit the Finalize command locally to the graph.
 
 #### CMT-002
 
@@ -980,7 +987,7 @@ When the finalizer set changes, peer configurations for finalizers no longer in 
 
 #### COMM-005
 
-Consensus messages (proposals, votes) MUST be pushed to all configured finalizer peers. Finalizers connect to peers on demand at the start of each finalization round. Connections MAY be dropped between rounds and re-established when the next round begins.
+Consensus messages (proposals, votes, signature shares) MUST be pushed to all configured finalizer peers. Finalizers connect to peers on demand at the start of each finalization round. Connections MAY be dropped between rounds and re-established when the next round begins.
 
 #### COMM-006
 
