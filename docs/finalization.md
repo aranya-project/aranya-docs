@@ -49,7 +49,7 @@ Finalization applies to the control plane only -- the persistent commands on the
 ## Design Goals
 
 1. **Safety** -- A Finalize command requires a quorum of valid signatures from the current finalizer set. Because any two quorums overlap, no two valid conflicting Finalize commands can exist in the graph. Any device can independently verify a Finalize command by checking the signatures in its envelope.
-2. **Availability** -- Finalization makes progress as long as a quorum of finalizers are online and can communicate. Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active.
+2. **Availability** -- Finalization tolerates up to `f` faulty or offline finalizers. Non-finalizer devices continue operating normally (publishing commands, syncing) regardless of whether finalization is active.
 3. **Periodic and on-demand** -- Finalization is triggered periodically (delay-based scheduling) or on demand (e.g. daemon restart). The BFT protocol selects the proposer automatically.
 
 ## Architecture
