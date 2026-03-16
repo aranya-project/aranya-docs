@@ -35,8 +35,8 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 Actors:
 - Admin - the privileged device capable and authorized to initiate the asynchronous onboarding proceedure. 
 - Onboarding Server - the server that stores the onboarding bundle and validates the credentials provided for requests.
-- New Device - the device that is being onboarded to the team.
 - Onboarding Client - a client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
+- New Device - the device that is being onboarded to the team.
 
 ```mermaid
 sequenceDiagram
@@ -124,14 +124,16 @@ sequenceDiagram
 - Admin MUST send 11word phrase to new device out of band
 
 
-- New device MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
-- New device MUST derive the bundle key using HKDF-SHA-512 from the 11 words
-- New device MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
-- New Device MUST decrypt the new device certificate and private key using the bundle key
-- New Device MUST decrypt the one-time-use join keypair using the bundle key
-- New Device MUST decrypt the pairing/syncing information using the bundle key 
-- New Device MUST decrypt the team ID using the bundle key
-- New Device MUST publish the SelfJoinTeam command using the one-time join key.
+- Onboarding Client MUST take the 11 words as input 
+- Onboarding Client MUST take the new device keybundle as input
+- Onboarding Client MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
+- Onboarding Client MUST derive the bundle key using HKDF-SHA-512 from the 11 words
+- Onboarding Client MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
+- Onboarding Client MUST decrypt the new device certificate and private key using the bundle key
+- Onboarding Client MUST decrypt the one-time-use join keypair using the bundle key
+- Onboarding Client MUST decrypt the pairing/syncing information using the bundle key 
+- Onboarding Client MUST decrypt the team ID using the bundle key
+- Onboarding Client MUST publish the SelfJoinTeam command using the one-time join key.
 
 
 - Onboarding Server MUST authenticate users using a certificate when handling requests on the `drop` endpoint
@@ -139,6 +141,8 @@ sequenceDiagram
 - Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
 - Onboarding Server MUST expose a `drop` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
 - Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
+
+
 
 ## Algorithms used
 
