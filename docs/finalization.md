@@ -257,7 +257,7 @@ Action-at-parent may create a sibling of the current head (increasing graph widt
 
 ### FactDB Merkle Root Verification
 
-The `verify_factdb_merkle_root` FFI computes the FactDB Merkle root at the current evaluation point and compares it to the expected value. This is an FFI because the policy language cannot access the FactDB's internal hash structure directly.
+The FactDB Merkle root is computed incrementally by the storage layer (`aranya_runtime::storage`) and stored on disk as part of the storage format, updated at each command. The runtime passes the current Merkle root into the policy VM via context, making it accessible through the `verify_factdb_merkle_root` FFI.
 
 Before consensus, each finalizer validates the proposal using an ephemeral command that verifies the Merkle root without persisting anything to the graph:
 
@@ -516,7 +516,7 @@ The following new FFI functions are required. These handle operations that the p
 
 - **`validate_init_finalizer_set(envelope, f1..f7)`** -- Validates the initial finalizer set from the `Init` command. Checks that all specified public signing keys are unique and valid. If none are provided, validates that the team owner's signing key (from the envelope) will be used as the default. Returns true if valid.
 - **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the multi-author envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
-- **`verify_factdb_merkle_root(expected_root)`** -- Computes the FactDB Merkle root at the current evaluation point and returns true if it matches the expected root. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
+- **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root from the VM context. The Merkle root is computed incrementally by the storage layer and passed into the policy VM by the runtime. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
 - **`emit_finalizer_membership_change(envelope, old_set, new_set)`** -- Compares the old and new `FinalizerSet` values to determine if the current device's membership has changed. If so, emits an effect. The daemon listens for this effect to immediately update its consensus participation state without re-querying the FactDB.
@@ -560,7 +560,7 @@ Before voting in consensus, each finalizer independently validates the proposed 
 
 Finalizers that do not have the proposed parent sync with the proposer to obtain it. Each finalizer then:
 
-1. **Computes the FactDB Merkle root** at the proposed parent from its local graph and FactDB.
+1. **Retrieves the FactDB Merkle root** at the proposed parent from the storage layer (computed incrementally and stored on disk).
 2. **Verifies it matches** the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
 3. **Checks the finalization epoch** -- The proposed parent must be after the last Finalize command (not re-finalizing already-finalized history).
 4. **Checks the proposer** -- The proposing device must be in the current finalizer set. The proposal is signed by the proposer's signing key; the recipient verifies the signature against the `FinalizerSet` fact to confirm membership.
@@ -871,7 +871,7 @@ The Finalize command policy MUST verify that the envelope contains at least a qu
 
 #### FPOL-004
 
-The Finalize command policy MUST verify that the `factdb_merkle_root` matches the locally computed FactDB Merkle root at the parent of the Finalize command.
+The Finalize command policy MUST verify that the `factdb_merkle_root` matches the FactDB Merkle root at the parent of the Finalize command (provided by the storage layer via the VM context).
 
 #### FPOL-005
 
