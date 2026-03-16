@@ -201,7 +201,7 @@ The set of commands that happen before a Finalize command is strictly the set of
 
 Properties:
 
-- **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the braid -- higher than any numeric priority value any other command can hold. The runtime's braid ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the braid construction code. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
+- **Priority**: The Finalize command carries the `finalize: true` attribute, which gives it the highest possible priority in the braid -- higher than any numeric priority value any other command can hold. The runtime's braid ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the braid construction code. Other commands may be appended to the same parent as siblings, but the `finalize: true` attribute guarantees the Finalize command precedes them.
 - **Fields**:
   - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only payload field. The parent is determined by where the command is placed in the graph (via action-at-parent, see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `LatestFinalizeSeq`, finalizer set from the `FinalizerSet` fact, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
@@ -237,7 +237,7 @@ Branches do not finalize in parallel. Parallel finalization would produce Finali
 
 Once a Finalize command is committed to the graph:
 
-- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this through braid ordering rather than by rejecting new commands. The `Finalization` attribute ensures the Finalize command is always ordered before any siblings in the braid, and any new command must be appended to the Finalize command or one of its descendants -- never before it. This means new commands can only extend the graph forward from the finalized point, never insert before it.
+- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this through braid ordering rather than by rejecting new commands. The `finalize: true` attribute ensures the Finalize command is always ordered before any siblings in the braid, and any new command must be appended to the Finalize command or one of its descendants -- never before it. This means new commands can only extend the graph forward from the finalized point, never insert before it.
 - Commands on branches that conflict with the finalized braid are permanently recalled.
 
 ### Action-at-Parent
@@ -251,7 +251,7 @@ This requires a change to the runtime's action API. Currently, all actions appen
 
 The Finalize command is the only command that uses the explicit parent mode. The daemon passes the agreed-upon parent from consensus when committing the Finalize command.
 
-Action-at-parent may create a sibling of the current head (increasing graph width), since other commands may have been appended to the head after the agreed-upon parent. This does not violate graph width assumptions in a meaningful way for finalization, because the `Finalization` attribute ensures the Finalize command is always ordered first among siblings in the braid. The next command any device appends will be a descendant of the Finalize command (or a descendant of a later head), so graph width returns to normal immediately.
+Action-at-parent may create a sibling of the current head (increasing graph width), since other commands may have been appended to the head after the agreed-upon parent. This does not violate graph width assumptions in a meaningful way for finalization, because the `finalize: true` attribute ensures the Finalize command is always ordered first among siblings in the braid. The next command any device appends will be a descendant of the Finalize command (or a descendant of a later head), so graph width returns to normal immediately.
 
 ### FactDB Merkle Root Verification
 
@@ -372,7 +372,7 @@ See [`validate_init_finalizer_set`](#new-ffis) for validation details.
 ```policy
 command Finalize {
     attributes {
-        Finalization
+        finalize: true
     }
 
     fields {
@@ -808,7 +808,7 @@ Branches MUST NOT finalize in parallel.
 
 #### FIN-007
 
-The runtime MUST ensure that finalized commands can never be preceded by new commands in the braid. This is enforced by the `Finalization` attribute's braid ordering guarantee combined with the requirement that new commands can only be appended to the Finalize command or its descendants.
+The runtime MUST ensure that finalized commands can never be preceded by new commands in the braid. This is enforced by the `finalize: true` attribute's braid ordering guarantee combined with the requirement that new commands can only be appended to the Finalize command or its descendants.
 
 #### FIN-008
 
@@ -878,7 +878,7 @@ Different valid subsets of author signatures MUST produce the same command ID fo
 
 #### FPOL-001
 
-The Finalize command MUST carry the `Finalization` attribute, giving it the highest priority in the braid. This priority is not a numeric value -- it is enforced by the runtime as an absolute ordering above all other commands.
+The Finalize command MUST carry the `finalize: true` attribute, giving it the highest priority in the braid. This priority is not a numeric value -- it is enforced by the runtime as an absolute ordering above all other commands.
 
 #### FPOL-002
 
