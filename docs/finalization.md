@@ -31,7 +31,7 @@ Finalization has two components:
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a parent for the Finalize command for a given consensus round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
-| Quorum | The minimum number of finalizers required for a consensus decision (q) |
+| Quorum (q) | The minimum number of finalizers required for a consensus decision |
 | Sequence number (seq) | Identifies a finalization round; increments with each successful Finalize command |
 
 ### Formulas
