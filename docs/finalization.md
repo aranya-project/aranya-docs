@@ -239,7 +239,6 @@ Once a Finalize command is committed to the graph:
 
 - All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this through braid ordering rather than by rejecting new commands. The `Finalization` attribute ensures the Finalize command is always ordered before any siblings in the braid, and any new command must be appended to the Finalize command or one of its descendants -- never before it. This means new commands can only extend the graph forward from the finalized point, never insert before it.
 - Commands on branches that conflict with the finalized braid are permanently recalled.
-- Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
 ### Action-at-Parent
 
