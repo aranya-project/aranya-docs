@@ -562,7 +562,7 @@ Finalizers that do not have the proposed parent sync with the proposer to obtain
 
 1. **Computes the FactDB Merkle root** at the proposed parent via the `verify_factdb_merkle_root` FFI.
 2. **Verifies it matches** the proposed `factdb_merkle_root`. This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
-3. **Checks the finalization epoch** -- The finalizer derives the sequence number from `LatestFinalizeSeq` at the proposed parent (the sequence number is not included in the proposal — it is computed locally). It then checks that `LatestFinalizeSeq` at its own head has not advanced past this value. If it has, another Finalize command was already committed and this proposal is stale. This prevents re-finalizing already-finalized history.
+3. **Checks the finalization epoch** -- The sequence number is not an explicit field in the proposal data — it is the Malachite `Height`, which Malachite includes in all protocol messages (proposals, votes). Each finalizer derives the height from `LatestFinalizeSeq` in its local FactDB and passes it to Malachite. Malachite automatically drops proposals with a height that does not match the finalizer's current height, preventing re-finalization of already-finalized history. If a finalizer's head has already advanced past the proposed height (another Finalize was committed), Malachite handles this as a stale-height message.
 4. **Checks the proposer** -- The proposing device must be in the current finalizer set. The proposal is signed by the proposer's signing key; the recipient verifies the signature against the `FinalizerSet` fact to confirm membership.
 
 Only after successful validation does the finalizer proceed to vote in consensus. The Finalize command itself is not constructed until after consensus reaches agreement (see [Signature Collection](#phase-2-signature-collection)).
@@ -577,13 +577,14 @@ A finalizer that has not yet synced the latest Finalize command may compute a di
 
 **Proposal.** The proposer selects a parent for the Finalize command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The proposal contains:
 
+- **Height** -- The finalization sequence number (Malachite `Height`). Derived from `LatestFinalizeSeq` in the proposer's FactDB. Malachite includes this in all protocol messages and uses it to match proposals to the correct finalization round.
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
 - **Parent** -- The graph command that the Finalize command will be appended to. This is not a payload field -- it is the position in the graph where the Finalize command is placed. All ancestors of the Finalize command become permanent.
 - **FactDB Merkle root** -- The FactDB Merkle root at the proposed parent. Agreement on the Merkle root implies agreement on the sequence number, finalizer set, and any pending updates -- all are derivable from the FactDB.
 
 **Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed parent in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the proposed parent, it validates the proposal by computing and comparing the FactDB Merkle root (see [Pre-Consensus Validation](#pre-consensus-validation)).
 
-**Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: validation fails, the proposed parent does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
+**Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: validation fails or the FactDB Merkle root does not match. Proposals with a stale or future height are handled by Malachite (dropped or buffered, respectively) before reaching validation.
 
 **Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, the finalizer precommits nil immediately (advancing the round without waiting for the timeout). If the prevote timeout expires without any quorum (neither for the proposal nor for nil), the finalizer also precommits nil. All finalizers participate in both voting stages.
 
@@ -909,7 +910,7 @@ Each finalizer MUST compute the FactDB Merkle root at the proposed parent and ve
 
 #### VAL-004
 
-The finalizer MUST derive the sequence number from `LatestFinalizeSeq` at the proposed parent and verify that `LatestFinalizeSeq` at its own head has not advanced past this value. If it has, the proposal is stale and the finalizer MUST prevote nil.
+The finalization sequence number is the Malachite `Height`, included in all protocol messages by Malachite. Each finalizer MUST derive the height from `LatestFinalizeSeq` in its local FactDB and pass it to Malachite. Malachite MUST drop proposals whose height does not match the finalizer's current height.
 
 #### VAL-005
 
@@ -931,11 +932,11 @@ If the selected proposer is offline, the consensus round MUST time out and advan
 
 #### CONS-003
 
-A proposal MUST contain: the consensus round number, the proposed parent, and the FactDB Merkle root at that parent.
+A proposal MUST contain: the Malachite height (finalization sequence number), the consensus round number, the proposed parent, and the FactDB Merkle root at that parent.
 
 #### CONS-004
 
-A finalizer MUST prevote nil if: validation fails, the proposed parent does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
+A finalizer MUST prevote nil if: validation fails or the FactDB Merkle root does not match. Proposals with a stale or future height are handled by Malachite (dropped or buffered) before reaching validation.
 
 #### CONS-005
 
