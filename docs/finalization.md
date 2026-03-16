@@ -23,7 +23,7 @@ Finalization has two components:
 |---|---|
 | Finalizer set | The group of devices authorized to participate in finalization consensus |
 | Finalizer | A device in the finalizer set |
-| Finalize command | A multi-author graph command whose ancestors all become permanent |
+| Finalize command | A certified (multi-signature) graph command whose ancestors all become permanent. Certified commands have no author; each signature is a certifier. |
 | Finalization round | The full process of producing a Finalize command for a specific sequence number. May contain multiple consensus rounds if proposals fail. |
 | Consensus round | A single propose-prevote-precommit cycle within a finalization round. If the proposal fails or times out, the round number increments and a new consensus round begins with the next proposer. |
 | Parent of the Finalize command | The graph command that the Finalize command is appended to. All ancestors of the Finalize command become permanent. Consensus decides this. |
@@ -96,7 +96,7 @@ Key architectural boundaries:
 - **Consensus protocol** and **sync protocol** are transport-agnostic crates in the `aranya-core` repository. Both produce and consume messages that the daemon delivers via the transport layer. Neither depends on QUIC directly.
 - **QUIC transport** is shared by both managers. The daemon multiplexes consensus and sync streams on the same QUIC connections.
 - **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime.
-- **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (multi-author envelopes, quorum verification).
+- **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (certified envelopes, quorum verification).
 
 ## Threat Model
 
@@ -182,19 +182,19 @@ If a second `UpdateFinalizerSet` is published before the next finalization, the 
 
 This section defines the on-graph commands, facts, and policy rules that enforce finalization. The policy is evaluated independently by every device -- it does not depend on or interact with the off-graph consensus protocol.
 
-### Multi-Author Commands
+### Certified Commands
 
-The Finalize command uses multi-author authentication instead of single-author authentication. Each signature represents an author -- a finalizer that endorsed the command. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
+The Finalize command uses certified authentication instead of single-author authentication. Each signature represents a certifier -- a finalizer that endorsed the command. Certified commands have no author. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
 
-This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The multi-author command type extends the envelope to carry multiple signatures instead of one.
+This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The certified command type extends the envelope to carry multiple certifier signatures instead of one.
 
-Key properties of multi-author commands:
+Key properties of certified commands:
 
-- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
-- **Multiple authors.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is an author endorsing the command.
-- **New FFI functions.** Multi-author commands require new envelope FFI:
-  - `seal_multi_author(payload)` -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
-  - `open_multi_author(envelope)` -- Opens a multi-author envelope and returns the deserialized fields.
+- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Certified commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of certifier signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Multiple certifiers.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is a certifier endorsing the command.
+- **New FFI functions.** Certified commands require new envelope FFI:
+  - `seal_certified(payload)` -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
+  - `open_certified(envelope)` -- Opens a certified envelope and returns the deserialized fields.
   - `verify_finalize_quorum(envelope)` -- Reads the signatures from the envelope and verifies a quorum against the current finalizer set.
 
 ### Finalize Command
@@ -206,7 +206,7 @@ Properties:
 - **Priority**: The Finalize command carries the `finalize: true` attribute, which gives it the highest possible priority in the braid -- higher than any numeric priority value any other command can hold. The runtime's braid ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the braid construction code. Other commands may be appended to the same parent as siblings, but the `finalize: true` attribute guarantees the Finalize command precedes them.
 - **Fields**:
   - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only payload field. The parent is determined by where the command is placed in the graph (via action-at-parent, see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `LatestFinalizeSeq`, finalizer set from the `FinalizerSet` fact, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
-- **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
+- **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that certified this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
   - The `factdb_merkle_root` matches the locally computed FactDB Merkle root at the parent of the Finalize command.
@@ -222,7 +222,7 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
 2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). When synced to other nodes, the graph rejects duplicate commands with the same ID at the graph layer — no weaving or policy evaluation occurs for the duplicate.
+3. Multiple finalizers committing the same Finalize produce the same command ID (see [Certified Commands](#certified-commands)). When synced to other nodes, the graph rejects duplicate commands with the same ID at the graph layer — no weaving or policy evaluation occurs for the duplicate.
 
 ### Finalization and Branches
 
@@ -383,8 +383,8 @@ command Finalize {
 
     // Signatures are in the envelope, not the payload.
     // Command ID is computed from the payload as usual.
-    seal { return seal_multi_author(serialize(this)) }
-    open { return deserialize(open_multi_author(envelope)) }
+    seal { return seal_certified(serialize(this)) }
+    open { return deserialize(open_certified(envelope)) }
 
     policy {
         check team_exists()
@@ -532,13 +532,13 @@ fact PendingFinalizerSetUpdate[]=> {
 
 #### New FFIs
 
-The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, multi-author envelopes). All fact operations are performed directly in policy code; FFI functions only perform validation and cryptographic operations.
+The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, certified envelopes). All fact operations are performed directly in policy code; FFI functions only perform validation and cryptographic operations.
 
 - **`validate_init_finalizer_set(envelope, f1..f7)`** -- Validates the initial finalizer set from the `Init` command. Checks that all specified public signing keys are unique and valid. If none are provided, validates that the team owner's signing key (from the envelope) will be used as the default. Returns true if valid.
-- **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the multi-author envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
+- **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
 - **`verify_factdb_merkle_root(expected_root)`** -- Obtains the current FactDB Merkle root and returns true if it matches the expected root. The runtime implements this using the storage API, which computes the root incrementally. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
-- **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
-- **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
+- **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
+- **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields.
 - **`emit_finalizer_set(finalizer_set)`** -- Emits an effect containing the current `FinalizerSet`. The daemon listens for this effect to update its consensus participation state and peer set without re-querying the FactDB.
 
 ## BFT Consensus Protocol
@@ -553,7 +553,7 @@ The initial implementation uses the team owner as the sole finalizer (single-fin
 
 ### Single Finalizer
 
-When the finalizer set contains exactly one member, the BFT consensus protocol is skipped. The sole finalizer publishes a `Finalize` command directly using the generalized multi-author command type with a single signature. This satisfies the quorum check (quorum of 1 is 1) and keeps the command type consistent regardless of finalizer set size.
+When the finalizer set contains exactly one member, the BFT consensus protocol is skipped. The sole finalizer publishes a `Finalize` command directly using the generalized certified command type with a single signature. This satisfies the quorum check (quorum of 1 is 1) and keeps the command type consistent regardless of finalizer set size.
 
 This is safe because the finalizer set is always established by a single authoritative source -- the `Init` command or a prior `Finalize` command that applied a pending update. Two devices cannot independently believe they are the sole finalizer at the same sequence number:
 
@@ -624,7 +624,7 @@ Different finalizers may end up with different subsets of signatures -- any vali
 
 #### Phase 3: Commit
 
-Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). When a finalizer syncs a Finalize command from another finalizer with the same command ID (but possibly different signatures), the graph rejects it because a command with that ID already exists — no weaving or policy evaluation occurs.
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Certified Commands](#certified-commands)). When a finalizer syncs a Finalize command from another finalizer with the same command ID (but possibly different signatures), the graph rejects it because a command with that ID already exists — no weaving or policy evaluation occurs.
 
 ### Consensus Communication
 
@@ -853,19 +853,19 @@ If a second `UpdateFinalizerSet` is published before the next finalization, the 
 
 All specified finalizer keys in an `UpdateFinalizerSet` or `Init` command MUST be unique and valid public signing keys.
 
-### Multi-Author Commands
+### Certified Commands
 
-#### MAUTH-001
+#### CERT-001
 
-The Finalize command MUST use multi-author authentication. The envelope MUST carry up to 7 optional `(signing_key_id, signature)` pairs.
+The Finalize command MUST use certified authentication. The envelope MUST carry up to 7 optional `(signing_key_id, signature)` pairs.
 
-#### MAUTH-002
+#### CERT-002
 
 Signatures MUST be stored in the envelope, not the payload. The command ID MUST be computed from the payload only.
 
-#### MAUTH-003
+#### CERT-003
 
-Different valid subsets of author signatures MUST produce the same command ID for the same payload.
+Different valid subsets of certifier signatures MUST produce the same command ID for the same payload.
 
 ### Finalize Command Policy
 
@@ -967,7 +967,7 @@ If precommit quorum is not reached (nil quorum or timeout), the consensus round 
 
 #### CONS-009
 
-When the finalizer set contains exactly one member, the BFT consensus protocol MUST be skipped. The sole finalizer MUST publish a Finalize command directly using the generalized multi-author command type with a single signature.
+When the finalizer set contains exactly one member, the BFT consensus protocol MUST be skipped. The sole finalizer MUST publish a Finalize command directly using the generalized certified command type with a single signature.
 
 ### Signature Collection
 
