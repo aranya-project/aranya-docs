@@ -212,7 +212,7 @@ Properties:
 - **Side effects**:
   - Updates the `LatestFinalizeSeq` singleton to the next sequence number.
   - If a `PendingFinalizerSetUpdate` fact exists, applies it atomically (see [Changing the Finalizer Set](#changing-the-finalizer-set)). The Merkle root check guarantees all finalizers agree on whether a pending update exists.
-  - Emits an effect if the device's own finalizer set membership has changed (added or removed), so the daemon can immediately update its consensus participation state.
+  - Emits an effect containing the current `FinalizerSet` so the daemon can update its consensus participation state and peer set.
 
 ### Finalize Ordering Guarantee
 
@@ -427,11 +427,12 @@ command Finalize {
 
                 // Consume the pending update.
                 delete PendingFinalizerSetUpdate[]
-
-                // Emit an effect if this device's finalizer membership changed.
-                let new_set = lookup FinalizerSet[]
-                emit_finalizer_membership_change(envelope, finalizer_set, new_set)
             }
+
+            // Always emit the current FinalizerSet so the daemon can
+            // update its consensus participation state and peer set.
+            let current_set = lookup FinalizerSet[]
+            emit_finalizer_set(current_set)
         }
     }
 }
@@ -537,7 +538,7 @@ The following new FFI functions are required. These handle operations that the p
 - **`verify_factdb_merkle_root(expected_root)`** -- Obtains the current FactDB Merkle root and returns true if it matches the expected root. The runtime implements this using the storage API, which computes the root incrementally. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
-- **`emit_finalizer_membership_change(envelope, old_set, new_set)`** -- Compares the old and new `FinalizerSet` values to determine if the current device's membership has changed. If so, emits an effect. The daemon listens for this effect to immediately update its consensus participation state without re-querying the FactDB.
+- **`emit_finalizer_set(finalizer_set)`** -- Emits an effect containing the current `FinalizerSet`. The daemon listens for this effect to update its consensus participation state and peer set without re-querying the FactDB.
 
 ## BFT Consensus Protocol
 
@@ -697,7 +698,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 Consensus state is not persisted -- all consensus messages are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
 
 1. Query the `LatestFinalizeSeq` fact to determine the last completed finalization sequence number.
-2. Check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its membership state by listening for the `emit_finalizer_membership_change` effect emitted by `Finalize` commands.
+2. Check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its finalizer set state by listening for the `emit_finalizer_set` effect emitted by `Finalize` commands.
 3. If a finalizer, connect to configured finalizer peers and join whatever consensus round is currently active. The Tendermint protocol handles late joiners without needing prior history.
 
 A daemon being offline does not block finalization -- as long as a quorum remains online, consensus continues. Stalled rounds advance automatically via timeout. If all finalizers restart simultaneously, they independently determine the current sequence number from FactDB and the deterministic proposer rotation ensures they agree on who proposes first.
