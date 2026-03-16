@@ -137,7 +137,7 @@ In the future, finalizers may not need to be devices at all, since all that matt
 
 The initial finalizer set is established in the team's `Init` command. The `Init` command includes 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key. The caller specifies 1 to 7 finalizers. If none are specified, the team owner's public signing key is used as the sole initial finalizer.
 
-Public signing keys (not key IDs) are stored on-graph because they are required for signature verification during consensus.
+Public signing keys (not key IDs) are stored on-graph because they are required for signature verification during consensus. The finalizer count and quorum are stored explicitly in the `FinalizerSet` fact so that the consensus protocol does not need to derive them implicitly.
 
 ### Set Size and Quorum
 
@@ -331,7 +331,16 @@ command Init {
             // Create the initial FinalizerSet.
             // If no keys were provided, the runtime defaults to the
             // team owner's signing key before creating this command.
+            let n = count_keys(
+                this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
+                this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
+                this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
+                this.finalizer7_pub_sign_key,
+            )
+            let q = (n * 2) / 3 + 1
             create FinalizerSet[]=>{
+                count: n,
+                quorum: q,
                 f1_pub_sign_key: this.finalizer1_pub_sign_key,
                 f2_pub_sign_key: this.finalizer2_pub_sign_key,
                 f3_pub_sign_key: this.finalizer3_pub_sign_key,
@@ -345,6 +354,8 @@ command Init {
 }
 
 fact FinalizerSet[]=>{
+    count int,
+    quorum int,
     f1_pub_sign_key optional bytes,
     f2_pub_sign_key optional bytes,
     f3_pub_sign_key optional bytes,
@@ -403,6 +414,8 @@ command Finalize {
                 // Replace the current FinalizerSet with the pending update.
                 delete FinalizerSet[]
                 create FinalizerSet[]=>{
+                    count: pending.count,
+                    quorum: pending.quorum,
                     f1_pub_sign_key: pending.new_finalizer1_pub_sign_key,
                     f2_pub_sign_key: pending.new_finalizer2_pub_sign_key,
                     f3_pub_sign_key: pending.new_finalizer3_pub_sign_key,
@@ -467,16 +480,18 @@ command UpdateFinalizerSet {
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
         let current = lookup FinalizerSet[]
-        let current_count = count_finalizers(current)
+        if current.count >= 4 {
+            check new_count >= 4
+        }
+
+        // Compute count and quorum for the new set.
         let new_count = count_keys(
             this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
             this.new_finalizer3_pub_sign_key, this.new_finalizer4_pub_sign_key,
             this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
             this.new_finalizer7_pub_sign_key,
         )
-        if current_count >= 4 {
-            check new_count >= 4
-        }
+        let new_quorum = (new_count * 2) / 3 + 1
 
         finish {
             // Stage the update. The next Finalize command will apply it
@@ -486,6 +501,8 @@ command UpdateFinalizerSet {
                 delete PendingFinalizerSetUpdate[]
             }
             create PendingFinalizerSetUpdate[]=>{
+                count: new_count,
+                quorum: new_quorum,
                 new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
                 new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
                 new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
@@ -499,6 +516,8 @@ command UpdateFinalizerSet {
 }
 
 fact PendingFinalizerSetUpdate[]=> {
+    count int,
+    quorum int,
     new_finalizer1_pub_sign_key optional bytes,
     new_finalizer2_pub_sign_key optional bytes,
     new_finalizer3_pub_sign_key optional bytes,
