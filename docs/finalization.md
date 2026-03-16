@@ -197,7 +197,7 @@ Key properties of multi-author commands:
 
 ### Finalize Command
 
-The `Finalize` command makes all of its ancestors permanent. It is the only graph command produced by finalization.
+The set of commands that happen before a Finalize command is strictly the set of its ancestors. This makes all ancestors permanent. The Finalize command is the only graph command produced by finalization.
 
 Properties:
 
