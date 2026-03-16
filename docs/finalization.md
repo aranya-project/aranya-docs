@@ -339,8 +339,8 @@ command Init {
             )
             let q = (n * 2) / 3 + 1
             create FinalizerSet[]=>{
-                count: n,
-                quorum: q,
+                num_finalizers: n,
+                quorum_size: q,
                 f1_pub_sign_key: this.finalizer1_pub_sign_key,
                 f2_pub_sign_key: this.finalizer2_pub_sign_key,
                 f3_pub_sign_key: this.finalizer3_pub_sign_key,
@@ -354,8 +354,8 @@ command Init {
 }
 
 fact FinalizerSet[]=>{
-    count int,
-    quorum int,
+    num_finalizers int,
+    quorum_size int,
     f1_pub_sign_key optional bytes,
     f2_pub_sign_key optional bytes,
     f3_pub_sign_key optional bytes,
@@ -414,8 +414,8 @@ command Finalize {
                 // Replace the current FinalizerSet with the pending update.
                 delete FinalizerSet[]
                 create FinalizerSet[]=>{
-                    count: pending.count,
-                    quorum: pending.quorum,
+                    num_finalizers: pending.num_finalizers,
+                    quorum_size: pending.quorum_size,
                     f1_pub_sign_key: pending.new_finalizer1_pub_sign_key,
                     f2_pub_sign_key: pending.new_finalizer2_pub_sign_key,
                     f3_pub_sign_key: pending.new_finalizer3_pub_sign_key,
@@ -480,7 +480,7 @@ command UpdateFinalizerSet {
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
         let current = lookup FinalizerSet[]
-        if current.count >= 4 {
+        if current.num_finalizers >= 4 {
             check new_count >= 4
         }
 
@@ -501,8 +501,8 @@ command UpdateFinalizerSet {
                 delete PendingFinalizerSetUpdate[]
             }
             create PendingFinalizerSetUpdate[]=>{
-                count: new_count,
-                quorum: new_quorum,
+                num_finalizers: new_count,
+                quorum_size: new_quorum,
                 new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
                 new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
                 new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
@@ -516,8 +516,8 @@ command UpdateFinalizerSet {
 }
 
 fact PendingFinalizerSetUpdate[]=> {
-    count int,
-    quorum int,
+    num_finalizers int,
+    quorum_size int,
     new_finalizer1_pub_sign_key optional bytes,
     new_finalizer2_pub_sign_key optional bytes,
     new_finalizer3_pub_sign_key optional bytes,
