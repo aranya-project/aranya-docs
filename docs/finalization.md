@@ -189,7 +189,7 @@ This requires a **new command type** in the `aranya-core` runtime. Existing comm
 
 Key properties of multi-author commands:
 
-- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (parent_id, factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
+- **Signatures live in the envelope, not the payload.** Single-author commands already store the signature in the envelope, separate from the payload. Multi-author commands follow the same pattern: the envelope carries up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Because the command ID is computed from the payload, and signatures are in the envelope, the ID computation does not change. Different valid subsets of author signatures produce the same command ID, which is critical -- multiple finalizers may independently commit the same Finalize command with different signature subsets, and the policy must treat them as the same command.
 - **Multiple authors.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is an author endorsing the command.
 - **New FFI functions.** Multi-author commands require new envelope FFI:
   - `seal_multi_author(payload)` -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later.
@@ -204,8 +204,7 @@ Properties:
 
 - **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the weave -- higher than any numeric priority value any other command can hold. The runtime's weave ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the weave construction code. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
 - **Fields**:
-  - `parent_id` -- The command ID of the parent of the Finalize command. Because each command ID is a hash of its content and its own parent's ID, `parent_id` is effectively a Merkle root of the entire graph up to that point -- it uniquely and cryptographically identifies the full chain of commands being finalized. All ancestors of this command become permanent.
-  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. In theory, the same `parent_id` should always produce identical FactDB state -- the two are redundant in a correct implementation. This field is included during initial development so that finalizers can detect graph/FactDB divergence before voting, surfacing any such bugs in pre-production. Once unit tests confirm that `parent_id` always implies a consistent FactDB state, this field is a candidate for removal as a production optimization (see [Future Work](#future-work)).
+  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only payload field. The parent is determined by where the command is placed in the graph (via action-at-parent, see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `FinalizeRecord` facts, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
@@ -243,9 +242,15 @@ Once a Finalize command is committed to the graph:
 - Commands on branches that conflict with the finalized weave are permanently recalled.
 - Devices can truncate graph data for finalized commands, retaining only the Finalize command as a compact proof of the finalized state.
 
-### FactDB Merkle Root Verification
+### Action-at-Parent
 
-The Finalize command payload has two fields: `parent_id` (the command ID of the parent, which is effectively a Merkle root of the graph up to that point) and `factdb_merkle_root` (the FactDB Merkle root at that parent). In a correct implementation these are redundant -- the same `parent_id` should always imply the same FactDB state. `factdb_merkle_root` is included during initial development to detect any divergence between graph and FactDB state before it reaches production. Once unit tests confirm the invariant, it is a candidate for removal.
+The Finalize command must be committed at a specific parent — the graph command that consensus agreed upon — rather than at the current head of the graph. This is necessary because unrelated commands may arrive between consensus completing and the Finalize command being committed. If the Finalize command were always appended to the head, the parent could change from what was agreed upon, invalidating the FactDB Merkle root.
+
+This requires a new runtime capability: **action-at-parent** — the ability to create a command at a specified position in the graph rather than always appending to the head. The Finalize command is the only command that uses this capability. The runtime must ensure the specified parent exists in the local graph before committing.
+
+Note that action-at-parent does not violate graph width assumptions in a meaningful way for finalization, because the `Finalization` attribute ensures the Finalize command is always ordered first among siblings in the weave.
+
+### FactDB Merkle Root Verification
 
 The `verify_factdb_merkle_root` FFI computes the FactDB Merkle root at the current evaluation point and compares it to the expected value. This is an FFI because the policy language cannot access the FactDB's internal hash structure directly.
 
@@ -336,7 +341,6 @@ command Finalize {
     }
 
     fields {
-        parent_id id,
         factdb_merkle_root FactRoot,
     }
 
@@ -350,9 +354,6 @@ command Finalize {
 
         // Verify quorum of valid signatures from the envelope.
         check verify_finalize_quorum(envelope)
-
-        // Verify parent_id matches the actual parent of this command.
-        check this.parent_id == get_parent_id(envelope)
 
         // Verify the FactDB Merkle root matches the locally computed root.
         check verify_factdb_merkle_root(this.factdb_merkle_root)
@@ -540,7 +541,7 @@ If a quorum prevote nil, the round advances immediately to the next proposer.
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon parent command ID and FactDB Merkle root. Because both values are determined by consensus, every finalizer produces the same payload and therefore the same command ID.
+Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon FactDB Merkle root. Because the Merkle root is deterministic given the parent, every finalizer produces the same payload and therefore the same command ID.
 
 Each finalizer signs the payload. To avoid unnecessary work, a finalizer MAY defer signing until it receives its first signature request from another finalizer (lazy signing). The signed payload MUST be cached so subsequent requests for the same payload can be served without re-signing. A finalizer then requests signatures from the other finalizers and stops once it has collected at least a quorum.
 
@@ -548,7 +549,7 @@ Different finalizers may end up with different subsets of signatures -- any vali
 
 #### Phase 3: Commit
 
-Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph. Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
 
 ### Consensus Communication
 
@@ -649,8 +650,8 @@ The consensus protocol is implemented using the malachite library. The integrati
 
 | Malachite Concept | Aranya Mapping |
 |---|---|
-| `Value` | Finalize command payload (parent_id, factdb_merkle_root) |
-| `ValueId` | Hash of the Finalize command payload (parent_id + factdb_merkle_root) |
+| `Value` | Finalize command content: proposed parent (graph position) and FactDB Merkle root |
+| `ValueId` | Hash of the proposed FactDB Merkle root |
 | `Height` | Finalization sequence number (derived from FactDB) |
 | `Validator` | Finalizer device. Malachite uses "validator" for what Aranya calls a "finalizer". |
 | `ValidatorSet` | Current finalizer set. Derived from `Finalizer` facts. Updated atomically when a `Finalize` command applies a `PendingFinalizerSetUpdate`. |
@@ -700,9 +701,9 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 6. **Decision.** All finalizers observe 4 precommits for the proposal. Agreement is reached.
 
-7. **Signature collection.** Each finalizer constructs the Finalize command payload (parent_id=&lt;agreed parent&gt;, factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
+7. **Signature collection.** Each finalizer constructs the Finalize command payload (factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
 
-8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it to their local graph. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `FinalizeRecord[seq: 3]` already exists.
+8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `FinalizeRecord[seq: 3]` already exists.
 
 ## Requirements
 
@@ -808,7 +809,7 @@ The Finalize command MUST carry the `Finalization` attribute, giving it the high
 
 #### FPOL-002
 
-The Finalize command payload MUST contain `parent_id` (the command ID of the parent of the Finalize command, which commits to the full graph chain up to that point). During initial development, the payload MUST also contain `factdb_merkle_root` (typed as `FactRoot`) to validate graph/FactDB consistency. Once unit tests confirm that `parent_id` always implies consistent FactDB state, `factdb_merkle_root` MAY be removed as a production optimization.
+The Finalize command MUST contain exactly one payload field: `factdb_merkle_root` (typed as `FactRoot`), the FactDB Merkle root at the parent of the Finalize command. The parent position in the graph is determined by action-at-parent (see [Action-at-Parent](#action-at-parent)), not by a payload field.
 
 #### FPOL-003
 
@@ -906,7 +907,7 @@ When the finalizer set contains exactly one member, the BFT consensus protocol M
 
 #### SIG-001
 
-After agreement, each finalizer MUST deterministically construct the Finalize command payload from the agreed-upon parent command ID and FactDB Merkle root.
+After agreement, each finalizer MUST deterministically construct the Finalize command payload from the agreed-upon FactDB Merkle root.
 
 #### SIG-002
 
@@ -925,6 +926,10 @@ Any finalizer that has collected a quorum of signatures MUST attach them to the 
 #### CMT-002
 
 The policy MUST ensure only the first Finalize command at a given seq to be woven succeeds; duplicates MUST be rejected because the `FinalizeRecord` already exists.
+
+#### CMT-003
+
+The runtime MUST support action-at-parent: committing the Finalize command at a specified parent in the graph rather than always appending to the current head. This ensures the Finalize command is placed at the parent agreed upon during consensus, even if unrelated commands have arrived since.
 
 ### Triggering Finalization
 
@@ -1032,10 +1037,10 @@ Each finalizer MUST log votes observed during each consensus round, including eq
 
 ## Future Work
 
-- **FactDB Merkle root consistency** -- The `factdb_merkle_root` field in the Finalize command is included during initial development to validate that the same `parent_id` always produces identical FactDB state across all nodes. Once unit tests confirm this invariant, `factdb_merkle_root` can be dropped from the Finalize command payload as a production optimization, leaving `parent_id` as the sole payload field.
+- **Weave Merkle root** -- Add a weave Merkle root to the Finalize command payload alongside `factdb_merkle_root`. The weave Merkle tree would be built from command hashes in weave order, enabling truncation (retain only roots as compact proof of prior state) and light clients (verify finalized state without replaying the full weave).
 - **Role-based finalizer set management** -- The `UpdateFinalizerSet` permission can be delegated to roles other than Owner. Future work could add additional governance controls (e.g. requiring multiple approvals or time-delayed updates).
 - **Graph-based consensus transport** -- Relay consensus messages as graph commands instead of requiring direct QUIC connections between finalizers. This would allow consensus to work through the existing sync topology without finalizers needing to know each other's network addresses. Requires graph support for non-permanent commands (e.g. truncation or branch-level garbage collection).
-- **Truncation** -- Define a garbage collection strategy for finalized graph data. The `parent_id` field in the Finalize command already serves as a Merkle root of the graph up to that point and can function as a compact proof of prior graph state, without requiring a separate weave Merkle root.
+- **Truncation** -- Define a garbage collection strategy for finalized graph data. Requires Merkle roots (e.g. weave Merkle root) to retain compact proofs of truncated state.
 - **Light clients** -- Devices that verify Finalize commands without replaying the full weave.
 - **Larger finalizer sets** -- Support finalizer sets beyond the current maximum of 7. This requires policy language support for collection types or additional FFI work to handle more fields.
 - **Non-device finalizers** -- Support finalizers that are not full devices. Since finalization only requires a signing key, a lightweight finalizer process could participate in consensus without the full device stack. This would allow dedicated finalization infrastructure separate from team devices.
