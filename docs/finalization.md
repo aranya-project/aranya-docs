@@ -27,7 +27,7 @@ Finalization has two components:
 | Finalization round | The full process of producing a Finalize command for a specific sequence number. May contain multiple consensus rounds if proposals fail. |
 | Consensus round | A single propose-prevote-precommit cycle within a finalization round. If the proposal fails or times out, the round number increments and a new consensus round begins with the next proposer. |
 | Parent of the Finalize command | The graph command that the Finalize command is appended to. All ancestors of the Finalize command become permanent. Consensus decides this. |
-| FactDB Merkle root | A hash over the entire FactDB state at a given point in the graph, represented in policy as the built-in `factroot` type. Agreement on the Merkle root implies agreement on all derived state (sequence number, finalizer set, pending updates). |
+| FactDB Merkle root | A hash over the entire FactDB state at a given point in the graph, represented in policy as a `FactRoot` struct (see [Policy Definitions](#policy-definitions)). Agreement on the Merkle root implies agreement on all derived state (sequence number, finalizer set, pending updates). |
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a parent for the Finalize command for a given consensus round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
@@ -254,7 +254,7 @@ Before consensus, each finalizer validates the proposal using an ephemeral comma
 ```policy
 ephemeral command VerifyFinalizationProposal {
     fields {
-        factdb_merkle_root factroot,
+        factdb_merkle_root FactRoot,
     }
 
     seal { return seal(serialize(this)) }
@@ -272,6 +272,16 @@ ephemeral command VerifyFinalizationProposal {
 The finalizer evaluates this ephemeral command at the proposed parent. If it succeeds, the Merkle roots match and the finalizer proceeds to vote. If it fails, the finalizer prevotes nil.
 
 ### Policy Definitions
+
+#### FactRoot Struct
+
+The FactDB Merkle root is wrapped in a policy struct to provide compile-time type safety. This prevents accidental mixing with other `bytes` values and makes the intent explicit without requiring a new built-in type.
+
+```policy
+struct FactRoot {
+    value bytes,
+}
+```
 
 #### Init Command Changes
 
@@ -327,7 +337,7 @@ command Finalize {
 
     fields {
         parent_id id,
-        factdb_merkle_root factroot,
+        factdb_merkle_root FactRoot,
     }
 
     // Signatures are in the envelope, not the payload.
@@ -798,7 +808,7 @@ The Finalize command MUST carry the `Finalization` attribute, giving it the high
 
 #### FPOL-002
 
-The Finalize command payload MUST contain `parent_id` (the command ID of the parent of the Finalize command, which commits to the full graph chain up to that point). During initial development, the payload MUST also contain `factdb_merkle_root` (typed as `factroot`) to validate graph/FactDB consistency. Once unit tests confirm that `parent_id` always implies consistent FactDB state, `factdb_merkle_root` MAY be removed as a production optimization.
+The Finalize command payload MUST contain `parent_id` (the command ID of the parent of the Finalize command, which commits to the full graph chain up to that point). During initial development, the payload MUST also contain `factdb_merkle_root` (typed as `FactRoot`) to validate graph/FactDB consistency. Once unit tests confirm that `parent_id` always implies consistent FactDB state, `factdb_merkle_root` MAY be removed as a production optimization.
 
 #### FPOL-003
 
