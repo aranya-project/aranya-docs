@@ -125,7 +125,7 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
 | **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
 | **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
-| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates at the same seq because the `FinalizeRecord` already exists. Payload-derived command ID means different signature subsets produce the same command. |
+| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates because the derived seq would not equal `LatestFinalizeSeq.seq + 1`. Payload-derived command ID means different signature subsets produce the same command. |
 | **Non-finalizer impersonation** | A non-finalizer node sends consensus messages to influence voting | All consensus messages are signed by the sender's signing key and verified against the current finalizer set. Messages from non-finalizers are dropped. |
 
 ## Finalizer Set
@@ -204,14 +204,14 @@ Properties:
 
 - **Priority**: The Finalize command carries the `Finalization` attribute, which gives it the highest possible priority in the weave -- higher than any numeric priority value any other command can hold. The runtime's weave ordering logic must recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the weave construction code. Other commands may be appended to the same parent as siblings, but the `Finalization` attribute guarantees the Finalize command precedes them.
 - **Fields**:
-  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only payload field. The parent is determined by where the command is placed in the graph (via action-at-parent, see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `FinalizeRecord` facts, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
+  - `factdb_merkle_root` -- The FactDB Merkle root at the parent of the Finalize command. This is the only payload field. The parent is determined by where the command is placed in the graph (via action-at-parent, see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `LatestFinalizeSeq`, finalizer set from `Finalizer` facts, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that authored this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The envelope contains at least a quorum of valid signatures from unique members of the current finalizer set.
   - The `factdb_merkle_root` matches the locally computed FactDB Merkle root at the parent of the Finalize command.
-  - The derived sequence number (`latest_finalize_record().seq + 1`) is sequential.
+  - The derived sequence number (`LatestFinalizeSeq.seq + 1`) is sequential.
 - **Side effects**:
-  - Creates a `FinalizeRecord` at the next sequence number (derived from existing records).
+  - Updates the `LatestFinalizeSeq` singleton to the next sequence number.
   - If a `PendingFinalizerSetUpdate` fact exists, applies it atomically (see [Changing the Finalizer Set](#changing-the-finalizer-set)). The Merkle root check guarantees all finalizers agree on whether a pending update exists.
   - Emits an effect if the device's own finalizer set membership has changed (added or removed), so the daemon can immediately update its consensus participation state.
 
@@ -220,8 +220,8 @@ Properties:
 All Finalize commands in the graph must form a chain -- for any two Finalize commands, one must be an ancestor of the other. This is enforced by:
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
-2. The sequence number is derived from the FactDB (`next_finalize_seq()`), so each Finalize command deterministically creates the next `FinalizeRecord` in sequence. Since the `FinalizeRecord` is created by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates at the same seq are rejected because the `FinalizeRecord` already exists.
+2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
+3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates are rejected because the sequential check fails (`LatestFinalizeSeq.seq` has already been advanced).
 
 ### Finalization and Branches
 
@@ -295,7 +295,7 @@ struct FactRoot {
 
 #### Init Command Changes
 
-The `Init` command is extended with finalizer fields (see [Initialization](#initialization)). The policy also creates an initial `FinalizeRecord` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
+The `Init` command is extended with finalizer fields (see [Initialization](#initialization)). The policy also creates an initial `LatestFinalizeSeq` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
 
 ```policy
 command Init {
@@ -325,9 +325,9 @@ command Init {
             this.finalizer7_pub_sign_key,
         )
 
-        // Create initial FinalizeRecord so seq 1 has a predecessor.
+        // Create initial LatestFinalizeSeq so seq 1 has a predecessor.
         finish {
-            create FinalizeRecord[seq: 0]=>{}
+            create LatestFinalizeSeq[]=>{seq: 0}
         }
     }
 }
@@ -363,14 +363,14 @@ command Finalize {
         // Verify the FactDB Merkle root matches the locally computed root.
         check verify_factdb_merkle_root(this.factdb_merkle_root)
 
-        // Derive the next sequence number from the latest FinalizeRecord.
-        let latest = latest_finalize_record()
+        // Derive the next sequence number from the LatestFinalizeSeq singleton.
+        let latest = lookup LatestFinalizeSeq[]
         let next_seq = latest.seq + 1
 
         finish {
-            create FinalizeRecord[
-                seq: next_seq,
-            ]=>{}
+            // Update the LatestFinalizeSeq singleton.
+            delete LatestFinalizeSeq[]
+            create LatestFinalizeSeq[]=>{seq: next_seq}
 
             // Apply the pending finalizer set update if one exists.
             // The Merkle root check guarantees all finalizers agree on
@@ -393,7 +393,7 @@ command Finalize {
     }
 }
 
-fact FinalizeRecord[seq int]=>{}
+fact LatestFinalizeSeq[]=>{seq int}
 ```
 
 #### UpdateFinalizerSet Command
@@ -470,7 +470,6 @@ The following new FFI functions are required. These handle operations that the p
 - **`validate_new_finalizer_set(f1..f7)`** -- Validates the new finalizer set fields. Checks that the specified count is between 1 and 7, all public signing keys are unique and valid, and the new set does not shrink below 4 if currently at 4+. Returns true if valid.
 - **`delete_all_finalizers()`** -- Deletes all current `Finalizer` facts. Required as an FFI because the policy language cannot iterate over an unbounded set of keyed facts.
 - **`create_finalizers_from_pending(pending)`** -- Creates `Finalizer` facts from the fields of a `PendingFinalizerSetUpdate` value.
-- **`latest_finalize_record()`** -- Returns the `FinalizeRecord` with the highest seq. Required as an FFI because the policy language cannot query for the maximum key value.
 - **`verify_factdb_merkle_root(expected_root)`** -- Computes the FactDB Merkle root at the current evaluation point and returns true if it matches the expected root. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
 - **`seal_multi_author(payload)`** -- Seals a multi-author command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
 - **`open_multi_author(envelope)`** -- Opens a multi-author envelope and returns the deserialized fields.
@@ -628,7 +627,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 
 Consensus state is not persisted -- all consensus messages are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
 
-1. Query the highest `FinalizeRecord` seq to determine the last completed finalization.
+1. Query the `LatestFinalizeSeq` fact to determine the last completed finalization sequence number.
 2. Check if this device is in the current finalizer set (query `Finalizer` facts). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its membership state by listening for the `emit_finalizer_membership_change_if_needed` effect emitted by `Finalize` commands.
 3. If a finalizer, connect to configured finalizer peers and join whatever consensus round is currently active. The Tendermint protocol handles late joiners without needing prior history.
 
@@ -689,7 +688,7 @@ Several Rust BFT consensus libraries were evaluated:
 
 ## Example: Full Finalization Round-Trip
 
-This example walks through a complete finalization round with 4 finalizers (A, B, C, D). The FactDB shows 2 prior `FinalizeRecord` entries, so this will be seq 3 (derived). The round succeeds on the first consensus round (round 0).
+This example walks through a complete finalization round with 4 finalizers (A, B, C, D). The `LatestFinalizeSeq` fact shows seq=2, so this will be seq 3 (derived). The round succeeds on the first consensus round (round 0).
 
 1. **Initiation.** Finalizer A determines there are unfinalized commands and signals the other finalizers that a finalization round should begin.
 
@@ -708,7 +707,7 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 7. **Signature collection.** Each finalizer constructs the Finalize command payload (factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
 
-8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `FinalizeRecord[seq: 3]` already exists.
+8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `LatestFinalizeSeq.seq` has already advanced past 3.
 
 ## Requirements
 
@@ -826,7 +825,7 @@ The Finalize command policy MUST verify that the `factdb_merkle_root` matches th
 
 #### FPOL-005
 
-The Finalize command MUST create a `FinalizeRecord` at the next sequence number, derived as `latest_finalize_record().seq + 1`.
+The Finalize command MUST update the `LatestFinalizeSeq` singleton fact to the next sequence number, derived as `LatestFinalizeSeq.seq + 1`.
 
 #### FPOL-006
 
@@ -838,7 +837,7 @@ Policy MUST reject Finalize commands with a duplicate sequence number. Multiple 
 
 #### FPOL-008
 
-The `Init` command MUST create an initial `FinalizeRecord` at seq 0 so the first Finalize command's sequential check has no special case.
+The `Init` command MUST create an initial `LatestFinalizeSeq` singleton fact with seq 0 so the first Finalize command's sequential check has no special case.
 
 #### FPOL-009
 
@@ -930,7 +929,7 @@ Any finalizer that has collected a quorum of signatures MUST attach them to the 
 
 #### CMT-002
 
-The policy MUST ensure only the first Finalize command at a given seq to be woven succeeds; duplicates MUST be rejected because the `FinalizeRecord` already exists.
+The policy MUST ensure only the first Finalize command at a given seq to be woven succeeds; duplicates MUST be rejected because the sequential check (`LatestFinalizeSeq.seq + 1`) fails after the first has advanced the sequence.
 
 #### CMT-003
 
@@ -1018,7 +1017,7 @@ Consensus state MUST NOT be persisted. When a daemon starts or restarts, any in-
 
 #### FAULT-002
 
-On startup, the daemon MUST determine finalization state from its local FactDB by querying the highest `FinalizeRecord` seq and checking if the device is in the current finalizer set. Subsequently, the daemon MUST maintain its membership state by listening for the effect emitted by FPOL-009.
+On startup, the daemon MUST determine finalization state from its local FactDB by querying the `LatestFinalizeSeq` fact and checking if the device is in the current finalizer set. Subsequently, the daemon MUST maintain its membership state by listening for the effect emitted by FPOL-009.
 
 #### FAULT-003
 
