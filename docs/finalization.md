@@ -246,9 +246,14 @@ Once a Finalize command is committed to the graph:
 
 The Finalize command must be committed at a specific parent — the graph command that consensus agreed upon — rather than at the current head of the graph. This is necessary because unrelated commands may arrive between consensus completing and the Finalize command being committed. If the Finalize command were always appended to the head, the parent could change from what was agreed upon, invalidating the FactDB Merkle root.
 
-This requires a new runtime capability: **action-at-parent** — the ability to create a command at a specified position in the graph rather than always appending to the head. The Finalize command is the only command that uses this capability. The runtime must ensure the specified parent exists in the local graph before committing.
+This requires a change to the runtime's action API. Currently, all actions append to the head of the graph. The action API must accept an optional parent parameter:
 
-Note that action-at-parent does not violate graph width assumptions in a meaningful way for finalization, because the `Finalization` attribute ensures the Finalize command is always ordered first among siblings in the weave.
+- **`action(command, parent: None)`** — Current behavior. Appends the command to the head of the graph. All existing commands continue to use this mode.
+- **`action(command, parent: Some(command_id))`** — Appends the command to the specified parent instead of the head. The runtime must verify the specified parent exists in the local graph before committing. If the parent does not exist, the action fails.
+
+The Finalize command is the only command that uses the explicit parent mode. The daemon passes the agreed-upon parent from consensus when committing the Finalize command.
+
+Action-at-parent may create a sibling of the current head (increasing graph width), since other commands may have been appended to the head after the agreed-upon parent. This does not violate graph width assumptions in a meaningful way for finalization, because the `Finalization` attribute ensures the Finalize command is always ordered first among siblings in the weave. The next command any device appends will be a descendant of the Finalize command (or a descendant of a later head), so graph width returns to normal immediately.
 
 ### FactDB Merkle Root Verification
 
@@ -929,7 +934,7 @@ The policy MUST ensure only the first Finalize command at a given seq to be wove
 
 #### CMT-003
 
-The runtime MUST support action-at-parent: committing the Finalize command at a specified parent in the graph rather than always appending to the current head. This ensures the Finalize command is placed at the parent agreed upon during consensus, even if unrelated commands have arrived since.
+The runtime's action API MUST accept an optional parent parameter. When `parent` is `None`, the command MUST be appended to the head (current behavior). When `parent` is `Some(command_id)`, the command MUST be appended to the specified parent. The runtime MUST verify the specified parent exists in the local graph before committing; if it does not exist, the action MUST fail. The Finalize command is the only command that uses the explicit parent mode.
 
 ### Triggering Finalization
 
