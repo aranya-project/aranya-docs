@@ -125,7 +125,7 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
 | **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
 | **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
-| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | Policy rejects duplicates because the derived seq would not equal `LatestFinalizeSeq.seq + 1`. Payload-derived command ID means different signature subsets produce the same command. |
+| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | The graph rejects duplicate commands with the same command ID. Different signature subsets produce the same command ID (payload-derived), so replays are identical commands. A forged Finalize with a different payload would fail the quorum signature check. |
 | **Non-finalizer impersonation** | A non-finalizer node sends consensus messages to influence voting | All consensus messages are signed by the sender's signing key and verified against the current finalizer set. Messages from non-finalizers are dropped. |
 
 ## Finalizer Set
@@ -221,7 +221,7 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
 2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)) -- the first succeeds and duplicates are rejected because the sequential check fails (`LatestFinalizeSeq.seq` has already been advanced).
+3. Multiple finalizers committing the same Finalize produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). When synced to other nodes, the graph rejects duplicate commands with the same ID at the graph layer — no weaving or policy evaluation occurs for the duplicate.
 
 ### Finalization and Branches
 
@@ -557,7 +557,7 @@ Different finalizers may end up with different subsets of signatures -- any vali
 
 #### Phase 3: Commit
 
-Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). The policy ensures only the first to be woven succeeds.
+Any finalizer that has collected a quorum of signatures attaches them to the envelope and commits the Finalize command locally to the graph at the agreed-upon parent using action-at-parent (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature subsets, but all produce the same command ID (see [Multi-Author Commands](#multi-author-commands)). When a finalizer syncs a Finalize command from another finalizer with the same command ID (but possibly different signatures), the graph rejects it because a command with that ID already exists — no weaving or policy evaluation occurs.
 
 ### Consensus Communication
 
@@ -711,7 +711,7 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 7. **Signature collection.** Each finalizer constructs the Finalize command payload (factdb_merkle_root=&lt;agreed root&gt;), signs it, and shares the signature. Each collects at least 3 signatures.
 
-8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID excludes signatures, all produce the same command ID. The first to be woven succeeds; duplicates are rejected because `LatestFinalizeSeq.seq` has already advanced past 3.
+8. **Commit.** All four finalizers assemble the Finalize command with their collected signatures and commit it at the agreed-upon parent using action-at-parent. Because the command ID is computed from the payload (which excludes signatures), all produce the same command ID. When finalizers sync with each other, the graph rejects duplicate commands with the same ID — no weaving or policy evaluation occurs for the duplicate.
 
 ## Requirements
 
@@ -933,7 +933,7 @@ Any finalizer that has collected a quorum of signatures MUST attach them to the 
 
 #### CMT-002
 
-The policy MUST ensure only the first Finalize command at a given seq to be woven succeeds; duplicates MUST be rejected because the sequential check (`LatestFinalizeSeq.seq + 1`) fails after the first has advanced the sequence.
+When a node syncs a Finalize command that has the same command ID as one already in the graph, the graph MUST reject it at the graph layer without weaving or policy evaluation. This is the standard graph behavior for duplicate command IDs.
 
 #### CMT-003
 
