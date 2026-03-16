@@ -186,7 +186,7 @@ This section defines the on-graph commands, facts, and policy rules that enforce
 
 The Finalize command uses certified authentication instead of single-author authentication. Each signature represents a certifier -- a finalizer that endorsed the command. Certified commands have no author. This is necessary because finalization represents agreement by a quorum of finalizers, not the action of a single device.
 
-This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The certified command type extends the envelope to carry multiple certifier signatures instead of one.
+This requires a **new command type** in the `aranya-core` runtime. Existing commands assume a single author with a single signature. The certified command type extends the envelope to carry multiple certifier signatures instead of one. As with regular commands, the command ID is computed from the payload only — the envelope (including signatures) is not part of the ID. This existing property is critical for certified commands because different finalizers may commit the same command with different signature subsets.
 
 Key properties of certified commands:
 
