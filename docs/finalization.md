@@ -262,7 +262,7 @@ Before consensus, each finalizer validates the proposal using an ephemeral comma
 ```policy
 ephemeral command VerifyFinalizationProposal {
     fields {
-        factdb_merkle_root FactRoot,
+        factdb_merkle_root struct FactRoot,
     }
 
     seal { return seal(serialize(this)) }
@@ -376,7 +376,7 @@ command Finalize {
     }
 
     fields {
-        factdb_merkle_root FactRoot,
+        factdb_merkle_root struct FactRoot,
     }
 
     // Signatures are in the envelope, not the payload.
@@ -882,7 +882,7 @@ The Finalize command MUST carry the `Finalization` attribute, giving it the high
 
 #### FPOL-002
 
-The Finalize command MUST contain exactly one payload field: `factdb_merkle_root` (typed as `FactRoot`), the FactDB Merkle root at the parent of the Finalize command. The parent position in the graph is determined by action-at-parent (see [Action-at-Parent](#action-at-parent)), not by a payload field.
+The Finalize command MUST contain exactly one payload field: `factdb_merkle_root` (typed as `struct FactRoot`), the FactDB Merkle root at the parent of the Finalize command. The parent position in the graph is determined by action-at-parent (see [Action-at-Parent](#action-at-parent)), not by a payload field.
 
 #### FPOL-003
 
