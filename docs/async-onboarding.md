@@ -43,7 +43,7 @@ sequenceDiagram
     participant Admin
     participant Graph
     participant Server as Onboarding Server
-    participant New as New Device
+    participant Client as Onboarding Client
 
     Note over Admin: Create one-time join keypair
     Note over Admin: Create signed device certificate
@@ -60,24 +60,24 @@ sequenceDiagram
     Admin->>Server: drop(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
     Note over Server: Store bundle keyed by mailbox ID
 
-    Admin-->>New: Send 11-word phrase (out of band)
+    Admin-->>Client: Send 11-word phrase (out of band)
 
-    Note over New: Derive mailbox ID<br/>using HKDF-SHA-512
-    Note over New: Derive symmetric encryption key<br/>using HKDF-SHA-512
-    Note over New: Derive authenticator<br/>using HKDF-SHA-512
+    Note over Client: Derive mailbox ID<br/>using HKDF-SHA-512
+    Note over Client: Derive symmetric encryption key<br/>using HKDF-SHA-512
+    Note over Client: Derive authenticator<br/>using HKDF-SHA-512
 
-    New->>Server: fetch(mailbox ID, authenticator)
+    Client->>Server: fetch(mailbox ID, authenticator)
     Note over Server: Validate HMAC(authenticator, mailbox ID)
-    Server->>New: Encrypted onboarding bundle
+    Server->>Client: Encrypted onboarding bundle
 
-    Note over New: Decrypt cert + private key
-    Note over New: Decrypt one-time join keypair
-    Note over New: Decrypt pairing/syncing info
-    Note over New: Decrypt team ID
+    Note over Client: Decrypt cert + private key
+    Note over Client: Decrypt one-time join keypair
+    Note over Client: Decrypt pairing/syncing info
+    Note over Client: Decrypt team ID
 
-    Note over New: Add team using decrypted team ID
-    New->>Graph: Sync with peering point to get graph
-    New->>Graph: SelfJoinTeam (using one-time join key)
+    Note over Client: Add team using decrypted team ID
+    Client->>Graph: Sync with peering point to get graph
+    Client->>Graph: SelfJoinTeam (using one-time join key)
 ```
 
 1. Admin prepares onboarding process
