@@ -527,6 +527,8 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 **Proposer selection.** A deterministic function selects the proposer for each consensus round based on the derived sequence number and consensus round number (round-robin over the sorted finalizer set). All finalizers derive the same sequence number from their FactDB. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
+A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most f finalizers are stale or faulty.
+
 **Proposal.** The proposer selects a parent for the Finalize command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The proposal contains:
 
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
