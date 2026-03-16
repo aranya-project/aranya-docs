@@ -537,9 +537,9 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 **Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer prevotes nil if: validation fails, the proposed parent does not advance beyond the last Finalize command, or the FactDB Merkle root does not match.
 
-If a quorum prevote nil, the round advances immediately to the next proposer.
+**Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, the finalizer precommits nil immediately (advancing the round without waiting for the timeout). If the prevote timeout expires without any quorum (neither for the proposal nor for nil), the finalizer also precommits nil. All finalizers participate in both voting stages.
 
-**Precommit.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it broadcasts a precommit for that proposal to all other finalizers. If a quorum of nil prevotes is observed, or the prevote timeout expires without quorum, the finalizer precommits nil. All finalizers participate in both voting stages.
+Note: Standard Tendermint (as implemented by Malachite) requires a full quorum of nil prevotes to advance immediately. A smaller number of nil prevotes (e.g. `n - q + 1`, which would make proposal quorum mathematically impossible) does not trigger early advancement — the round waits for the timeout in that case. This is conservative but avoids giving a minority the ability to accelerate round advancement.
 
 **Decision.** When a quorum of precommits is observed for the same proposal, the consensus round reaches agreement. If precommit quorum is not reached (nil quorum or timeout), the consensus round number increments and a new proposer is selected. The process repeats from the proposal step with the new proposer.
 
@@ -621,7 +621,7 @@ timeout(r) = base_timeout + r * timeout_increment
 
 Where `r` is the consensus round number (starting at 0). The default `timeout_increment` is 50% of `base_timeout` (e.g., if `base_timeout` is 30s, each successive round adds 15s). The first consensus round uses `base_timeout`; each subsequent round adds `timeout_increment`. All timeout values are configurable per deployment.
 
-Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum prevote nil, the consensus round advances to the next proposer without waiting for any timeout.
+Consensus rounds can also fail fast without waiting for timeouts. If a finalizer receives an obviously invalid proposal (already-finalized sequence number, unknown parent, malformed content), it prevotes nil immediately. If a quorum of nil prevotes is reached, the round advances to the next proposer without waiting for the prevote timeout.
 
 ### Daemon Startup and Fault Tolerance
 
@@ -889,7 +889,7 @@ A finalizer MUST prevote nil if: validation fails, the proposed parent does not 
 
 #### CONS-005
 
-If a quorum prevote nil, the consensus round MUST advance immediately to the next proposer.
+If a quorum of nil prevotes is observed, finalizers MUST precommit nil immediately without waiting for the prevote timeout. If the prevote timeout expires without any quorum (neither for the proposal nor for nil), finalizers MUST also precommit nil. A smaller number of nil prevotes (less than quorum) MUST NOT trigger early advancement.
 
 #### CONS-006
 
