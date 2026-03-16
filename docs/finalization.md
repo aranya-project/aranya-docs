@@ -630,20 +630,11 @@ Consensus messages are sent off-graph between finalizers. The only on-graph comm
 
 #### Transport
 
-Consensus messages are sent over QUIC connections between finalizers. These may be separate connections from sync, or multiplexed on the existing sync connections -- connection reuse is an optimization, not a requirement. If finalization rounds are fast enough, dedicated connections avoid the complexity of multiplexing.
+The consensus protocol is transport-agnostic -- it produces and consumes messages that are delivered by an external transport layer, similarly to how the sync protocol is implemented. The daemon polls the consensus protocol for outgoing messages and delivers incoming messages to it.
 
-If connections are shared, each stream begins with a `MsgType` enum value to distinguish protocols:
+The initial daemon implementation uses QUIC connections between finalizers. These may be separate connections from sync, or multiplexed on the existing sync connections. If connections are shared, each stream begins with a protocol discriminant to route to the appropriate handler.
 
-```rust
-enum MsgType {
-    Sync,
-    Consensus,
-}
-```
-
-The QUIC server reads the `MsgType` when accepting a stream and routes it to the appropriate protocol handler. Streams with an unrecognized `MsgType` are closed immediately.
-
-Finalizers open consensus streams only with other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
+Finalizers send consensus messages only to other finalizers -- non-finalizer peers are unaffected and never see consensus traffic.
 
 #### Finalizer Peer Configuration
 
@@ -658,18 +649,18 @@ When the finalizer set changes (via an `UpdateFinalizerSet` command), peer confi
 
 Non-finalizer devices do not need to configure finalizer peers.
 
-**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Connections that are no longer needed MAY be dropped between rounds and re-established when the next round begins -- persistent connections to all finalizers are not required.
+**Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Persistent connections to all finalizers are not required.
 
-**Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature, confirms the public signing key belongs to a member of the current finalizer set (by looking it up in the `FinalizerSet` fact), and checks that the key matches the expected key for the QUIC connection's source address (based on the configured finalizer peer mappings). Messages that fail any of these checks are dropped.
+**Sender verification.** Each consensus message is signed by the sender's signing key. The recipient verifies the signature and confirms the public signing key belongs to a member of the current finalizer set (by looking it up in the `FinalizerSet` fact). Messages that fail verification are dropped.
 
 #### Consensus Message Types
 
-| Message | Transport | Sender | Description |
-|---|---|---|---|
-| `Proposal` | QUIC stream | Proposer | Proposed parent for the Finalize command and FactDB Merkle root |
-| `Prevote` | QUIC stream | Finalizer | First-stage vote for or against a proposal |
-| `Precommit` | QUIC stream | Finalizer | Second-stage vote to commit a proposal |
-| `SignatureShare` | QUIC stream | Finalizer | Finalizer's signature over the agreed Finalize command content |
+| Message | Sender | Description |
+|---|---|---|
+| `Proposal` | Proposer | Proposed parent for the Finalize command and FactDB Merkle root |
+| `Prevote` | Finalizer | First-stage vote for or against a proposal |
+| `Precommit` | Finalizer | Second-stage vote to commit a proposal |
+| `SignatureShare` | Finalizer | Finalizer's signature over the agreed Finalize command content |
 
 ### Timeouts
 
@@ -694,7 +685,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 
 ### Daemon Startup and Fault Tolerance
 
-Consensus state is not persisted -- all consensus messages are ephemeral QUIC messages. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
+Consensus state is not persisted -- all consensus messages are ephemeral. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
 
 1. Query the `LatestFinalizeSeq` fact to determine the last completed finalization sequence number.
 2. Check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its finalizer set state by listening for the `emit_finalizer_set` effect emitted by `Finalize` commands.
@@ -729,8 +720,8 @@ The consensus protocol is implemented using the malachite library. The integrati
 | `Validator` | Finalizer device. Malachite uses "validator" for what Aranya calls a "finalizer". |
 | `ValidatorSet` | Current finalizer set. Derived from the `FinalizerSet` fact. Updated atomically when a `Finalize` command applies a `PendingFinalizerSetUpdate`. |
 | `Address` | Finalizer's `pub_signing_key_id` |
-| `Vote` | Prevote/precommit QUIC messages |
-| `Proposal` | Finalization proposal QUIC message |
+| `Vote` | Prevote/precommit messages |
+| `Proposal` | Finalization proposal message |
 
 #### Malachite Context Implementation
 
@@ -1038,7 +1029,7 @@ The initiating finalizer MUST NOT necessarily become the proposer. The proposer 
 
 #### COMM-001
 
-Consensus messages MUST be sent off-graph over QUIC connections between finalizers. The only on-graph command produced by finalization MUST be the `Finalize` command.
+Consensus messages MUST be sent off-graph between finalizers. The consensus protocol MUST be transport-agnostic. The only on-graph command produced by finalization MUST be the `Finalize` command.
 
 #### COMM-002
 
@@ -1062,7 +1053,7 @@ Each consensus message MUST be signed by the sender's signing key.
 
 #### COMM-007
 
-The recipient MUST verify the signature, confirm the public signing key belongs to a member of the current finalizer set (by looking it up in the `FinalizerSet` fact), and check that the key matches the expected key for the QUIC connection's source address. Messages that fail any check MUST be dropped.
+The recipient MUST verify the signature and confirm the public signing key belongs to a member of the current finalizer set (by looking it up in the `FinalizerSet` fact). Messages that fail verification MUST be dropped.
 
 ### Timeouts
 
