@@ -57,44 +57,46 @@ Finalization applies to the control plane only -- the persistent commands on the
 The finalization system spans multiple layers of the Aranya stack. The aranya-core runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
 
 ```
-┌──────────────────────────────────────────────────┐
-│                  aranya-daemon                   │
-│                                                  │
-│  ┌───────────────────┐  ┌───────────────────┐    │
-│  │ Consensus Manager │  │   Sync Manager    │    │
-│  │                   │  │                   │    │
-│  │ ┌───────────────┐ │  │ ┌───────────────┐ │    │
-│  │ │  Consensus    │ │  │ │ Sync Protocol │ │    │
-│  │ │  Protocol     │ │  │ └───────────────┘ │    │
-│  │ └──────┬────────┘ │  │                   │    │
-│  │        │          │  │                   │    │
-│  │        ▼          │  │                   │    │
-│  │ ┌───────────────┐ │  │                   │    │
-│  │ │ Finalization  │ │  │                   │    │
-│  │ │ Policy        │ │  │                   │    │
-│  │ └───────────────┘ │  │                   │    │
-│  └────────┬──────────┘  └────────┬──────────┘    │
-│           │                      │               │
-│      ┌────┴──────────────────────┤               │
-│      ▼                           ▼               │
-│  ┌─────────────────┐  ┌─────────────────────┐    │
-│  │ aranya-core     │  │  QUIC Transport     │    │
-│  │ Runtime         │  └─────────────────────┘    │
-│  │                 │                             │
-│  │ ┌─────────────┐ │                             │
-│  │ │Finalization │ │                             │
-│  │ │FFIs (plugin)│ │                             │
-│  │ └─────────────┘ │                             │
-│  └─────────────────┘                             │
-└──────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                    aranya-daemon                    │
+│                                                     │
+│  ┌───────────────────┐  ┌───────────────────┐       │
+│  │ Consensus Manager │  │   Sync Manager    │       │
+│  │                   │  │                   │       │
+│  │ ┌───────────────┐ │  │ ┌───────────────┐ │       │
+│  │ │  Consensus    │ │  │ │ Sync Protocol │ │       │
+│  │ │  Protocol     │ │  │ │ (aranya-core) │ │       │
+│  │ │ (aranya-core) │ │  │ └───────────────┘ │       │
+│  │ └──────┬────────┘ │  │                   │       │
+│  │        │          │  │                   │       │
+│  │        ▼          │  │                   │       │
+│  │ ┌───────────────┐ │  │                   │       │
+│  │ │ Finalization  │ │  │                   │       │
+│  │ │ Policy        │ │  │                   │       │
+│  │ └───────────────┘ │  │                   │       │
+│  └────────┬──────────┘  └────────┬──────────┘       │
+│           │                      │                  │
+│      ┌────┴──────────────────────┘                  │
+│      ▼                                              │
+│  ┌─────────────────┐  ┌──────────────────────────┐  │
+│  │ aranya-core     │  │  QUIC Transport          │  │
+│  │ Runtime         │  │  (shared by consensus    │  │
+│  │                 │  │   and sync managers)     │  │
+│  │ ┌─────────────┐ │  └──────────────────────────┘  │
+│  │ │Finalization │ │                                │
+│  │ │FFIs (plugin)│ │                                │
+│  │ └─────────────┘ │                                │
+│  └─────────────────┘                                │
+└─────────────────────────────────────────────────────┘
 ```
 
 Key architectural boundaries:
 
-- **Consensus manager** and **sync manager** orchestrate their respective protocols and relay messages via QUIC transport. They are daemon-layer components.
-- **Consensus protocol** and **sync protocol** are separate crates in the `aranya-core` repository but are not part of the core runtime. Both depend on the runtime (e.g., consensus queries graph heads). Neither depends on QUIC transport directly.
+- **Consensus manager** and **sync manager** orchestrate their respective protocols and deliver messages via the shared QUIC transport. They are daemon-layer components.
+- **Consensus protocol** and **sync protocol** are transport-agnostic crates in the `aranya-core` repository. Both produce and consume messages that the daemon delivers via the transport layer. Neither depends on QUIC directly.
+- **QUIC transport** is shared by both managers. The daemon multiplexes consensus and sync streams on the same QUIC connections.
 - **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime.
-- **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (multi-author envelopes, quorum verification, finalizer set management).
+- **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (multi-author envelopes, quorum verification).
 
 ## Threat Model
 
