@@ -76,8 +76,8 @@ The finalization system spans multiple layers of the Aranya stack. The aranya-co
 │  │ └───────────────┘ │  │                   │       │
 │  └────────┬──────────┘  └────────┬──────────┘       │
 │           │                      │                  │
-│      ┌────┴──────────────────────┘                  │
-│      ▼                                              │
+│      ┌────┴──────────────────────┤                  │
+│      ▼                           ▼                  │
 │  ┌─────────────────┐  ┌──────────────────────────┐  │
 │  │ aranya-core     │  │  QUIC Transport          │  │
 │  │ Runtime         │  │  (shared by consensus    │  │
