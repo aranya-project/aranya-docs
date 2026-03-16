@@ -31,16 +31,16 @@ Finalization has two components:
 | Proposer | The finalizer selected by the BFT protocol's deterministic round-robin to propose a parent for the Finalize command for a given consensus round |
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
-| Quorum (q) | The minimum number of finalizers required for a consensus decision |
+| Quorum (`q`) | The minimum number of finalizers required for a consensus decision |
 | Sequence number (seq) | Identifies a finalization round; increments with each successful Finalize command |
 
 ### Formulas
 
 | Variable | Formula | Description |
 |---|---|---|
-| n | | Finalizer set size (1 to 7) |
-| f | ⌊(n - 1) / 3⌋ | Maximum number of Byzantine (malicious or faulty) finalizers the protocol can tolerate |
-| q | ⌊(n * 2) / 3⌋ + 1 | Quorum size -- the minimum number of finalizers required for a consensus decision. Ensures safety as long as at most f finalizers are Byzantine. |
+| `n` | | Finalizer set size (1 to 7) |
+| `f` | `⌊(n - 1) / 3⌋` | Maximum number of Byzantine (malicious or faulty) finalizers the protocol can tolerate |
+| `q` | `⌊(n * 2) / 3⌋ + 1` | Quorum size -- the minimum number of finalizers required for a consensus decision. Ensures safety as long as at most `f` finalizers are Byzantine. |
 
 ## Scope
 
@@ -101,7 +101,7 @@ Key architectural boundaries:
 
 ### Fault Model
 
-The consensus protocol assumes the standard BFT fault model: at most f of the n finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (q) of honest, online nodes can communicate.
+The consensus protocol assumes the standard BFT fault model: at most `f` of the `n` finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (`q`) of honest, online nodes can communicate.
 
 ### Why Multi-Party Finalization
 
@@ -119,7 +119,7 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 | Attack | Description | Mitigation |
 |---|---|---|
 | **Malicious proposer** | Proposes an invalid or self-serving parent for the Finalize command | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
-| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires q, not unanimity. Up to f unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
+| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires `q`, not unanimity. Up to `f` unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
 | **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
 | **Compromised finalizer set manager** | Device with `UpdateFinalizerSet` permission replaces the set with devices they control | Owner is the trust anchor (determines initial set in `Init` and controls permission delegation). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
 | **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
@@ -146,7 +146,7 @@ The maximum supported set size for the initial implementation is 7. The BFT algo
 
 Quorum size is computed as `⌊(n * 2) / 3⌋ + 1` where `n` is the finalizer set size. Quorum values for each set size (see [Formulas](#formulas)):
 
-| n | f | q |
+| `n` | `f` | `q` |
 |---|---|---|
 | 1 | 0 | 1 |
 | 2 | 0 | 2 |
@@ -156,7 +156,7 @@ Quorum size is computed as `⌊(n * 2) / 3⌋ + 1` where `n` is the finalizer se
 | 6 | 1 | 5 |
 | 7 | 2 | 5 |
 
-Sizes following `n = 3f + 1` (1, 4, 7) give maximum fault tolerance for the fewest nodes.
+Sizes following `n = 3f + 1` (`1`, `4`, `7`) give maximum fault tolerance for the fewest nodes.
 
 ### Changing the Finalizer Set
 
@@ -573,7 +573,7 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 **Proposer selection.** A deterministic function selects the proposer for each consensus round based on the derived sequence number and consensus round number (round-robin over the sorted finalizer set). All finalizers derive the same sequence number from their FactDB. If the selected proposer is offline, the consensus round times out and advances to the next consensus round with the next proposer in rotation.
 
-A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most f finalizers are stale or faulty.
+A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most `f` finalizers are stale or faulty.
 
 **Proposal.** The proposer selects a parent for the Finalize command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The proposal contains:
 
