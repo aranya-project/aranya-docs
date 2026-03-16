@@ -299,13 +299,13 @@ The `Init` command is extended with finalizer fields (see [Initialization](#init
 command Init {
     fields {
         // ... existing fields ...
-        finalizer1_pub_sign_key optional bytes,
-        finalizer2_pub_sign_key optional bytes,
-        finalizer3_pub_sign_key optional bytes,
-        finalizer4_pub_sign_key optional bytes,
-        finalizer5_pub_sign_key optional bytes,
-        finalizer6_pub_sign_key optional bytes,
-        finalizer7_pub_sign_key optional bytes,
+        finalizer1_pub_sign_key option[bytes],
+        finalizer2_pub_sign_key option[bytes],
+        finalizer3_pub_sign_key option[bytes],
+        finalizer4_pub_sign_key option[bytes],
+        finalizer5_pub_sign_key option[bytes],
+        finalizer6_pub_sign_key option[bytes],
+        finalizer7_pub_sign_key option[bytes],
     }
 
     // ... existing seal/open ...
@@ -355,13 +355,13 @@ command Init {
 fact FinalizerSet[]=>{
     num_finalizers int,
     quorum_size int,
-    f1_pub_sign_key optional bytes,
-    f2_pub_sign_key optional bytes,
-    f3_pub_sign_key optional bytes,
-    f4_pub_sign_key optional bytes,
-    f5_pub_sign_key optional bytes,
-    f6_pub_sign_key optional bytes,
-    f7_pub_sign_key optional bytes,
+    f1_pub_sign_key option[bytes],
+    f2_pub_sign_key option[bytes],
+    f3_pub_sign_key option[bytes],
+    f4_pub_sign_key option[bytes],
+    f5_pub_sign_key option[bytes],
+    f6_pub_sign_key option[bytes],
+    f7_pub_sign_key option[bytes],
 }
 ```
 
@@ -446,13 +446,13 @@ The `UpdateFinalizerSet` command stages a finalizer set change (see [Changing th
 ```policy
 command UpdateFinalizerSet {
     fields {
-        new_finalizer1_pub_sign_key optional bytes,
-        new_finalizer2_pub_sign_key optional bytes,
-        new_finalizer3_pub_sign_key optional bytes,
-        new_finalizer4_pub_sign_key optional bytes,
-        new_finalizer5_pub_sign_key optional bytes,
-        new_finalizer6_pub_sign_key optional bytes,
-        new_finalizer7_pub_sign_key optional bytes,
+        new_finalizer1_pub_sign_key option[bytes],
+        new_finalizer2_pub_sign_key option[bytes],
+        new_finalizer3_pub_sign_key option[bytes],
+        new_finalizer4_pub_sign_key option[bytes],
+        new_finalizer5_pub_sign_key option[bytes],
+        new_finalizer6_pub_sign_key option[bytes],
+        new_finalizer7_pub_sign_key option[bytes],
     }
 
     seal { return seal(serialize(this)) }
@@ -518,13 +518,13 @@ command UpdateFinalizerSet {
 fact PendingFinalizerSetUpdate[]=> {
     num_finalizers int,
     quorum_size int,
-    new_finalizer1_pub_sign_key optional bytes,
-    new_finalizer2_pub_sign_key optional bytes,
-    new_finalizer3_pub_sign_key optional bytes,
-    new_finalizer4_pub_sign_key optional bytes,
-    new_finalizer5_pub_sign_key optional bytes,
-    new_finalizer6_pub_sign_key optional bytes,
-    new_finalizer7_pub_sign_key optional bytes,
+    new_finalizer1_pub_sign_key option[bytes],
+    new_finalizer2_pub_sign_key option[bytes],
+    new_finalizer3_pub_sign_key option[bytes],
+    new_finalizer4_pub_sign_key option[bytes],
+    new_finalizer5_pub_sign_key option[bytes],
+    new_finalizer6_pub_sign_key option[bytes],
+    new_finalizer7_pub_sign_key option[bytes],
 }
 ```
 
