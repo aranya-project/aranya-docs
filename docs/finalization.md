@@ -368,8 +368,10 @@ command Finalize {
         // Look up the current finalizer set for quorum verification.
         let finalizer_set = lookup FinalizerSet[]
 
-        // Verify quorum of valid signatures from the envelope.
-        check verify_finalize_quorum(envelope, finalizer_set)
+        // Verify that the envelope has a quorum of valid, unique
+        // certifier signatures from the finalizer set.
+        let cert_count = get_certified_signature_count(envelope, finalizer_set)
+        check cert_count >= finalizer_set.quorum_size
 
         // Verify the FactDB Merkle root matches the locally computed root.
         check verify_factdb_merkle_root(this.factdb_merkle_root)
@@ -513,7 +515,7 @@ fact PendingFinalizerSetUpdate[]=> {
 FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
 - **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of non-None keys on success, or an error if no keys are provided or if any non-None keys are duplicates. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
-- **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum. *Required as FFI because cryptographic signature verification is not available in the policy language.*
+- **`get_certified_signature_count(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns the count of valid, unique certifier signatures. The policy checks this count against `finalizer_set.quorum_size`. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
 - **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection. *Required as FFI because cryptographic envelope sealing is not available in the policy language (follows the existing `seal_command` FFI pattern).*
 - **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields. *Required as FFI because cryptographic envelope operations are not available in the policy language (follows the existing `open_envelope` FFI pattern).*
