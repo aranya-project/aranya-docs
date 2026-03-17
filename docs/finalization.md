@@ -387,8 +387,7 @@ command Finalize {
 
         finish {
             // Update the LatestFinalizeSeq singleton.
-            delete LatestFinalizeSeq[]
-            create LatestFinalizeSeq[]=>{seq: next_seq}
+            update LatestFinalizeSeq[] to {seq: next_seq}
 
             // Apply the pending finalizer set update if one exists.
             // The Merkle root check guarantees all finalizers agree on
@@ -396,8 +395,7 @@ command Finalize {
             let pending = lookup PendingFinalizerSetUpdate[]
             if pending is some {
                 // Replace the current FinalizerSet with the pending update.
-                delete FinalizerSet[]
-                create FinalizerSet[]=>{
+                update FinalizerSet[] to {
                     num_finalizers: pending.num_finalizers,
                     quorum_size: pending.quorum_size,
                     f1_pub_sign_key: pending.new_finalizer1_pub_sign_key,
