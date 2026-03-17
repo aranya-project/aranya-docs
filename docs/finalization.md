@@ -385,16 +385,16 @@ command Finalize {
         let latest = lookup LatestFinalizeSeq[]
         let next_seq = latest.seq + 1
 
-        finish {
-            // Update the LatestFinalizeSeq singleton.
-            update LatestFinalizeSeq[] to {seq: next_seq}
+        // Check for a pending finalizer set update before the finish block.
+        // The Merkle root check guarantees all finalizers agree on
+        // whether a pending update exists.
+        let pending = lookup PendingFinalizerSetUpdate[]
 
-            // Apply the pending finalizer set update if one exists.
-            // The Merkle root check guarantees all finalizers agree on
-            // whether a pending update exists.
-            let pending = lookup PendingFinalizerSetUpdate[]
-            if pending is some {
-                // Replace the current FinalizerSet with the pending update.
+        // Policy terminates after executing a finish block, so use
+        // branching to handle both cases in a single finish.
+        if pending is some {
+            finish {
+                update LatestFinalizeSeq[] to {seq: next_seq}
                 update FinalizerSet[] to {
                     num_finalizers: pending.num_finalizers,
                     quorum_size: pending.quorum_size,
@@ -406,15 +406,14 @@ command Finalize {
                     f6_pub_sign_key: pending.new_finalizer6_pub_sign_key,
                     f7_pub_sign_key: pending.new_finalizer7_pub_sign_key,
                 }
-
-                // Consume the pending update.
                 delete PendingFinalizerSetUpdate[]
+                emit_finalizer_set(finalizer_set)
             }
-
-            // Always emit the current FinalizerSet so the daemon can
-            // update its consensus participation state and peer set.
-            let current_set = lookup FinalizerSet[]
-            emit_finalizer_set(current_set)
+        } else {
+            finish {
+                update LatestFinalizeSeq[] to {seq: next_seq}
+                emit_finalizer_set(finalizer_set)
+            }
         }
     }
 }
