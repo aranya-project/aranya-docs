@@ -299,9 +299,9 @@ command Init {
         // ... existing init logic ...
 
         // Validate finalizer set (1 to 7 finalizers).
-        // If none provided, default to team owner as sole finalizer.
+        // The runtime defaults to the team owner's signing key
+        // before creating this command if none are provided.
         check validate_init_finalizer_set(
-            envelope,
             this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
             this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
             this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
@@ -517,7 +517,7 @@ fact PendingFinalizerSetUpdate[]=> {
 
 The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, certified envelopes). All fact operations are performed directly in policy code; FFI functions only perform validation and cryptographic operations.
 
-- **`validate_init_finalizer_set(envelope, f1..f7)`** -- Validates the initial finalizer set from the `Init` command. Checks that all specified public signing keys are unique and valid. If none are provided, validates that the team owner's signing key (from the envelope) will be used as the default. Returns true if valid.
+- **`validate_init_finalizer_set(f1..f7)`** -- Validates the initial finalizer set from the `Init` command. Checks that at least one key is provided, all specified public signing keys are unique and valid. Returns true if valid. The runtime is responsible for defaulting to the team owner's signing key before creating the command if none are specified by the caller.
 - **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
 - **`verify_factdb_merkle_root(expected_root)`** -- Obtains the current FactDB Merkle root and returns true if it matches the expected root. The runtime implements this using the storage API, which computes the root incrementally. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
 - **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
