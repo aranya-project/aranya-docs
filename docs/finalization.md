@@ -301,7 +301,8 @@ command Init {
         // Validate finalizer set (1 to 7 finalizers).
         // The runtime defaults to the team owner's signing key
         // before creating this command if none are provided.
-        check validate_init_finalizer_set(
+        check this.finalizer1_pub_sign_key is some
+        check no_duplicate_keys(
             this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
             this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
             this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
@@ -350,7 +351,7 @@ fact FinalizerSet[]=>{
 }
 ```
 
-See [`validate_init_finalizer_set`](#new-ffis) for validation details.
+See [Finalizer Set Validation](#finalizer-set-validation) for validation details.
 
 #### Finalize Command
 
@@ -407,12 +408,12 @@ command Finalize {
                     f7_pub_sign_key: pending.new_finalizer7_pub_sign_key,
                 }
                 delete PendingFinalizerSetUpdate[]
-                emit_finalizer_set(finalizer_set)
+                emit FinalizerSetChanged {finalizer_set: finalizer_set}
             }
         } else {
             finish {
                 update LatestFinalizeSeq[] to {seq: next_seq}
-                emit_finalizer_set(finalizer_set)
+                emit FinalizerSetChanged {finalizer_set: finalizer_set}
             }
         }
     }
@@ -512,14 +513,23 @@ fact PendingFinalizerSetUpdate[]=> {
 
 #### New FFIs
 
-The following new FFI functions are required. These handle operations that the policy language cannot express directly (cryptographic verification, certified envelopes). All fact operations are performed directly in policy code; FFI functions only perform validation and cryptographic operations.
+FFI functions must be pure functions — they take inputs and return outputs without side effects. The following new FFIs handle cryptographic operations that the policy language cannot express directly. All fact operations and effect emissions are performed in policy code.
 
-- **`validate_init_finalizer_set(f1..f7)`** -- Validates the initial finalizer set from the `Init` command. Checks that at least one key is provided, all specified public signing keys are unique and valid. Returns true if valid. The runtime is responsible for defaulting to the team owner's signing key before creating the command if none are specified by the caller.
 - **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
-- **`verify_factdb_merkle_root(expected_root)`** -- Obtains the current FactDB Merkle root and returns true if it matches the expected root. The runtime implements this using the storage API, which computes the root incrementally. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
-- **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection.
-- **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields.
-- **`emit_finalizer_set(finalizer_set)`** -- Emits an effect containing the current `FinalizerSet`. The daemon listens for this effect to update its consensus participation state and peer set without re-querying the FactDB.
+- **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. The runtime implements this using the storage API, which computes the root incrementally and passes it into the policy VM via context. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
+- **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection. (Follows the existing `seal_command` FFI pattern.)
+- **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields. (Follows the existing `open_envelope` FFI pattern.)
+
+#### Finalizer Set Validation
+
+Finalizer set validation is performed in policy code, not via FFI:
+
+- **Init command**: The policy checks that at least one key is provided and uses `no_duplicate_keys` to verify uniqueness. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
+- **UpdateFinalizerSet command**: The policy checks that at least one key is provided, verifies uniqueness via `no_duplicate_keys`, and enforces the no-shrink-below-4 rule.
+
+#### Effects
+
+The `Finalize` command emits a `FinalizerSetChanged` effect containing the current `FinalizerSet` using the policy `emit` statement. The daemon listens for this effect to update its consensus participation state and peer set without re-querying the FactDB.
 
 ## BFT Consensus Protocol
 
@@ -665,7 +675,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 Consensus state is not persisted -- all consensus messages are ephemeral. When a daemon starts or restarts, any in-progress finalization round is abandoned. The daemon determines finalization state from its local FactDB and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
 
 1. Query the `LatestFinalizeSeq` fact to determine the last completed finalization sequence number.
-2. Check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its finalizer set state by listening for the `emit_finalizer_set` effect emitted by `Finalize` commands.
+2. Check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon maintains its finalizer set state by listening for the `FinalizerSetChanged` effect emitted by `Finalize` commands.
 3. If a finalizer, connect to configured finalizer peers and join whatever consensus round is currently active. The Tendermint protocol handles late joiners without needing prior history.
 
 A daemon being offline does not block finalization -- as long as a quorum remains online, consensus continues. Stalled rounds advance automatically via timeout. If all finalizers restart simultaneously, they independently determine the current sequence number from FactDB and the deterministic proposer rotation ensures they agree on who proposes first.
