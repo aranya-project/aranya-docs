@@ -224,23 +224,6 @@ All Finalize commands in the graph must form a chain -- for any two Finalize com
 2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize must be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
 3. Multiple finalizers committing the same Finalize produce the same command ID (see [Certified Commands](#certified-commands)). When synced to other nodes, the graph rejects duplicate commands with the same ID at the graph layer — no weaving or policy evaluation occurs for the duplicate.
 
-### Finalization and Branches
-
-Finalization advances along a single chain. Only commands in the ancestry of the Finalize command are finalized -- commands on unmerged branches are not. This means:
-
-- The proposer selects a parent for the Finalize command from its local graph. Finalizers that don't have it sync with the proposer (see [Agreement](#phase-1-agreement)).
-- Unmerged branches remain unfinalized but continue operating normally.
-- As devices sync and merge branches into the finalized branch, those commands become eligible for finalization in subsequent rounds.
-- No explicit merge step is required before finalization -- merges happen naturally through sync, and the next finalization round covers the newly merged commands.
-
-Branches do not finalize in parallel. Parallel finalization would produce Finalize commands that are not ancestors of each other, violating the chain guarantee. The graph must converge through merges before commands on separate branches can be finalized.
-
-### Post-Finalization
-
-Once a Finalize command is committed to the graph:
-
-- All commands that are ancestors of the Finalize command are permanently accepted. Their effects in the FactDB are irreversible -- the runtime enforces this through braid ordering rather than by rejecting new commands. The `finalize: true` attribute ensures the Finalize command is always ordered before any siblings in the braid, and any new command must be appended to the Finalize command or one of its descendants -- never before it. This means new commands can only extend the graph forward from the finalized point, never insert before it.
-- Commands on branches that conflict with the finalized braid are permanently recalled.
 
 ### Action-at-Parent
 
