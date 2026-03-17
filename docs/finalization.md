@@ -299,30 +299,21 @@ command Init {
         // ... existing init logic ...
 
         // Validate finalizer set (1 to 7 finalizers).
+        // Returns -1 if no keys provided or duplicates found,
+        // otherwise returns the count of non-None keys.
         // The runtime defaults to the team owner's signing key
         // before creating this command if none are provided.
-        check this.finalizer1_pub_sign_key is some
-        check no_duplicate_keys(
+        let n = validate_finalizer_keys(
             this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
             this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
             this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
             this.finalizer7_pub_sign_key,
         )
+        check n > 0
+        let q = compute_quorum_size(n)
 
-        // Create initial LatestFinalizeSeq so seq 1 has a predecessor.
         finish {
             create LatestFinalizeSeq[]=>{seq: 0}
-
-            // Create the initial FinalizerSet.
-            // If no keys were provided, the runtime defaults to the
-            // team owner's signing key before creating this command.
-            let n = count_keys(
-                this.finalizer1_pub_sign_key, this.finalizer2_pub_sign_key,
-                this.finalizer3_pub_sign_key, this.finalizer4_pub_sign_key,
-                this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
-                this.finalizer7_pub_sign_key,
-            )
-            let q = (n * 2) / 3 + 1
             create FinalizerSet[]=>{
                 num_finalizers: n,
                 quorum_size: q,
@@ -449,17 +440,16 @@ command UpdateFinalizerSet {
         check has_permission(author, UpdateFinalizerSet)
 
         // Validate the new finalizer set.
-        // At least one key must be provided (max 7 is structural).
-        check this.new_finalizer1_pub_sign_key is some
-
-        // All provided keys must be unique (pairwise comparison
-        // across the fixed fields).
-        check no_duplicate_keys(
+        // Returns -1 if no keys provided or duplicates found,
+        // otherwise returns the count of non-None keys.
+        let new_count = validate_finalizer_keys(
             this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
             this.new_finalizer3_pub_sign_key, this.new_finalizer4_pub_sign_key,
             this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
             this.new_finalizer7_pub_sign_key,
         )
+        check new_count > 0
+        let new_quorum = compute_quorum_size(new_count)
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
         let current = lookup FinalizerSet[]
@@ -467,32 +457,37 @@ command UpdateFinalizerSet {
             check new_count >= 4
         }
 
-        // Compute count and quorum for the new set.
-        let new_count = count_keys(
-            this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
-            this.new_finalizer3_pub_sign_key, this.new_finalizer4_pub_sign_key,
-            this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
-            this.new_finalizer7_pub_sign_key,
-        )
-        let new_quorum = (new_count * 2) / 3 + 1
-
-        finish {
-            // Stage the update. The next Finalize command will apply it
-            // automatically. If a pending update already exists, replace it.
-            let existing = lookup PendingFinalizerSetUpdate[]
-            if existing is some {
+        // Stage the update. The next Finalize command will apply it
+        // automatically. If a pending update already exists, replace it.
+        let existing = lookup PendingFinalizerSetUpdate[]
+        if existing is some {
+            finish {
                 delete PendingFinalizerSetUpdate[]
+                create PendingFinalizerSetUpdate[]=>{
+                    num_finalizers: new_count,
+                    quorum_size: new_quorum,
+                    new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
+                    new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
+                    new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
+                    new_finalizer4_pub_sign_key: this.new_finalizer4_pub_sign_key,
+                    new_finalizer5_pub_sign_key: this.new_finalizer5_pub_sign_key,
+                    new_finalizer6_pub_sign_key: this.new_finalizer6_pub_sign_key,
+                    new_finalizer7_pub_sign_key: this.new_finalizer7_pub_sign_key,
+                }
             }
-            create PendingFinalizerSetUpdate[]=>{
-                num_finalizers: new_count,
-                quorum_size: new_quorum,
-                new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
-                new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
-                new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
-                new_finalizer4_pub_sign_key: this.new_finalizer4_pub_sign_key,
-                new_finalizer5_pub_sign_key: this.new_finalizer5_pub_sign_key,
-                new_finalizer6_pub_sign_key: this.new_finalizer6_pub_sign_key,
-                new_finalizer7_pub_sign_key: this.new_finalizer7_pub_sign_key,
+        } else {
+            finish {
+                create PendingFinalizerSetUpdate[]=>{
+                    num_finalizers: new_count,
+                    quorum_size: new_quorum,
+                    new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
+                    new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
+                    new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
+                    new_finalizer4_pub_sign_key: this.new_finalizer4_pub_sign_key,
+                    new_finalizer5_pub_sign_key: this.new_finalizer5_pub_sign_key,
+                    new_finalizer6_pub_sign_key: this.new_finalizer6_pub_sign_key,
+                    new_finalizer7_pub_sign_key: this.new_finalizer7_pub_sign_key,
+                }
             }
         }
     }
@@ -513,19 +508,21 @@ fact PendingFinalizerSetUpdate[]=> {
 
 #### New FFIs
 
-FFI functions must be pure functions — they take inputs and return outputs without side effects. The following new FFIs handle cryptographic operations that the policy language cannot express directly. All fact operations and effect emissions are performed in policy code.
+FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
-- **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum.
-- **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. The runtime implements this using the storage API, which computes the root incrementally and passes it into the policy VM via context. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command.
-- **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection. (Follows the existing `seal_command` FFI pattern.)
-- **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields. (Follows the existing `open_envelope` FFI pattern.)
+- **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns -1 if no keys are provided or if any non-None keys are duplicates; otherwise returns the count of non-None keys. The caller checks `n > 0` to reject invalid sets. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands. **TODO:** Confirm whether the policy language can propagate FFI errors directly. If so, this FFI should return an error instead of -1.
+- **`compute_quorum_size(n)`** -- Takes a finalizer count and returns the BFT quorum size: `⌊(n × 2) / 3⌋ + 1`. *Required as FFI because the policy language only supports `add`, `sub`, `saturating_add`, and `saturating_sub` — multiply and divide are not available.*
+- **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum. *Required as FFI because cryptographic signature verification is not available in the policy language.*
+- **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
+- **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection. *Required as FFI because cryptographic envelope sealing is not available in the policy language (follows the existing `seal_command` FFI pattern).*
+- **`open_certified(envelope)`** -- Opens a certified envelope and returns the deserialized fields. *Required as FFI because cryptographic envelope operations are not available in the policy language (follows the existing `open_envelope` FFI pattern).*
 
 #### Finalizer Set Validation
 
-Finalizer set validation is performed in policy code, not via FFI:
+Both commands use `validate_finalizer_keys` to validate and count the provided keys, and `compute_quorum_size` to derive the quorum. All other validation logic is in policy:
 
-- **Init command**: The policy checks that at least one key is provided and uses `no_duplicate_keys` to verify uniqueness. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
-- **UpdateFinalizerSet command**: The policy checks that at least one key is provided, verifies uniqueness via `no_duplicate_keys`, and enforces the no-shrink-below-4 rule.
+- **Init command**: Calls `validate_finalizer_keys` (returns error or count), then `compute_quorum_size`. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
+- **UpdateFinalizerSet command**: Same validation, plus policy enforces the no-shrink-below-4 rule: if the current `FinalizerSet` has 4+ finalizers, the new count must also be >= 4.
 
 #### Effects
 
