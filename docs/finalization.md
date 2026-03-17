@@ -595,15 +595,14 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most `f` finalizers are stale or faulty.
 
-**Proposal.** The proposer selects a parent command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The parent is the command to finalize -- the Finalize command will be appended after it, making all of its ancestors permanent. The proposal contains protocol fields managed by Malachite and a payload with the finalization-specific data:
+**Proposal.** The proposer selects a parent command from its local graph (typically its current head or a recent command), computes the FactDB Merkle root at that point, and constructs the unsigned Finalize command (via `seal_certified`). The parent is the command to finalize -- the Finalize command will be appended after it, making all of its ancestors permanent. The proposal contains protocol fields managed by Malachite and a payload with the finalization-specific data:
 
 Protocol fields (managed by Malachite):
 - **Height** -- The finalization sequence number (Malachite `Height`). Derived from `LatestFinalizeSeq` in the proposer's FactDB. Malachite includes this in all protocol messages and uses it to match proposals to the correct finalization round.
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
 
 Proposal payload (finalization-specific):
-- **Parent** -- The graph command to finalize. The Finalize command will be appended after this command, making all of its ancestors permanent.
-- **FactDB Merkle root** -- The FactDB Merkle root at the proposed parent. Agreement on the Merkle root implies agreement on the sequence number, finalizer set, and any pending updates -- all are derivable from the FactDB.
+- **Unsigned Finalize command** -- The complete Finalize command envelope without signatures, constructed by the proposer using `seal_certified`. This includes the parent, FactDB Merkle root, and command ID. By including the command directly, all finalizers are guaranteed to sign the exact same command — no independent reconstruction is needed. Signatures are attached after consensus during the [Signature Collection](#phase-2-signature-collection) phase.
 
 **Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed parent in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the proposed parent, it validates the proposal by computing and comparing the FactDB Merkle root (see [Pre-Consensus Validation](#pre-consensus-validation)).
 
@@ -617,7 +616,7 @@ Note: Standard Tendermint (as implemented by Malachite) requires a full quorum o
 
 #### Phase 2: Signature Collection
 
-Once agreement is reached on the parent of the Finalize command, each finalizer deterministically constructs the Finalize command payload from the agreed-upon FactDB Merkle root. Because the Merkle root is deterministic given the parent, every finalizer produces the same payload and therefore the same command ID.
+Once agreement is reached, each finalizer already has the unsigned Finalize command from the proposal. Since the command was constructed by the proposer and agreed upon during consensus, all finalizers sign the exact same command with the same command ID.
 
 Signature collection is intentionally separate from the consensus voting phases. Signing after consensus means each signature attests that the finalizer both approves the command and believes a quorum agreed on it. This is a stronger claim than signing during precommit (which would only attest to approval). It also avoids wasting signature computation on failed rounds and reduces bandwidth — each finalizer requests signatures only until it has a quorum, rather than broadcasting to all peers.
 
