@@ -299,8 +299,8 @@ command Init {
         // ... existing init logic ...
 
         // Validate finalizer set (1 to 7 finalizers).
-        // Returns -1 if no keys provided or duplicates found,
-        // otherwise returns the count of non-None keys.
+        // Returns the count of non-None keys, or an error if
+        // no keys are provided or duplicates are found.
         // The runtime defaults to the team owner's signing key
         // before creating this command if none are provided.
         let n = validate_finalizer_keys(
@@ -309,7 +309,6 @@ command Init {
             this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
             this.finalizer7_pub_sign_key,
         )
-        check n > 0
         let q = compute_quorum_size(n)
 
         finish {
@@ -440,15 +439,14 @@ command UpdateFinalizerSet {
         check has_permission(author, UpdateFinalizerSet)
 
         // Validate the new finalizer set.
-        // Returns -1 if no keys provided or duplicates found,
-        // otherwise returns the count of non-None keys.
+        // Returns the count of non-None keys, or an error if
+        // no keys are provided or duplicates are found.
         let new_count = validate_finalizer_keys(
             this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
             this.new_finalizer3_pub_sign_key, this.new_finalizer4_pub_sign_key,
             this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
             this.new_finalizer7_pub_sign_key,
         )
-        check new_count > 0
         let new_quorum = compute_quorum_size(new_count)
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
@@ -510,7 +508,7 @@ fact PendingFinalizerSetUpdate[]=> {
 
 FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
-- **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns -1 if no keys are provided or if any non-None keys are duplicates; otherwise returns the count of non-None keys. The caller checks `n > 0` to reject invalid sets. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands. **TODO:** Confirm whether the policy language can propagate FFI errors directly. If so, this FFI should return an error instead of -1.
+- **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of non-None keys on success, or an error if no keys are provided or if any non-None keys are duplicates. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
 - **`compute_quorum_size(n)`** -- Takes a finalizer count and returns the BFT quorum size: `⌊(n × 2) / 3⌋ + 1`. *Required as FFI because the policy language only supports `add`, `sub`, `saturating_add`, and `saturating_sub` — multiply and divide are not available.*
 - **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
@@ -549,11 +547,11 @@ This is safe because the finalizer set is always established by a single authori
 
 ### Triggering Finalization
 
-Finalization is triggered in three ways:
+All finalization triggers use the same scheduling mechanism: an effect that sets a delay before the next finalization round. The daemon tracks one pending schedule at a time -- a shorter delay overwrites the current schedule.
 
-1. **Periodic scheduling.** The `Init` command emits an effect that schedules the first finalization after a configured delay. Each successful `Finalize` command emits an effect scheduling the next one. Scheduling uses a delay (not wall clock time) -- the daemon tracks the delay locally. Only one finalization can be scheduled at a time; a shorter delay overwrites the current schedule.
+1. **Periodic scheduling.** The `Init` command emits an effect that schedules the first finalization after a configured delay. Each successful `Finalize` command emits an effect scheduling the next one. Scheduling uses a delay (not wall clock time) -- the daemon tracks the delay locally.
 2. **Daemon restart.** When a finalizer daemon comes back online, it always attempts to trigger finalization. The daemon does not try to determine whether the last finalization was recent -- it proceeds unconditionally and relies on other finalizers to prevote nil if finalization was too recent. This avoids the daemon needing to persist scheduling state across restarts.
-3. **On-demand.** Any finalizer can initiate a finalization round on-demand by signaling other finalizers via the off-graph consensus protocol.
+3. **On-demand.** A policy command can request immediate finalization by emitting a scheduling effect with a zero delay. This overwrites any pending periodic schedule, triggering finalization immediately. After the resulting `Finalize` command completes, the normal periodic schedule is re-established.
 
 In all cases, the initiating finalizer does not necessarily become the proposer -- the proposer is selected deterministically by the BFT algorithm's proposer rotation (see [Agreement](#phase-1-agreement)). If multiple finalizers trigger concurrently, consensus resolves to a single proposal.
 
