@@ -640,16 +640,11 @@ Finalizers send consensus messages only to other finalizers -- non-finalizer pee
 
 #### Finalizer Peer Configuration
 
-Finalizer network addresses are configured at runtime via the client API:
+Since finalizers are devices for the initial implementation, the consensus manager reuses the existing sync peer configuration for addressing. Finalizer devices are already configured as sync peers, so no additional peer configuration API is needed. The consensus manager determines which sync peers are finalizers by matching their signing keys against the `FinalizerSet` fact.
 
-- **`add_finalizer_peer(pub_signing_key_id, address)`** -- Registers a finalizer peer's network address. The local finalizer establishes (or reuses) a QUIC connection to this address for consensus communication.
-- **`remove_finalizer_peer(pub_signing_key_id)`** -- Removes a finalizer peer.
+When the finalizer set changes (via an `UpdateFinalizerSet` command applied by a `Finalize` command), the consensus manager updates its peer set based on the new `FinalizerSet` fact.
 
-The on-graph finalizer set contains full public signing keys. Mapping signing keys to network addresses is an operational concern handled outside the graph. When provisioning a finalizer device, the operator configures the network addresses of the other finalizers.
-
-When the finalizer set changes (via an `UpdateFinalizerSet` command), peer configurations for finalizers no longer in the set are automatically removed. New finalizers must be configured by the operator before they can participate in consensus.
-
-Non-finalizer devices do not need to configure finalizer peers.
+Non-finalizer devices do not participate in consensus traffic.
 
 **Broadcast pattern.** Consensus messages (proposals, votes, signature shares) are pushed to all configured finalizer peers. A finalizer connects to peers on demand at the start of each finalization round. Persistent connections to all finalizers are not required.
 
@@ -1039,11 +1034,11 @@ Finalizers MUST only open consensus streams with other finalizers. Non-finalizer
 
 #### COMM-003
 
-Finalizer network addresses MUST be configured at runtime via the client API (`add_finalizer_peer` / `remove_finalizer_peer`).
+The consensus manager MUST reuse the existing sync peer configuration for finalizer addressing. It MUST determine which sync peers are finalizers by matching their signing keys against the `FinalizerSet` fact.
 
 #### COMM-004
 
-When the finalizer set changes, peer configurations for finalizers no longer in the set MUST be automatically removed.
+When the finalizer set changes, the consensus manager MUST update its peer set based on the new `FinalizerSet` fact.
 
 #### COMM-005
 
