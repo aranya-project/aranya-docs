@@ -276,9 +276,47 @@ struct FactRoot {
 }
 ```
 
+#### Facts
+
+The following facts are used by the finalization commands. All are singleton facts (empty key `[]`).
+
+```policy
+fact FinalizerSet[]=>{
+    num_finalizers int,
+    quorum_size int,
+    f1_pub_sign_key option[bytes],
+    f2_pub_sign_key option[bytes],
+    f3_pub_sign_key option[bytes],
+    f4_pub_sign_key option[bytes],
+    f5_pub_sign_key option[bytes],
+    f6_pub_sign_key option[bytes],
+    f7_pub_sign_key option[bytes],
+}
+
+fact LatestFinalizeSeq[]=>{seq int}
+
+fact PendingFinalizerSetUpdate[]=> {
+    num_finalizers int,
+    quorum_size int,
+    new_finalizer1_pub_sign_key option[bytes],
+    new_finalizer2_pub_sign_key option[bytes],
+    new_finalizer3_pub_sign_key option[bytes],
+    new_finalizer4_pub_sign_key option[bytes],
+    new_finalizer5_pub_sign_key option[bytes],
+    new_finalizer6_pub_sign_key option[bytes],
+    new_finalizer7_pub_sign_key option[bytes],
+}
+```
+
+- **`FinalizerSet`** -- The current set of finalizers, their count, and the quorum size. Created by `Init`, updated by `Finalize` when a pending update exists.
+- **`LatestFinalizeSeq`** -- The last completed finalization sequence number. Created at 0 by `Init`, incremented by each `Finalize` command.
+- **`PendingFinalizerSetUpdate`** -- Stages a finalizer set change. Created by `UpdateFinalizerSet`, consumed by the next `Finalize` command.
+
 #### Init Command Changes
 
 The `Init` command is extended with finalizer fields (see [Initialization](#initialization)). The policy also creates an initial `LatestFinalizeSeq` at seq 0 so the Finalize command's sequential check has no special case for the first finalization.
+
+See [Finalizer Set Validation](#finalizer-set-validation) for validation details.
 
 ```policy
 command Init {
@@ -329,21 +367,7 @@ command Init {
         }
     }
 }
-
-fact FinalizerSet[]=>{
-    num_finalizers int,
-    quorum_size int,
-    f1_pub_sign_key option[bytes],
-    f2_pub_sign_key option[bytes],
-    f3_pub_sign_key option[bytes],
-    f4_pub_sign_key option[bytes],
-    f5_pub_sign_key option[bytes],
-    f6_pub_sign_key option[bytes],
-    f7_pub_sign_key option[bytes],
-}
 ```
-
-See [Finalizer Set Validation](#finalizer-set-validation) for validation details.
 
 #### Finalize Command
 
@@ -381,7 +405,7 @@ command Finalize {
         let next_seq = latest.seq + 1
 
         // Check for a pending finalizer set update before the finish block.
-        // The Merkle root check guarantees all finalizers agree on
+        // Agreement on the parent guarantees all finalizers agree on
         // whether a pending update exists.
         let pending = lookup PendingFinalizerSetUpdate[]
 
@@ -412,8 +436,6 @@ command Finalize {
         }
     }
 }
-
-fact LatestFinalizeSeq[]=>{seq int}
 ```
 
 #### UpdateFinalizerSet Command
@@ -495,18 +517,6 @@ command UpdateFinalizerSet {
             }
         }
     }
-}
-
-fact PendingFinalizerSetUpdate[]=> {
-    num_finalizers int,
-    quorum_size int,
-    new_finalizer1_pub_sign_key option[bytes],
-    new_finalizer2_pub_sign_key option[bytes],
-    new_finalizer3_pub_sign_key option[bytes],
-    new_finalizer4_pub_sign_key option[bytes],
-    new_finalizer5_pub_sign_key option[bytes],
-    new_finalizer6_pub_sign_key option[bytes],
-    new_finalizer7_pub_sign_key option[bytes],
 }
 ```
 
