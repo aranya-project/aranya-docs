@@ -291,6 +291,9 @@ command Init {
         finalizer5_pub_sign_key option[bytes],
         finalizer6_pub_sign_key option[bytes],
         finalizer7_pub_sign_key option[bytes],
+        // Quorum size computed by the daemon from the consensus
+        // protocol (malachite ThresholdParam::min_expected).
+        quorum_size int,
     }
 
     // ... existing seal/open ...
@@ -309,13 +312,12 @@ command Init {
             this.finalizer5_pub_sign_key, this.finalizer6_pub_sign_key,
             this.finalizer7_pub_sign_key,
         )
-        let q = compute_quorum_size(n)
 
         finish {
             create LatestFinalizeSeq[]=>{seq: 0}
             create FinalizerSet[]=>{
                 num_finalizers: n,
-                quorum_size: q,
+                quorum_size: this.quorum_size,
                 f1_pub_sign_key: this.finalizer1_pub_sign_key,
                 f2_pub_sign_key: this.finalizer2_pub_sign_key,
                 f3_pub_sign_key: this.finalizer3_pub_sign_key,
@@ -426,6 +428,9 @@ command UpdateFinalizerSet {
         new_finalizer5_pub_sign_key option[bytes],
         new_finalizer6_pub_sign_key option[bytes],
         new_finalizer7_pub_sign_key option[bytes],
+        // Quorum size computed by the daemon from the consensus
+        // protocol (malachite ThresholdParam::min_expected).
+        quorum_size int,
     }
 
     seal { return seal(serialize(this)) }
@@ -447,7 +452,6 @@ command UpdateFinalizerSet {
             this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
             this.new_finalizer7_pub_sign_key,
         )
-        let new_quorum = compute_quorum_size(new_count)
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
         let current = lookup FinalizerSet[]
@@ -463,7 +467,7 @@ command UpdateFinalizerSet {
                 delete PendingFinalizerSetUpdate[]
                 create PendingFinalizerSetUpdate[]=>{
                     num_finalizers: new_count,
-                    quorum_size: new_quorum,
+                    quorum_size: this.quorum_size,
                     new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
                     new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
                     new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
@@ -477,7 +481,7 @@ command UpdateFinalizerSet {
             finish {
                 create PendingFinalizerSetUpdate[]=>{
                     num_finalizers: new_count,
-                    quorum_size: new_quorum,
+                    quorum_size: this.quorum_size,
                     new_finalizer1_pub_sign_key: this.new_finalizer1_pub_sign_key,
                     new_finalizer2_pub_sign_key: this.new_finalizer2_pub_sign_key,
                     new_finalizer3_pub_sign_key: this.new_finalizer3_pub_sign_key,
@@ -509,7 +513,6 @@ fact PendingFinalizerSetUpdate[]=> {
 FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
 - **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of non-None keys on success, or an error if no keys are provided or if any non-None keys are duplicates. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
-- **`compute_quorum_size(n)`** -- Takes a finalizer count and returns the BFT quorum size: `⌊(n × 2) / 3⌋ + 1`. *Required as FFI because the policy language only supports `add`, `sub`, `saturating_add`, and `saturating_sub` — multiply and divide are not available.*
 - **`verify_finalize_quorum(envelope, finalizer_set)`** -- Takes the `FinalizerSet` fact value and reads the signatures from the certified envelope. For each signature, matches the signing key ID from the envelope against the public signing keys in the finalizer set, then verifies the signature against the command content. Returns true once a quorum of valid, unique finalizer signatures is confirmed; returns false if all signatures are checked without reaching quorum. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
 - **`seal_certified(payload)`** -- Seals a certified command. The command ID is computed from the payload as usual. The envelope is created without signatures; they are attached later during signature collection. *Required as FFI because cryptographic envelope sealing is not available in the policy language (follows the existing `seal_command` FFI pattern).*
@@ -517,10 +520,10 @@ FFI functions must be pure functions — they take inputs and return outputs wit
 
 #### Finalizer Set Validation
 
-Both commands use `validate_finalizer_keys` to validate and count the provided keys, and `compute_quorum_size` to derive the quorum. All other validation logic is in policy:
+Both commands use `validate_finalizer_keys` to validate and count the provided keys. The `quorum_size` is passed as an action field, computed by the daemon using the consensus protocol's threshold parameters (malachite `ThresholdParam::min_expected`). This keeps the quorum formula outside of policy, so the policy does not embed assumptions about the consensus protocol.
 
-- **Init command**: Calls `validate_finalizer_keys` (returns error or count), then `compute_quorum_size`. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
-- **UpdateFinalizerSet command**: Same validation, plus policy enforces the no-shrink-below-4 rule: if the current `FinalizerSet` has 4+ finalizers, the new count must also be >= 4.
+- **Init command**: Calls `validate_finalizer_keys` (returns error or count). The `quorum_size` is provided by the daemon. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
+- **UpdateFinalizerSet command**: Same key validation, plus policy enforces the no-shrink-below-4 rule: if the current `FinalizerSet` has 4+ finalizers, the new count must also be >= 4. The `quorum_size` is provided by the daemon.
 
 #### Effects
 
