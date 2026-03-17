@@ -580,11 +580,14 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most `f` finalizers are stale or faulty.
 
-**Proposal.** The proposer selects a parent for the Finalize command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The proposal contains:
+**Proposal.** The proposer selects a parent command from its local graph (typically its current head or a recent command) and computes the FactDB Merkle root at that point. The parent is the command to finalize -- the Finalize command will be appended after it, making all of its ancestors permanent. The proposal contains protocol fields managed by Malachite and a payload with the finalization-specific data:
 
+Protocol fields (managed by Malachite):
 - **Height** -- The finalization sequence number (Malachite `Height`). Derived from `LatestFinalizeSeq` in the proposer's FactDB. Malachite includes this in all protocol messages and uses it to match proposals to the correct finalization round.
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
-- **Parent** -- The graph command that the Finalize command will be appended to. This is not a payload field -- it is the position in the graph where the Finalize command is placed. All ancestors of the Finalize command become permanent.
+
+Proposal payload (finalization-specific):
+- **Parent** -- The graph command to finalize. The Finalize command will be appended after this command, making all of its ancestors permanent.
 - **FactDB Merkle root** -- The FactDB Merkle root at the proposed parent. Agreement on the Merkle root implies agreement on the sequence number, finalizer set, and any pending updates -- all are derivable from the FactDB.
 
 **Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed parent in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the proposed parent, it validates the proposal by computing and comparing the FactDB Merkle root (see [Pre-Consensus Validation](#pre-consensus-validation)).
