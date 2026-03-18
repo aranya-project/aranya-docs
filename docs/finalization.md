@@ -194,31 +194,54 @@ Key properties of certified commands:
 
 - **Signatures MUST be stored in the envelope, not the payload.** **[CERT-002]** The envelope MUST carry up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Unlike regular commands (where the command ID includes the author sign ID and signature), the certified command ID MUST be computed from the payload only — excluding all signatures and signer identities. Different valid subsets of certifier signatures MUST produce the same command ID for the same payload. **[CERT-003]**
 - **Multiple certifiers.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is a certifier endorsing the command.
-- **New FFI functions.** Certified commands require new FFI functions (see [New FFIs](#new-ffis) for details):
-  - `seal_certified(payload)` -- Creates the unsigned certified envelope with command ID.
-  - `open_certified(envelope)` -- Verifies the command ID and deserializes the payload.
-  - `verify_certified_quorum(envelope, finalizer_set)` -- Verifies the envelope contains a quorum of valid certifier signatures. Returns an error or success.
+- **Construction and verification are separated.** Unlike regular commands where seal and open are both policy blocks, certified commands split these responsibilities:
+  - **Construction (daemon-side):** The daemon constructs the certified envelope using a dedicated finalization runtime module (see [Certified Command Implementation](#certified-command-implementation)). This happens outside the policy pipeline — there is no seal block for certified commands.
+  - **Verification (policy-side):** The policy has `open_certified(envelope)` and `verify_certified_quorum(envelope, finalizer_set)` FFIs to verify and process the pre-built envelope (see [New FFIs](#new-ffis)).
 
 #### Certified Command Implementation
 
-The following types and functions are needed in `aranya-core` to support certified commands:
+Certified command construction is handled by a dedicated **finalization runtime module** in `aranya-core` that abstracts the certified command lifecycle. The daemon calls this module to construct envelopes and sign commands; the policy VM calls it (via FFIs) to verify them. The module internally uses `aranya-crypto` for digest computation and signing, keeping the daemon decoupled from low-level crypto details.
 
-**`aranya-crypto` crate (`src/policy.rs`):**
-- `certified_digest(command_name, parent_id, command_data)` -- Computes the command digest without `author_sign_id`. Uses a new domain separator (`"CertifiedPolicyCommand-v1"`) to prevent cross-protocol attacks with regular commands.
-- `certified_cmd_id(digest)` -- Computes the command ID from the digest only, without a signature. Uses a new domain separator (`"CertifiedCommandId-v1"`).
+**Digest and ID computation.** Certified commands use a two-layer hash structure that parallels regular commands but excludes author and signature:
 
-**`aranya-crypto` crate (`src/aranya.rs`):**
-- `SigningKey::sign_certified_cmd(command_name, parent_id, command_data)` -- Signs the certified digest. Each certifier signs the same digest (no signer-specific data in the hash), producing a different signature over identical content.
-- `VerifyingKey::verify_certified_cmd(command_name, parent_id, command_data, signature)` -- Verifies a single certifier's signature against the certified digest.
+```
+certified_digest = H("CertifiedPolicyCommand-v1", command_name, parent_id, payload)
+certified_cmd_id = H("CertifiedCommandId-v1", certified_digest)
+```
 
-**`aranya-envelope-ffi` crate:**
-- `CertifiedEnvelope` struct -- Contains `parent_id`, `command_id`, `payload`, and up to 7 `(signing_key_id, signature)` pairs. No `author_id` field (certified commands have no author).
-- `new_certified(parent_id, command_id, payload)` -- Creates an envelope without signatures.
-- Accessor functions for certified envelope fields.
+Compare with regular commands: `digest = H("SignPolicyCommand-v1", author_sign_id, command_name, parent_id, payload)` and `cmd_id = H("PolicyCommandId-v1", digest, signature)`. The different domain separators prevent cross-protocol attacks (a regular command signature cannot be reused as a certified command signature, and vice versa). The exclusion of `author_sign_id` and `signature` ensures all certifiers produce the same digest and the same command ID regardless of who signs or which signatures are included.
 
-**`aranya-crypto-ffi` crate:**
-- `sign_certified(signing_key_id, command_bytes)` FFI -- Calls `sign_certified_cmd`, returns the signature.
-- `verify_certified(public_key, parent_id, command_bytes, command_id, signature)` FFI -- Calls `verify_certified_cmd`, used internally by `verify_certified_quorum` to verify individual signatures.
+**`CertifiedEnvelope` struct:**
+
+```rust
+struct CertifiedEnvelope {
+    parent_id: CmdId,
+    command_id: CmdId,
+    command_name: String,
+    payload: Vec<u8>,              // Serialized command fields
+    certifier_signatures: Vec<(SigningKeyId, Signature)>,  // Up to 7 pairs
+    // No author_id — certified commands have no author
+}
+```
+
+**Finalization runtime module (new crate or module in `aranya-core`):**
+
+Daemon-facing API (construction):
+- `certified_command_id(command_name, parent_id, payload)` → `CmdId` -- Computes the certified digest and derives the command ID as described above. Used by the proposer to include the command ID in the proposal, and by each finalizer to verify it matches before signing.
+- `sign_certified(signing_key, command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it with the provided signing key. Returns the signer's key ID and signature. Each certifier signs the same digest, producing a different signature over identical content. Used by each finalizer during the precommit phase.
+- `build_certified_envelope(command_name, parent_id, payload, signatures)` → `CertifiedEnvelope` -- Constructs the complete envelope. Computes the command ID internally via `certified_command_id`. The `signatures` parameter contains all `(SigningKeyId, Signature)` pairs collected from precommit messages. Used by each finalizer when committing the Finalize command.
+
+Policy-facing API (verification, exposed as FFIs):
+- `open_certified(envelope)` → deserialized command fields -- Recomputes `certified_command_id(command_name, parent_id, payload)` from the envelope's fields and verifies it matches the envelope's `command_id`. Returns an error if the ID does not match (indicating a tampered or malformed envelope). On success, deserializes and returns the command fields. Does not verify certifier signatures — that is handled separately by `verify_certified_quorum`.
+- `verify_certified_quorum(envelope, finalizer_set)` -- Verifies a quorum of valid certifier signatures (see [New FFIs](#new-ffis) for detailed behavior including fail-fast optimizations).
+
+**Runtime action API:**
+- A new action type MUST accept a pre-built `CertifiedEnvelope` and a parent command ID for commit. **[CMT-004]** The runtime:
+  1. Verifies the specified parent exists in the local graph (action-at-parent).
+  2. Skips the seal block — the envelope is already constructed by the daemon.
+  3. Runs the command's `open` block (`open_certified`) to verify the command ID and deserialize the payload.
+  4. Runs the command's `policy` block (quorum verification, Merkle root check, sequence check, pending update application).
+  5. If all checks pass, commits the command to the graph at the specified parent.
 
 ### Finalize Command
 
@@ -404,9 +427,8 @@ command Finalize {
         factdb_merkle_root struct FactRoot,
     }
 
-    // Signatures are in the envelope, not the payload.
-    // Command ID is computed from the payload as usual.
-    seal { return seal_certified(serialize(this)) }
+    // No seal block — the daemon constructs the certified envelope
+    // directly using the finalization runtime module.
     open { return deserialize(open_certified(envelope)) }
 
     policy {
@@ -549,7 +571,6 @@ FFI functions must be pure functions — they take inputs and return outputs wit
 - **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of non-None keys on success, or an error if no keys are provided or if any non-None keys are duplicates. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
 - **`verify_certified_quorum(envelope, finalizer_set)`** -- Verifies that the certified envelope contains a quorum of valid certifier signatures from the `FinalizerSet`. MUST fail fast if the number of signatures in the envelope is less than `finalizer_set.quorum_size` — this avoids verifying any signatures when quorum is impossible. Otherwise, verifies signatures one by one: matches each signing key ID against the public signing keys in the finalizer set, then verifies the signature against the command content. MUST return an error if any signature is invalid (bad signature, key not in finalizer set, or duplicate key) — an honest node would never produce an envelope with invalid signatures, so their presence indicates a malformed or tampered command. MUST stop verifying after `quorum_size` valid signatures and return success — remaining signatures beyond quorum do not need to be verified. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
-- **`seal_certified(payload)`** -- Creates an unsigned certified command envelope. The command ID is computed from a digest of the command name, parent ID, and payload — unlike regular commands, the digest excludes `author_sign_id` and the command ID excludes the signature (see [Certified Command Implementation](#certified-command-implementation)). The envelope is created without signatures; they are attached during the precommit phase. *Required as FFI because cryptographic envelope sealing is not available in the policy language.*
 - **`open_certified(envelope)`** -- Verifies the certified command ID matches the payload and deserializes the fields. Does not verify certifier signatures — that is handled by `verify_certified_quorum` in the policy block. *Required as FFI because cryptographic envelope operations are not available in the policy language.*
 
 #### Finalizer Set Validation
@@ -616,20 +637,20 @@ The goal of this phase is for finalizers to agree on a parent for the Finalize c
 
 A finalizer that has not yet synced the latest Finalize command may compute a different sequence number and therefore a different proposer. This does not break consensus — Malachite drops messages for a lower height and buffers messages for a higher height, so the stale finalizer's messages are harmless. The stale finalizer catches up through Malachite's built-in sync protocol: peers broadcast their current height, the behind node detects it is falling behind and fetches the missing decided values, then replays any buffered messages for the correct height. If the stale finalizer happens to be the designated proposer for a round, that round times out and rotation selects the next proposer — a liveness delay, not a safety issue. Safety is maintained as long as at most `f` finalizers are stale or faulty.
 
-**Proposal.** The proposer selects a parent command from its local graph (typically its current head or a recent command), computes the FactDB Merkle root at that point, and constructs the unsigned Finalize command (via `seal_certified`). The parent is the command to finalize -- the Finalize command will be appended after it, making all of its ancestors permanent. A proposal MUST contain the Malachite height (finalization sequence number), the consensus round number, and the unsigned Finalize command (which includes the proposed parent and FactDB Merkle root). **[CONS-003]** The proposal contains protocol fields managed by Malachite and a payload with the finalization-specific data:
+**Proposal.** The proposer selects a parent command from its local graph (typically its current head or a recent command), computes the FactDB Merkle root at that point, and constructs the unsigned Finalize command using the finalization runtime module (`build_certified_envelope` with an empty signature list). The parent is the command to finalize -- the Finalize command will be appended after it, making all of its ancestors permanent. A proposal MUST contain the Malachite height (finalization sequence number), the consensus round number, and the unsigned Finalize command (which includes the proposed parent and FactDB Merkle root). **[CONS-003]** The proposal contains protocol fields managed by Malachite and a payload with the finalization-specific data:
 
 Protocol fields (managed by Malachite):
 - **Height** -- The finalization sequence number (Malachite `Height`). Derived from `LatestFinalizeSeq` in the proposer's FactDB. Malachite includes this in all protocol messages and uses it to match proposals to the correct finalization round.
 - **Round** -- The consensus round number within this finalization round (increments on timeout).
 
 Proposal payload (finalization-specific):
-- **Unsigned Finalize command** -- The complete Finalize command envelope without signatures, constructed by the proposer using `seal_certified`. This includes the parent, FactDB Merkle root, and command ID. By including the command directly, all finalizers are guaranteed to sign the exact same command — no independent reconstruction is needed. Signatures are attached during the precommit phase (see [Agreement](#phase-1-agreement)).
+- **Unsigned Finalize command** -- The complete Finalize command envelope without signatures, constructed by the proposer using the finalization runtime module. This includes the parent, FactDB Merkle root, and command ID. By including the command directly, all finalizers are guaranteed to sign the exact same command — no independent reconstruction is needed. Signatures are attached during the precommit phase (see [Agreement](#phase-1-agreement)).
 
 **Sync and validate.** Each finalizer receives the proposal. If a finalizer does not have the proposed parent in its local graph, it syncs with the proposer to obtain it and all ancestor commands. Once the finalizer has the proposed parent, it validates the proposal by computing and comparing the FactDB Merkle root (see [Pre-Consensus Validation](#pre-consensus-validation)).
 
 **Prevote.** If validation passes, the finalizer broadcasts a prevote for the proposal to all other finalizers. A finalizer MUST prevote nil if: validation fails or the FactDB Merkle root does not match. **[CONS-004]** Proposals with a stale or future height are handled by Malachite (dropped or buffered, respectively) before reaching validation.
 
-**Precommit and sign.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it MUST sign the unsigned Finalize command from the proposal and broadcast a precommit with the attached `(signing_key_id, signature)` pair to all other finalizers. **[CONS-006, SIG-001]** Since the command was constructed by the proposer and included in the proposal, all finalizers MUST sign the exact same command with the same command ID. Nil precommits carry no signature. If a quorum of nil prevotes is observed, finalizers MUST precommit nil immediately without waiting for the prevote timeout. **[CONS-005]** If the prevote timeout expires without any quorum (neither for the proposal nor for nil), finalizers MUST also precommit nil. A smaller number of nil prevotes (less than quorum) MUST NOT trigger early advancement. All finalizers participate in both voting stages.
+**Precommit and sign.** Every finalizer independently observes the prevotes. When a finalizer observes a quorum of prevotes for the same proposal, it MUST sign the unsigned Finalize command from the proposal (using `sign_certified` from the finalization runtime module) and broadcast a precommit with the attached `(signing_key_id, signature)` pair to all other finalizers. **[CONS-006, SIG-001]** Since the command was constructed by the proposer and included in the proposal, all finalizers MUST sign the exact same command with the same command ID. Nil precommits carry no signature. If a quorum of nil prevotes is observed, finalizers MUST precommit nil immediately without waiting for the prevote timeout. **[CONS-005]** If the prevote timeout expires without any quorum (neither for the proposal nor for nil), finalizers MUST also precommit nil. A smaller number of nil prevotes (less than quorum) MUST NOT trigger early advancement. All finalizers participate in both voting stages.
 
 Note: Standard Tendermint (as implemented by Malachite) requires a full quorum of nil prevotes to advance immediately. A smaller number of nil prevotes (e.g. `n - q + 1`, which would make proposal quorum mathematically impossible) does not trigger early advancement — the round waits for the timeout in that case. This is conservative but avoids giving a minority the ability to accelerate round advancement.
 
@@ -661,7 +682,7 @@ For a maximum finalizer set size of 7, the bandwidth and compute differences are
 
 #### Phase 2: Commit
 
-When a finalizer has accumulated at least a quorum of signatures, it MUST attach all collected signatures to the unsigned Finalize command envelope and commit it locally to the graph at the agreed-upon parent using action-at-parent **[CMT-001]** (see [Action-at-Parent](#action-at-parent)). Multiple finalizers may independently commit with different signature sets (depending on which precommit messages they had received at the time of commit), but all produce the same command ID (see [Certified Commands](#certified-commands)). When a node syncs a Finalize command that has the same command ID as one already in the graph, the graph MUST reject it at the graph layer without weaving or policy evaluation **[CMT-002]** -- this is the standard graph behavior for duplicate command IDs.
+When a finalizer has accumulated at least a quorum of signatures, it MUST build the final certified envelope using `build_certified_envelope` (from the finalization runtime module) with the payload and all collected signatures, then commit it locally to the graph at the agreed-upon parent via the certified command action (see [Action-at-Parent](#action-at-parent))). **[CMT-001]** Multiple finalizers may independently commit with different signature sets (depending on which precommit messages they had received at the time of commit), but all produce the same command ID (see [Certified Commands](#certified-commands)). When a node syncs a Finalize command that has the same command ID as one already in the graph, the graph MUST reject it at the graph layer without weaving or policy evaluation **[CMT-002]** -- this is the standard graph behavior for duplicate command IDs.
 
 ### Consensus Communication
 
