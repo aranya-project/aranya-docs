@@ -10,7 +10,7 @@ This specification uses [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) keywo
 
 ## Overview
 
-Finalization is the process by which commands become permanent. All ancestors of a Finalize command MUST become permanent once the command is committed to the graph. **[FIN-001]** Only commands in the ancestry of the Finalize command are considered finalized; commands on unmerged branches MUST NOT be finalized, and branches MUST NOT finalize in parallel. **[FIN-005, FIN-006]** Once finalized, commands MUST NOT be recallable by future merges. **[FIN-002]** Commands on branches that conflict with the finalized braid MUST be permanently recalled. **[FIN-008]** This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
+Finalization is the process by which commands become permanent. All ancestors of a Finalize command MUST become permanent once the command is committed to the graph. **[FIN-001]** Only commands in the ancestry of the Finalize command are considered finalized; commands on unmerged branches MUST NOT be finalized, and branches MUST NOT finalize in parallel. **[FIN-005, FIN-006]** Once finalized, commands MUST NOT be recallable by future merges. **[FIN-002]** Commands on unmerged branches are not affected by finalization — when merged, they are evaluated against the current FactDB state using normal recall semantics. This bounds the impact of long partitions and adversarial branching by guaranteeing that accepted commands remain accepted.
 
 Finalization has two components:
 
@@ -97,39 +97,6 @@ Key architectural boundaries:
 - **QUIC transport** is shared by both managers. The daemon multiplexes consensus and sync streams on the same QUIC connections.
 - **Finalization policy** is part of the daemon layer and depends on the aranya-core runtime.
 - **Finalization FFIs** are an optional runtime plugin for operations the policy language cannot express directly (certified envelopes, quorum verification).
-
-## Threat Model
-
-### Fault Model
-
-The consensus protocol assumes the standard BFT fault model: at most `f` of the `n` finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (`q`) of honest, online nodes can communicate.
-
-### Why Multi-Party Finalization
-
-Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus improves both availability and resilience to state loss. Availability improves because finalization authority is distributed across a set of finalizers rather than concentrated in a single device. Resilience to state loss improves because a single finalizer that loses its state (e.g. after a crash or restore from backup) could finalize a command that conflicts with a previous finalization, deadlocking the team; with multi-party consensus, a quorum of finalizers would all need to lose state for this to occur. The security of multi-party finalization is still bounded by devices with the `UpdateFinalizerSet` permission -- a compromised device with this permission can undermine the finalizer set in either model.
-
-| Concern | Single finalizer (owner) | Multi-party (BFT) |
-|---|---|---|
-| **Availability** | Owner offline = finalization halts | Finalization authority is distributed across a finalizer set; finalization continues as long as a quorum of finalizers is online |
-| **Compromised finalizer set manager** | Can finalize arbitrary state | Same -- a device with `UpdateFinalizerSet` permission can replace the finalizer set. Security is equivalent in both models. |
-| **Compromised non-owner finalizer** | N/A (no other finalizers) | Requires quorum agreement; single compromised finalizer limited to liveness disruption |
-| **Accountability** | No independent verification | Multiple independent verifications; misbehavior detectable via vote logs |
-
-### Attack Vectors and Mitigations
-
-| Attack | Description | Mitigation |
-|---|---|---|
-| **Malicious proposer** | Proposes an invalid or self-serving parent for the Finalize command | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
-| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires `q`, not unanimity. Up to `f` unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
-| **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
-| **Compromised finalizer set manager** | Device with `UpdateFinalizerSet` permission replaces the set with devices they control | Owner is the trust anchor (determines initial set in `Init` and controls permission delegation). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
-| **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
-| **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
-| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
-| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | The graph rejects duplicate commands with the same command ID. Different signature subsets produce the same command ID (payload-derived), so replays are identical commands. A forged Finalize with a different payload would fail the quorum signature check. |
-| **Non-finalizer impersonation** | A non-finalizer node sends consensus messages to influence voting | All consensus messages are signed by the sender's signing key and verified against the current finalizer set. Messages from non-finalizers are dropped. |
-| <a id="precommit-signature-safety"></a>**Precommit signature collection** | Byzantine node collects signatures from precommit messages and publishes a Finalize command before honest nodes observe the consensus decision | A quorum of precommit-signatures requires a quorum of precommits, which IS the Tendermint consensus decision. The Byzantine node can only publish a valid Finalize for the proposal that honest nodes voted for. Tendermint's locking mechanism (which operates at the prevote level) prevents two different proposals from each accumulating a quorum of precommit-signatures — any two quorums overlap by at least `f+1` honest nodes, and locked honest nodes will not sign a different proposal. The Byzantine fault tolerance threshold (`f` out of `n = 3f+1`) is unchanged. |
-| **Malformed Finalize envelope** | Byzantine finalizer commits a Finalize command with a quorum of valid signatures plus injected invalid signatures (e.g., garbage signature at the start of the list) to cause other nodes to reject the command | `verify_certified_quorum` fails fast on any invalid signature, rejecting the entire command. This does not cause a denial of service: the malformed command is not added to honest nodes' graphs, so when an honest finalizer later syncs a valid Finalize command with the same command ID, it is accepted normally. An honest node never produces an envelope with invalid signatures, so failing fast avoids unnecessary computation without affecting availability. |
 
 ## Finalizer Set
 
@@ -268,7 +235,7 @@ All Finalize commands in the graph MUST form a chain -- for any two Finalize com
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
 2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize MUST be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
-3. Multiple finalizers committing the same Finalize produce the same command ID (see [Certified Commands](#certified-commands)). When synced to other nodes, the graph rejects duplicate commands with the same ID at the graph layer — no weaving or policy evaluation occurs for the duplicate.
+3. Multiple finalizers committing the same Finalize produce the same command ID (see [Certified Commands](#certified-commands)). When synced to other nodes, the graph recognizes them as the same command (standard sync deduplication) — no weaving or policy evaluation occurs.
 
 
 ### Action-at-Parent
@@ -682,7 +649,7 @@ For a maximum finalizer set size of 7, the bandwidth and compute differences are
 
 #### Phase 2: Commit
 
-When a finalizer has accumulated at least a quorum of signatures, it MUST build the final certified envelope using `build_certified_envelope` (from the finalization runtime module) with the payload and all collected signatures, then commit it locally to the graph at the agreed-upon parent via the certified command action (see [Action-at-Parent](#action-at-parent))). **[CMT-001]** Multiple finalizers may independently commit with different signature sets (depending on which precommit messages they had received at the time of commit), but all produce the same command ID (see [Certified Commands](#certified-commands)). When a node syncs a Finalize command that has the same command ID as one already in the graph, the graph MUST reject it at the graph layer without weaving or policy evaluation **[CMT-002]** -- this is the standard graph behavior for duplicate command IDs.
+When a finalizer has accumulated at least a quorum of signatures, it MUST build the final certified envelope using `build_certified_envelope` (from the finalization runtime module) with the payload and all collected signatures, then commit it locally to the graph at the agreed-upon parent via the certified command action (see [Action-at-Parent](#action-at-parent))). **[CMT-001]** Multiple finalizers may independently commit with different signature sets (depending on which precommit messages they had received at the time of commit), but all produce the same command ID (see [Certified Commands](#certified-commands)). When a node syncs a Finalize command that has the same command ID as one already in the graph, the graph MUST recognize it as a duplicate and skip it without weaving or policy evaluation **[CMT-002]** -- this is standard sync deduplication behavior.
 
 ### Consensus Communication
 
@@ -819,7 +786,40 @@ This example walks through a complete finalization round with 4 finalizers (A, B
 
 6. **Decision.** All finalizers observe 4 precommits for the proposal, each carrying a signature. Agreement is reached. Each finalizer now has 4 signatures (3 needed for quorum).
 
-7. **Commit.** All four finalizers attach the collected signatures to the Finalize command envelope and commit it at the agreed-upon parent using action-at-parent. Because the command ID is computed from the payload (which excludes signatures), all produce the same command ID. When finalizers sync with each other, the graph rejects duplicate commands with the same ID — no weaving or policy evaluation occurs for the duplicate.
+7. **Commit.** All four finalizers attach the collected signatures to the Finalize command envelope and commit it at the agreed-upon parent using action-at-parent. Because the command ID is computed from the payload (which excludes signatures), all produce the same command ID. When finalizers sync with each other, the graph recognizes them as the same command (standard sync deduplication) — no weaving or policy evaluation occurs.
+
+## Threat Model
+
+### Fault Model
+
+The consensus protocol assumes the standard BFT fault model: at most `f` of the `n` finalizers may be Byzantine (malicious or arbitrarily faulty). We do not know in advance which nodes are Byzantine. The protocol must be safe regardless of which nodes are faulty, and live as long as a quorum (`q`) of honest, online nodes can communicate.
+
+### Why Multi-Party Finalization
+
+Single-finalizer mode (where the owner is the sole finalizer) is used for the initial implementation. Multi-party consensus improves both availability and resilience to state loss. Availability improves because finalization authority is distributed across a set of finalizers rather than concentrated in a single device. Resilience to state loss improves because a single finalizer that loses its state (e.g. after a crash or restore from backup) could finalize a command that conflicts with a previous finalization, deadlocking the team; with multi-party consensus, a quorum of finalizers would all need to lose state for this to occur. The security of multi-party finalization is still bounded by devices with the `UpdateFinalizerSet` permission -- a compromised device with this permission can undermine the finalizer set in either model.
+
+| Concern | Single finalizer (owner) | Multi-party (BFT) |
+|---|---|---|
+| **Availability** | Owner offline = finalization halts | Finalization authority is distributed across a finalizer set; finalization continues as long as a quorum of finalizers is online |
+| **Compromised finalizer set manager** | Can finalize arbitrary state | Same -- a device with `UpdateFinalizerSet` permission can replace the finalizer set. Security is equivalent in both models. |
+| **Compromised non-owner finalizer** | N/A (no other finalizers) | Requires quorum agreement; single compromised finalizer limited to liveness disruption |
+| **Accountability** | No independent verification | Multiple independent verifications; misbehavior detectable via vote logs |
+
+### Attack Vectors and Mitigations
+
+| Attack | Description | Mitigation |
+|---|---|---|
+| **Malicious proposer** | Proposes an invalid or self-serving parent for the Finalize command | Every finalizer independently verifies the proposal and prevotes nil if invalid. Quorum cannot be reached without honest agreement. |
+| **Blocking finalization** | Byzantine finalizer withholds votes to prevent quorum | Quorum requires `q`, not unanimity. Up to `f` unresponsive finalizers are tolerated. Offline proposer times out and rotation selects the next. |
+| **Equivocation** | Finalizer sends conflicting votes in the same consensus round | Malachite detects equivocation with cryptographic evidence. Tendermint guarantees safety regardless. Owner can remove the finalizer via `UpdateFinalizerSet`. |
+| **Compromised finalizer set manager** | Device with `UpdateFinalizerSet` permission replaces the set with devices they control | Owner is the trust anchor (determines initial set in `Init` and controls permission delegation). Two-phase update requires quorum to sync and agree before the change is applied. Operational controls (monitoring, access restriction) are the primary defense. |
+| **Command hiding** | Malicious node withholds commands from finalizers to cause them to finalize an incomplete view of the graph | Mitigated by sufficient network connectivity -- non-malicious nodes forward commands to finalizers through other paths. The network is assumed well-connected enough that a single malicious node cannot deny availability of graph commands. |
+| **Stale finalization** | Proposer finalizes a point far behind the current head | Only delays finalization of recent commands. Round-robin rotation gives the next proposer a chance. Persistent stale proposals are detectable in vote logs. |
+| **Network partition** | Attacker isolates finalizers to cause conflicting finalizations | Quorum requirement ensures at most one partition can finalize. Minority partition halts finalization; graph operations continue. Devices converge when the partition heals. |
+| **Replay / duplicate Finalize** | Attacker replays a valid Finalize command | The graph recognizes duplicate commands with the same command ID as already present (standard sync deduplication). Different signature subsets produce the same command ID (payload-derived), so replays are identical commands. A forged Finalize with a different payload would fail the quorum signature check. |
+| **Non-finalizer impersonation** | A non-finalizer node sends consensus messages to influence voting | All consensus messages are signed by the sender's signing key and verified against the current finalizer set. Messages from non-finalizers are dropped. |
+| <a id="precommit-signature-safety"></a>**Precommit signature collection** | Byzantine node collects signatures from precommit messages and publishes a Finalize command before honest nodes observe the consensus decision | A quorum of precommit-signatures requires a quorum of precommits, which IS the Tendermint consensus decision. The Byzantine node can only publish a valid Finalize for the proposal that honest nodes voted for. Tendermint's locking mechanism (which operates at the prevote level) prevents two different proposals from each accumulating a quorum of precommit-signatures — any two quorums overlap by at least `f+1` honest nodes, and locked honest nodes will not sign a different proposal. The Byzantine fault tolerance threshold (`f` out of `n = 3f+1`) is unchanged. |
+| **Malformed Finalize envelope** | Byzantine finalizer commits a Finalize command with a quorum of valid signatures plus injected invalid signatures (e.g., garbage signature at the start of the list) to cause other nodes to reject the command | `verify_certified_quorum` fails fast on any invalid signature, rejecting the entire command. This does not cause a denial of service: the malformed command is not added to honest nodes' graphs, so when an honest finalizer later syncs a valid Finalize command with the same command ID, it is accepted normally. An honest node never produces an envelope with invalid signatures, so failing fast avoids unnecessary computation without affecting availability. |
 
 ## Future Work
 
