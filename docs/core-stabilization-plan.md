@@ -56,8 +56,7 @@ For the initial stabilization, the only supported policy implementation is `VmPo
 
 - **Hide the wire format**: Add deserialization functions/methods so users do not need to depend on `postcard` to deserialize sync messages. This removes `postcard` from the user-facing API surface.
 
-- **State machine refactor**: Proposed but **still under discussion**. The idea is to refactor sync types to use a state machine to drive syncing.
-- **Pull out Sync APIs**: We may be able to pull the current set of APIs for syncing into a separate crate and release them consider those stable. The refactor mentioned above would be a breaking change that will be in a v2 (or the next major version of that crate).
+- **Pull out Sync APIs**: We may be able to pull the current set of APIs for syncing into a separate crate and release them consider those stable. The [refactor](#sync-api-refactor) will be a breaking change that will be in a v2 (or the next major version of that crate).
   
 **Open questions**:
 
@@ -150,6 +149,10 @@ The policy language has several planned **breaking** changes that must land befo
 - Fallible pure functions and actions should use the new `Result[T, E]` for return types
 
 - Move custom serialization/deserialization outside of policy code
+
+### Sync API refactor
+
+Proposed but **still under discussion**. The idea is to refactor sync types to use a state machine to drive syncing.
 
 ### Sync Wire Format
 
