@@ -156,7 +156,7 @@ Proposed but **still under discussion**. The idea is to refactor sync types to u
 
 ### Sync Wire Format
 
-Stabilizing the wire format becomes important when users deploy Aranya in production environments. Not required for Phase 1 since the new user-facing crate will abstract over the wire format.
+Stabilizing the wire format becomes important in production environments where devices cannot all upgrade simultaneously. A stable wire format improves backwards compatibility between devices on different versions of the sync crates.
 
 ### Compiled Policy Module Format (`aranya-policy-module`)
 
