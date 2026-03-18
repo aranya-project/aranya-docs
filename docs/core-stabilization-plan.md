@@ -6,6 +6,8 @@ Enable users of the aranya-core crates (open-source community and external custo
   
 - **Strict semver**: No breaking changes without a major version bump (e.g., `1.x` -> `2.x`).
 
+- **Updates**: Stable crates should receive backward compatible bug fixes, vulnerability patches, and potentially new features that can be added in a backward compatible way.
+
 - **Versioning**: Per-crate decision on whether to bump to `1.0` or remain at `0.x` based on whether the team decides a crate is ready.
 
 - **Timeline**: ???
@@ -59,12 +61,10 @@ For the initial stabilization, the only supported policy implementation is `VmPo
   
 **Open questions**:
 
-- [x] Will future sync optimizations change the sync APIs? (Ask Ben.) Example: `SyncResponder::find_needed_segments` was modified to take `TraversalBuffers`. ^dda3f8
+- [x] Will future sync optimizations change the sync APIs? (Ask Ben.) Example: `SyncResponder::poll` was modified to take `TraversalBuffers`.
 	- A: Potentially. The "braid" function will change but other API changes are still TBD.
 
 ### 3. Graph Storage (`aranya-runtime`)
-
-Stabilize `LinearStorageProvider` as the **preferred** storage implementation rather than stabilizing the underlying storage traits.
 
 - **Seal `IoManager`**: Restrict the `IoManager` trait so only the two existing implementations can be used:
 
@@ -106,7 +106,7 @@ These crates generate Rust bindings from policy definitions. Stabilization is **
 
 ### 6. FFI Modules (`aranya-*-ffi` crates)
 
-The FFI modules are policy language extensions written in Rust. There are five core modules:
+The FFI modules are policy language extensions written in Rust. There are five[^2] core modules:
 
   
 
@@ -120,12 +120,12 @@ The FFI modules are policy language extensions written in Rust. There are five c
 
 These crates can be stabilized independently of the policy language itself.
 
-**TODO**: Determine what "stabilization" means concretely for FFI modules. ^37df52
+**TODO**: Determine what "stabilization" means concretely for FFI modules.
 - [ ] Ask Jonathan M.
 	- [ ] Would limiting custom FFIs and only allowing the currently implemented set of FFIs suffice for now?
 
 
-**Known issue**: FFI module ordering is fragile. Modules passed to `VmPolicy::new()` **must** be in the same order as the schemas given to the compiler. Incorrect ordering causes silent misbehavior or runtime errors. See [this thread](https://github.com/aranya-project/aranya-core/pull/549/changes#r2914047791) for further context
+**[Known issue](https://github.com/aranya-project/aranya-core/issues/618)**: FFI module ordering is fragile. Modules passed to `VmPolicy::new()` **must** be in the same order as the schemas given to the compiler. Incorrect ordering causes silent misbehavior or runtime errors. See [this thread](https://github.com/aranya-project/aranya-core/pull/549/changes#r2914047791) for further context
 
 ### 7. Aranya IDs (`aranya-id`)
 
@@ -226,3 +226,4 @@ Investigate adding [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-s
 | Which dependency types leak into public APIs?                                                                                                    | Steve                  | Needs audit |
 
 [^1]: The policy language interface consists of: actions, effects, and exported global values.
+[^2]: Actually there's a sixth one, aranya-afc-util. That's omitted as we're excluding AFC from this initial stabilization effort
