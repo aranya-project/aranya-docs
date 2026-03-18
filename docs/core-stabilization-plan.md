@@ -56,7 +56,7 @@ For the initial stabilization, the only supported policy implementation is `VmPo
 
 - **Hide the wire format**: Add deserialization functions/methods so users do not need to depend on `postcard` to deserialize sync messages. This removes `postcard` from the user-facing API surface.
 
-- **Pull out Sync APIs**: We may be able to pull the current set of APIs for syncing into a separate crate and release them consider those stable. The [refactor](#sync-api-refactor) will be a breaking change that will be in a v2 (or the next major version of that crate).
+- **Pull out Sync APIs**: We may be able to pull the current set of APIs for syncing into a separate crate and consider them as stable. The [refactor](#sync-api-refactor) will be a breaking change that will be in a v2 (or the next major version of that crate).
   
 **Open questions**:
 
