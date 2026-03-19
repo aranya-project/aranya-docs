@@ -192,12 +192,18 @@ Note: The exact structure (whether payload is inside the envelope or separate) s
 
 **Finalization runtime module (new crate or module in `aranya-core`):**
 
+The finalization runtime module receives the keystore from the daemon at initialization (consistent with how aranya-core handles crypto for sync and policy). The daemon relies on aranya-core runtime crates to sign and verify on its behalf — all signing operations use the keystore internally.
+
 Low-level API (construction):
 - `certified_command_id(command_name, parent_id, payload)` → `CmdId` -- Computes the certified digest and derives the command ID as described above. Used by the proposer to include the command ID in the proposal, and by each finalizer to verify it matches before signing.
-- `sign_certified(signing_key, command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it with the provided signing key. Returns the signer's key ID and signature. Each certifier signs the same digest, producing a different signature over identical content. Used by each finalizer during the precommit phase.
+- `sign_certified(command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it using the keystore. Returns the signer's key ID and signature. Each certifier signs the same digest, producing a different signature over identical content. Used by each finalizer during the precommit phase.
 - `build_certified_envelope(command_name, parent_id, payload, signatures)` → `CertifiedEnvelope` -- Constructs the complete envelope. Computes the command ID internally via `certified_command_id`. The `signatures` parameter contains all `(SigningKeyId, Signature)` pairs collected from precommit messages. Used by each finalizer when committing the Finalize command.
 
-The daemon SHOULD wrap these low-level APIs with higher-level finalization-specific methods that hard-code the Finalize command name and accept only the finalization-specific parameters (parent command ID, FactDB Merkle root, signing key, signatures). This reduces the risk of passing incorrect `command_name` or `parent_id` values at call sites.
+Consensus message API (signing and verification):
+- `sign_consensus_message(message)` → `SignedMessage` -- Serializes the message, signs it using the keystore, and attaches the sender's signing key ID. Used for all outgoing consensus messages (proposals, prevotes, precommits). The daemon delivers the resulting bytes over QUIC.
+- `verify_and_decode_consensus_message(bytes, finalizer_set)` → `Message` -- Verifies the sender's signature against the `FinalizerSet`, checks that the signing key ID belongs to a current finalizer, and deserializes the message. Returns an error if verification fails. Used for all incoming consensus messages.
+
+The module SHOULD provide higher-level finalization-specific wrappers that hard-code the Finalize command name and accept only the finalization-specific parameters (parent command ID, FactDB Merkle root, signatures). This reduces the risk of passing incorrect `command_name` or `parent_id` values at call sites.
 
 Policy-facing API (verification, exposed as FFIs):
 - `open_certified(envelope)` → deserialized command fields -- Recomputes `certified_command_id(command_name, parent_id, payload)` from the envelope's fields and verifies it matches the envelope's `command_id`. Returns an error if the ID does not match (indicating a tampered or malformed envelope). On success, deserializes and returns the command fields. Does not verify certifier signatures — that is handled separately by `verify_certified_quorum`.
@@ -781,7 +787,7 @@ Consensus messages MUST be sent off-graph between finalizers. **[COMM-001]** The
 
 #### Transport
 
-The consensus protocol MUST be transport-agnostic -- it produces and consumes messages that are delivered by an external transport layer, similarly to how the sync protocol is implemented. The daemon polls the consensus protocol for outgoing messages and delivers incoming messages to it.
+The consensus protocol MUST be transport-agnostic -- it produces and consumes serialized, pre-signed message bytes that are delivered by an external transport layer, similarly to how the sync protocol is implemented. The consensus protocol in aranya-core is responsible for signing outgoing messages and verifying incoming messages using the keystore — the daemon MUST rely on aranya-core runtime crates to sign and verify consensus messages on its behalf. **[COMM-009]** This is consistent with the existing architecture where the daemon delegates cryptographic operations to aranya-core. The daemon polls the consensus protocol for outgoing message bytes and delivers incoming message bytes to it.
 
 The daemon reuses the existing QUIC transport that it already uses for the sync protocol to deliver consensus messages between finalizers. Consensus and sync streams are multiplexed on the same QUIC connections, with each stream beginning with a protocol discriminant to route to the appropriate handler. This is a convenience of the current daemon implementation, not a requirement of the consensus protocol.
 
@@ -797,7 +803,7 @@ Non-finalizer devices do not participate in consensus traffic.
 
 **Broadcast pattern.** Consensus messages (proposals, prevotes, precommits with signatures) MUST be pushed to all configured finalizer peers. **[COMM-005]** Finalizers connect to peers on demand at the start of each finalization round. Connections MAY be dropped between rounds and re-established when the next round begins.
 
-**Sender verification.** Each consensus message MUST include the sender's signing key ID and be signed by the corresponding signing key. **[COMM-006]** The recipient MUST look up the public signing key in the `FinalizerSet` fact using the provided key ID and verify the signature. Including the key ID avoids the need to try all keys in the set — if the key ID is not in the finalizer set, the message is rejected immediately; if it is, the recipient verifies the signature against the corresponding public key. A mismatched key ID (wrong key ID for the actual signer) results in signature verification failure. Messages that fail verification MUST be dropped. **[COMM-007]**
+**Sender verification.** Each consensus message MUST include the sender's signing key ID and be signed by the corresponding signing key. **[COMM-006]** The daemon relies on the consensus protocol in aranya-core to sign and verify on its behalf. On the sending side, aranya-core signs each outgoing message using the keystore before returning it to the daemon for transport. On the receiving side, aranya-core verifies incoming messages by looking up the public signing key in the `FinalizerSet` fact using the provided key ID. Including the key ID avoids the need to try all keys in the set — if the key ID is not in the finalizer set, the message is rejected immediately; if it is, the signature is verified against the corresponding public key. A mismatched key ID (wrong key ID for the actual signer) results in signature verification failure. Messages that fail verification MUST be dropped. **[COMM-007]**
 
 **Replay protection.** Replay protection operates at two layers: consensus messages and certified signatures.
 
@@ -899,29 +905,36 @@ The following pseudocode illustrates how the daemon's consensus manager integrat
 // Query FactDB for current finalization state.
 let next_height = query_finalize_seq() + 1
 let finalizer_set = query_finalizer_set()
-
-// Build Malachite validator set from FinalizerSet fact.
-let validator_set = build_validator_set(finalizer_set)
 let my_finalizer_id = pub_key_bundle.sign_key.id()
 
-// Initialize Malachite driver.
-let driver = Driver::new(ctx, next_height, validator_set, my_finalizer_id, threshold_params)
+// Initialize the consensus protocol with the keystore. aranya-core
+// handles all signing/verification internally. [COMM-009]
+let consensus = ConsensusProtocol::new(keystore, finalizer_set, my_finalizer_id, threshold_params)
 
 // Tell Malachite to start consensus at this height.
-driver.input(StartHeight(next_height, validator_set))
+consensus.start_height(next_height, finalizer_set)
 
 // --- Main event loop ---
 
 loop {
     select {
-        // Incoming consensus message from a finalizer peer.
-        msg = recv_from_peer() => {
-            // Verify sender's signing key ID is in finalizer set and
-            // verify the message signature. [COMM-006, COMM-007]
-            if !verify_sender_and_signature(msg, finalizer_set) { continue }
+        // Incoming consensus message bytes from a finalizer peer.
+        // The daemon delivers raw bytes; aranya-core verifies the
+        // signature and decodes the message internally. [COMM-006, COMM-007]
+        bytes = recv_from_peer() => {
+            let msg = match consensus.verify_and_decode(bytes, finalizer_set) {
+                Ok(msg) => msg,
+                Err(_) => continue,  // Invalid signature or non-finalizer
+            }
 
             match msg.type {
                 Proposal => {
+                    // Fail-fast: check proposer matches expected rotation
+                    // before syncing or validating. [VAL-005]
+                    if !consensus.is_designated_proposer(msg.signing_key_id, next_height, msg.round) {
+                        continue
+                    }
+
                     // If we don't have the proposed parent, sync until
                     // graph head stabilizes. [VAL-002]
                     if !have_command(msg.proposal.parent_id) {
@@ -930,36 +943,38 @@ loop {
 
                     // Validate proposal: run ephemeral action at proposed
                     // parent. [VAL-001, VAL-003, CMT-009]
-                    let valid = verify_finalization_proposal(
+                    if !verify_finalization_proposal(
                         msg.proposal.merkle_root,
                         at_parent: msg.proposal.parent_id,
-                    )
+                    ) {
+                        continue
+                    }
 
-                    // Check proposer matches expected rotation. [VAL-005]
-                    let valid = valid && is_designated_proposer(msg.signing_key_id, next_height, msg.round)
-
-                    // Feed proposal to Malachite. Malachite checks height/round.
-                    driver.input(ReceivedProposal(msg.proposal))
-
-                    // Malachite will output a Prevote (for or nil) based on
-                    // whether we called input with a valid proposal.
+                    // Feed valid proposal to Malachite. Malachite checks
+                    // height/round and will output a Prevote for the proposal.
+                    consensus.receive_proposal(msg.proposal)
                 }
 
                 Prevote => {
-                    driver.input(ReceivedVote(msg.prevote))
+                    // Sender already verified above. Malachite validates
+                    // height/round and handles duplicates/equivocation.
+                    consensus.receive_prevote(msg.prevote)
                 }
 
                 Precommit => {
                     // Feed vote to Malachite for state management. [CONS-010]
-                    driver.input(ReceivedVote(msg.precommit))
+                    // Malachite validates height/round.
+                    consensus.receive_precommit(msg.precommit)
 
-                    // Extract certified signature if non-nil. [SIG-002]
-                    if let Some((key_id, sig)) = msg.certified_signature {
-                        accumulated_signatures.insert(key_id, sig)
-                    }
+                    // Accumulate certified signature. Precommit messages
+                    // always carry a certified signature (nil precommits
+                    // are a separate message type with no signature).
+                    let (key_id, sig) = msg.certified_signature
+                    accumulated_signatures.insert(key_id, sig)
 
                     // Check if we have a quorum of certified signatures.
-                    if accumulated_signatures.len() >= finalizer_set.quorum_size {
+                    // Quorum threshold from Malachite's threshold params.
+                    if accumulated_signatures.len() >= threshold_params.quorum_size {
                         // Build certified envelope and commit. [CMT-001]
                         let envelope = build_finalize_envelope(
                             proposal.parent_id,
@@ -968,48 +983,66 @@ loop {
                         )
                         commit_at_parent(envelope, proposal.parent_id)
 
-                        // Advance to next height. [CONS-011]
+                        // Notify Malachite the height is decided. [CONS-011]
+                        // The next finalization round starts after the
+                        // ScheduleFinalization delay (emitted by the
+                        // Finalize command's finish block), not immediately.
                         next_height += 1
-                        accumulated_signatures.clear()
-                        driver.input(StartHeight(next_height, validator_set))
+                        consensus.start_height(next_height, finalizer_set)
+
+                        // accumulated_signatures falls out of scope here;
+                        // a new collection is created for the next round.
                     }
+                }
+
+                NilVote => {
+                    // Nil vote (prevote or precommit) — no payload.
+                    // Feed to Malachite for round advancement.
+                    consensus.receive_nil_vote(msg.phase, msg.round)
                 }
             }
         }
 
-        // Malachite output: the driver wants us to send a message.
-        output = driver.poll_output() => {
+        // Consensus protocol output: aranya-core has a message to send.
+        // Messages are signed by aranya-core on the daemon's behalf.
+        // The daemon delivers the resulting bytes over QUIC.
+        output = consensus.poll_output() => {
             match output {
-                SendProposal(proposal) => {
+                SendProposal => {
                     // We are the proposer. Use our current graph head as the
                     // finalization point.
                     let parent_id = graph.head()
                     let merkle_root = storage.merkle_root_at(parent_id)
-                    broadcast_to_finalizers(Proposal {
-                        parent_id: parent_id,
-                        merkle_root: merkle_root,
-                    })
+                    // aranya-core signs the proposal internally.
+                    let bytes = consensus.build_proposal(parent_id, merkle_root)
+                    send_to_finalizer_peers(bytes)
                 }
 
                 SendPrevote(prevote) => {
-                    broadcast_to_finalizers(prevote)
+                    // aranya-core signs the prevote internally.
+                    let bytes = consensus.sign_and_encode(prevote)
+                    send_to_finalizer_peers(bytes)
                 }
 
                 SendPrecommit(precommit) => {
-                    // Sign the Finalize command (only if voting for, not nil). [SIG-003]
+                    // Sign the Finalize command (certified signature). [SIG-003]
                     // Malachite ensures precommit is only for a value that
                     // received prevote quorum — no additional check needed.
-                    if precommit.is_for_proposal() {
-                        let (key_id, sig) = sign_finalize(
-                            my_signing_key,
-                            proposal.parent_id,
-                            proposal.merkle_root,
-                        )
-                        precommit.attach_certified_signature(key_id, sig)
-                        // Also accumulate our own signature.
-                        accumulated_signatures.insert(key_id, sig)
-                    }
-                    broadcast_to_finalizers(precommit)
+                    // aranya-core signs both the certified command and the
+                    // consensus message internally using the keystore.
+                    let (key_id, sig) = consensus.sign_finalize(
+                        proposal.parent_id,
+                        proposal.merkle_root,
+                    )
+                    // Also accumulate our own signature.
+                    accumulated_signatures.insert(key_id, sig)
+                    let bytes = consensus.sign_and_encode_precommit(precommit, key_id, sig)
+                    send_to_finalizer_peers(bytes)
+                }
+
+                SendNilVote(phase) => {
+                    let bytes = consensus.sign_and_encode_nil(phase)
+                    send_to_finalizer_peers(bytes)
                 }
 
                 ScheduleTimeout(phase, duration) => {
@@ -1027,13 +1060,13 @@ loop {
 
         // Timer expired for a consensus phase.
         timeout = timer_expired() => {
-            driver.input(Timeout(timeout.phase))
+            consensus.timeout(timeout.phase)
         }
     }
 }
 ```
 
-This pseudocode is illustrative — the actual daemon code, transport layer, policy actions/queries, and Malachite API surface may all differ from the conceptual structure shown here. The key integration points are: `StartHeight` to begin a round, feeding received messages as inputs, processing outputs (send messages, schedule timeouts), and committing on signature quorum.
+This pseudocode is illustrative — the actual daemon code, transport layer, policy actions/queries, and Malachite API surface may all differ from the conceptual structure shown here. The key architectural points are: the daemon relies on aranya-core runtime crates to sign and verify consensus messages on its behalf, consistent with the existing sync architecture. The key integration points with Malachite are: `start_height` to begin a round, feeding verified messages as inputs, processing outputs (build and send signed messages, schedule timeouts), and committing on signature quorum.
 
 ### Library Selection
 
