@@ -261,19 +261,38 @@ The `verify_factdb_merkle_root` FFI obtains the current FactDB Merkle root and c
 Before consensus, each finalizer validates the proposal using an ephemeral command that verifies the Merkle root without persisting anything to the graph:
 
 ```policy
+// Verifies that the proposed FactDB Merkle root matches the local
+// FactDB state at the specified parent. Emits VerifyFinalizationProposalResult
+// on success. If the Merkle root does not match, the check fails and
+// no effect is emitted — the daemon interprets the absence of the
+// result effect as validation failure.
+ephemeral action verify_finalization_proposal(factdb_merkle_root struct FactRoot) {
+    publish VerifyFinalizationProposal {
+        factdb_merkle_root: factdb_merkle_root,
+    }
+}
+
+effect VerifyFinalizationProposalResult {
+    valid bool,
+}
+
 ephemeral command VerifyFinalizationProposal {
     fields {
         factdb_merkle_root struct FactRoot,
     }
 
-    seal { return seal(serialize(this)) }
-    open { return deserialize(open(envelope)) }
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
 
     policy {
         check team_exists()
 
         // Verify the proposer's claimed Merkle root matches our local FactDB state.
         check verify_factdb_merkle_root(this.factdb_merkle_root)
+
+        finish {
+            emit VerifyFinalizationProposalResult {valid: true}
+        }
     }
 }
 ```
@@ -559,6 +578,78 @@ Both commands use `validate_finalizer_keys` to validate and count the provided k
 - **Init command**: Calls `validate_finalizer_keys` (returns error or count). The `quorum_size` is provided by the daemon. The runtime defaults to the team owner's signing key before creating the command if none are specified by the caller.
 - **UpdateFinalizerSet command**: Same key validation, plus policy enforces the no-shrink-below-4 rule: if the current `FinalizerSet` has 4+ finalizers, the new count must also be >= 4. The `quorum_size` is provided by the daemon.
 
+#### Queries
+
+The daemon queries finalization state from the FactDB on startup and when needed during consensus. The following policy actions expose the relevant facts:
+
+```policy
+// Emits QueryLatestFinalizeSeqResult with the last completed
+// finalization sequence number.
+ephemeral action query_finalize_seq() {
+    publish QueryLatestFinalizeSeq {}
+}
+
+effect QueryLatestFinalizeSeqResult {
+    seq int,
+}
+
+ephemeral command QueryLatestFinalizeSeq {
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        check team_exists()
+        let latest = lookup LatestFinalizeSeq[]
+        finish {
+            emit QueryLatestFinalizeSeqResult {seq: latest.seq}
+        }
+    }
+}
+
+// Emits QueryFinalizerSetResult with the current finalizer set.
+ephemeral action query_finalizer_set() {
+    publish QueryFinalizerSet {}
+}
+
+effect QueryFinalizerSetResult {
+    num_finalizers int,
+    quorum_size int,
+    f1_pub_sign_key option[bytes],
+    f2_pub_sign_key option[bytes],
+    f3_pub_sign_key option[bytes],
+    f4_pub_sign_key option[bytes],
+    f5_pub_sign_key option[bytes],
+    f6_pub_sign_key option[bytes],
+    f7_pub_sign_key option[bytes],
+}
+
+ephemeral command QueryFinalizerSet {
+    seal { return seal_command(serialize(this)) }
+    open { return deserialize(open_envelope(envelope)) }
+
+    policy {
+        check team_exists()
+        let fs = lookup FinalizerSet[]
+        finish {
+            emit QueryFinalizerSetResult {
+                num_finalizers: fs.num_finalizers,
+                quorum_size: fs.quorum_size,
+                f1_pub_sign_key: fs.f1_pub_sign_key,
+                f2_pub_sign_key: fs.f2_pub_sign_key,
+                f3_pub_sign_key: fs.f3_pub_sign_key,
+                f4_pub_sign_key: fs.f4_pub_sign_key,
+                f5_pub_sign_key: fs.f5_pub_sign_key,
+                f6_pub_sign_key: fs.f6_pub_sign_key,
+                f7_pub_sign_key: fs.f7_pub_sign_key,
+            }
+        }
+    }
+}
+```
+
+- **`query_finalize_seq`** -- Ephemeral action that emits `QueryLatestFinalizeSeqResult` with the last completed finalization sequence number. Used by the daemon on startup to derive the next Malachite height (`seq + 1`).
+- **`query_finalizer_set`** -- Ephemeral action that emits `QueryFinalizerSetResult` with the current finalizer set including public signing keys, count, and quorum size. Used by the daemon on startup to determine if this device is a finalizer and to build the Malachite validator set.
+
 #### Effects
 
 The `Finalize` command MUST emit a `FinalizerSetChanged` effect containing the current `FinalizerSet` using the policy `emit` statement. The daemon listens for this effect to update its consensus participation state and peer set without re-querying the FactDB.
@@ -731,7 +822,7 @@ All consensus messages include the sender's signing key ID as a field. The key I
 
 ### Timeouts
 
-A successful consensus round (no timeouts, no retries) is expected to complete in under a few seconds on a local network. Each consensus phase (propose, sync, prevote, precommit) MUST have a configurable timeout: **[TMOUT-001]**
+A successful consensus round (no timeouts, no retries) is expected to complete in under a few seconds on a local network. Each consensus phase (propose, sync, prevote, precommit) has a timeout: **[TMOUT-001]** For MVP, timeouts are hard-coded to the defaults below. Configurable timeouts via the daemon configuration file can be added in a future iteration if needed.
 
 | Phase | Default Timeout | Behavior on Expiry |
 |---|---|---|
@@ -797,6 +888,152 @@ The `Context` trait is implemented with:
 - **`select_proposer`** -- Deterministic selection from the sorted finalizer set using `derived_seq + consensus_round` as index modulo finalizer count.
 - **`new_proposal`** -- Constructs a proposal containing the proposed parent and FactDB Merkle root.
 - **`new_prevote` / `new_precommit`** -- Constructs vote messages signed with the finalizer's signing key.
+
+#### Malachite Integration Pseudocode
+
+The following pseudocode illustrates how the daemon's consensus manager integrates with Malachite. Malachite is event-driven — the daemon feeds inputs and processes outputs in a loop.
+
+```
+// --- Startup ---
+
+// Query FactDB for current finalization state.
+let next_height = query_finalize_seq() + 1
+let finalizer_set = query_finalizer_set()
+
+// Build Malachite validator set from FinalizerSet fact.
+let validator_set = build_validator_set(finalizer_set)
+let my_finalizer_id = pub_key_bundle.sign_key.id()
+
+// Initialize Malachite driver.
+let driver = Driver::new(ctx, next_height, validator_set, my_finalizer_id, threshold_params)
+
+// Tell Malachite to start consensus at this height.
+driver.input(StartHeight(next_height, validator_set))
+
+// --- Main event loop ---
+
+loop {
+    select {
+        // Incoming consensus message from a finalizer peer.
+        msg = recv_from_peer() => {
+            // Verify sender's signing key ID is in finalizer set and
+            // verify the message signature. [COMM-006, COMM-007]
+            if !verify_sender_and_signature(msg, finalizer_set) { continue }
+
+            match msg.type {
+                Proposal => {
+                    // If we don't have the proposed parent, sync until
+                    // graph head stabilizes. [VAL-002]
+                    if !have_command(msg.proposal.parent_id) {
+                        sync_until_stable(msg.sender)
+                    }
+
+                    // Validate proposal: run ephemeral action at proposed
+                    // parent. [VAL-001, VAL-003, CMT-009]
+                    let valid = verify_finalization_proposal(
+                        msg.proposal.merkle_root,
+                        at_parent: msg.proposal.parent_id,
+                    )
+
+                    // Check proposer matches expected rotation. [VAL-005]
+                    let valid = valid && is_designated_proposer(msg.signing_key_id, next_height, msg.round)
+
+                    // Feed proposal to Malachite. Malachite checks height/round.
+                    driver.input(ReceivedProposal(msg.proposal))
+
+                    // Malachite will output a Prevote (for or nil) based on
+                    // whether we called input with a valid proposal.
+                }
+
+                Prevote => {
+                    driver.input(ReceivedVote(msg.prevote))
+                }
+
+                Precommit => {
+                    // Feed vote to Malachite for state management. [CONS-010]
+                    driver.input(ReceivedVote(msg.precommit))
+
+                    // Extract certified signature if non-nil. [SIG-002]
+                    if let Some((key_id, sig)) = msg.certified_signature {
+                        accumulated_signatures.insert(key_id, sig)
+                    }
+
+                    // Check if we have a quorum of certified signatures.
+                    if accumulated_signatures.len() >= finalizer_set.quorum_size {
+                        // Build certified envelope and commit. [CMT-001]
+                        let envelope = build_finalize_envelope(
+                            proposal.parent_id,
+                            proposal.merkle_root,
+                            accumulated_signatures,
+                        )
+                        commit_at_parent(envelope, proposal.parent_id)
+
+                        // Advance to next height. [CONS-011]
+                        next_height += 1
+                        accumulated_signatures.clear()
+                        driver.input(StartHeight(next_height, validator_set))
+                    }
+                }
+            }
+        }
+
+        // Malachite output: the driver wants us to send a message.
+        output = driver.poll_output() => {
+            match output {
+                SendProposal(proposal) => {
+                    // We are the proposer. Use our current graph head as the
+                    // finalization point.
+                    let parent_id = graph.head()
+                    let merkle_root = storage.merkle_root_at(parent_id)
+                    broadcast_to_finalizers(Proposal {
+                        parent_id: parent_id,
+                        merkle_root: merkle_root,
+                    })
+                }
+
+                SendPrevote(prevote) => {
+                    broadcast_to_finalizers(prevote)
+                }
+
+                SendPrecommit(precommit) => {
+                    // Sign the Finalize command (only if voting for, not nil). [SIG-003]
+                    // Malachite ensures precommit is only for a value that
+                    // received prevote quorum — no additional check needed.
+                    if precommit.is_for_proposal() {
+                        let (key_id, sig) = sign_finalize(
+                            my_signing_key,
+                            proposal.parent_id,
+                            proposal.merkle_root,
+                        )
+                        precommit.attach_certified_signature(key_id, sig)
+                        // Also accumulate our own signature.
+                        accumulated_signatures.insert(key_id, sig)
+                    }
+                    broadcast_to_finalizers(precommit)
+                }
+
+                ScheduleTimeout(phase, duration) => {
+                    start_timer(phase, duration)
+                }
+
+                Decide(round, proposal) => {
+                    // Ignored — we commit based on signature quorum, which
+                    // is reached at the same time or before Malachite's
+                    // internal decision (a quorum of non-nil precommits
+                    // implies a quorum of certified signatures).
+                }
+            }
+        }
+
+        // Timer expired for a consensus phase.
+        timeout = timer_expired() => {
+            driver.input(Timeout(timeout.phase))
+        }
+    }
+}
+```
+
+This pseudocode is illustrative — the actual daemon code, transport layer, policy actions/queries, and Malachite API surface may all differ from the conceptual structure shown here. The key integration points are: `StartHeight` to begin a round, feeding received messages as inputs, processing outputs (send messages, schedule timeouts), and committing on signature quorum.
 
 ### Library Selection
 
@@ -892,4 +1129,5 @@ Single-finalizer mode (where the owner is the sole finalizer) is used for the in
 - **Finalizer set quorum validation** -- Validate that a new finalizer set can reach quorum before accepting the `UpdateFinalizerSet` command (e.g., verify that the specified devices are reachable and can participate in consensus). This is less critical while the owner can unilaterally change the set, but becomes more important if finalizer set management is delegated or consensus-based.
 - **On-graph equivocation evidence** -- Log equivocation evidence and consensus observability data to the graph as commands. This would ensure propagation to all devices and provide an auditable record for finalizer set management decisions (e.g., justifying removal of a misbehaving finalizer via `UpdateFinalizerSet`). Requires familiarity with Malachite's equivocation evidence format to determine the appropriate command structure.
 - **Quorum loss recovery** -- Define a recovery mechanism for when more than `f` finalizers are permanently lost, causing finalization to halt. Because finalizer set changes are only applied by `Finalize` commands, the owner cannot update the set once quorum is lost. Recovery would require an out-of-band mechanism — for example, a special recovery command that bypasses the two-phase finalizer set update, authorized by the owner or a quorum of remaining honest finalizers. This is inherently unsafe: a recovery command that directly modifies the finalizer set outside of the consensus protocol could cause disagreement if multiple recovery commands are issued concurrently or if partitioned nodes have divergent views of the set. Any recovery mechanism must be designed to avoid producing conflicting Finalize commands under the new set, which may require all nodes to reach agreement on the recovery command itself before resuming finalization.
+- **Configurable consensus timeouts** -- Allow consensus phase timeouts (propose, sync, prevote, precommit) and timeout increment to be configured via the daemon configuration file. Currently hard-coded to 30s base with 15s increment per round.
 - **Certified merge commands** -- Require merge commands to be certified by an active device. Currently, an unbounded number of merge commands can be created by anyone in the sync group. The certified command type introduced for finalization could be reused to add authentication to merge commands.
