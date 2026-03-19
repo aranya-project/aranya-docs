@@ -901,7 +901,7 @@ The following pseudocode illustrates how the daemon's consensus manager integrat
 
 ```
 // --- Handler: incoming message from peer ---
-fn handle_recv(bytes, consensus, finalizer_set, next_height) -> Option<CommitResult> {
+fn handle_recv(bytes, consensus, finalizer_set, next_height, accumulated_signatures) -> Option<CommitResult> {
     // verify_and_decode checks: valid signature, sender is in
     // finalizer set, and not a duplicate vote (same sender, same
     // phase, same round). Duplicates are dropped. [COMM-006, COMM-007]
@@ -1025,11 +1025,13 @@ let consensus = ConsensusProtocol::new(keystore, finalizer_set, my_finalizer_id,
 
 // --- Finalization round loop ---
 // Each iteration is one finalization round (one sequence number).
-// The round waits for the ScheduleFinalization delay before starting.
+// First round starts immediately on daemon startup. [TRIG-004]
+// Subsequent rounds wait for the ScheduleFinalization delay.
+
+// Start first round immediately.
+consensus.start_height(next_height, finalizer_set)
 
 loop {
-    wait_for_finalization_schedule()
-    consensus.start_height(next_height, finalizer_set)
 
     // --- Consensus round loop ---
     // A finalization round may span multiple consensus rounds if
@@ -1075,6 +1077,11 @@ loop {
     }
 
     next_finalization_round:
+    // Wait for the ScheduleFinalization delay before starting
+    // the next round. The delay was set by the Finalize command's
+    // finish block. [TRIG-002]
+    wait_for_finalization_schedule()
+    consensus.start_height(next_height, finalizer_set)
 }
 ```
 
