@@ -900,17 +900,6 @@ The `Context` trait is implemented with:
 The following pseudocode illustrates how the daemon's consensus manager integrates with Malachite. Malachite is event-driven — the daemon feeds inputs and processes outputs in a loop.
 
 ```
-// --- Startup ---
-
-// Query FactDB for current finalization state.
-let next_height = query_finalize_seq() + 1
-let finalizer_set = query_finalizer_set()
-let my_finalizer_id = pub_key_bundle.sign_key.id()
-
-// Initialize the consensus protocol with the keystore. aranya-core
-// handles all signing/verification internally. [COMM-009]
-let consensus = ConsensusProtocol::new(keystore, finalizer_set, my_finalizer_id, threshold_params)
-
 // --- Handler: incoming message from peer ---
 fn handle_recv(bytes, consensus, finalizer_set, next_height) -> Option<CommitResult> {
     // verify_and_decode checks: valid signature, sender is in
@@ -1022,6 +1011,17 @@ fn handle_output(output, consensus, accumulated_signatures) {
         _ => {}
     }
 }
+
+// --- Startup ---
+
+// Query FactDB for current finalization state.
+let next_height = query_finalize_seq() + 1
+let finalizer_set = query_finalizer_set()
+let my_finalizer_id = pub_key_bundle.sign_key.id()
+
+// Initialize the consensus protocol with the keystore. aranya-core
+// handles all signing/verification internally. [COMM-009]
+let consensus = ConsensusProtocol::new(keystore, finalizer_set, my_finalizer_id, threshold_params)
 
 // --- Finalization round loop ---
 // Each iteration is one finalization round (one sequence number).
