@@ -61,38 +61,26 @@ These goals are enforced by normative requirements throughout the spec. Cross-re
 
 The finalization system spans multiple layers of the Aranya stack. The aranya-core runtime does not depend on or know about the consensus implementation. This separation allows applications to choose their own consensus algorithm if needed -- the finalization policy on the graph is consensus-agnostic and only cares that the Finalize command carries a valid quorum of signatures.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    aranya-daemon                    │
-│                                                     │
-│  ┌───────────────────┐  ┌───────────────────┐       │
-│  │ Consensus Manager │  │   Sync Manager    │       │
-│  │                   │  │                   │       │
-│  │ ┌───────────────┐ │  │ ┌───────────────┐ │       │
-│  │ │  Consensus    │ │  │ │ Sync Protocol │ │       │
-│  │ │  Protocol     │ │  │ │ (aranya-core) │ │       │
-│  │ │ (aranya-core) │ │  │ └───────────────┘ │       │
-│  │ └──────┬────────┘ │  │                   │       │
-│  │        │          │  │                   │       │
-│  │        ▼          │  │                   │       │
-│  │ ┌───────────────┐ │  │                   │       │
-│  │ │ Finalization  │ │  │                   │       │
-│  │ │ Policy        │ │  │                   │       │
-│  │ └───────────────┘ │  │                   │       │
-│  └────────┬──────────┘  └────────┬──────────┘       │
-│           │                      │                  │
-│      ┌────┴──────────────────────┤                  │
-│      ▼                           ▼                  │
-│  ┌─────────────────┐  ┌──────────────────────────┐  │
-│  │ aranya-core     │  │  QUIC Transport          │  │
-│  │ Runtime         │  │  (shared by consensus    │  │
-│  │                 │  │   and sync managers)     │  │
-│  │ ┌─────────────┐ │  └──────────────────────────┘  │
-│  │ │Finalization │ │                                │
-│  │ │FFIs (plugin)│ │                                │
-│  │ └─────────────┘ │                                │
-│  └─────────────────┘                                │
-└─────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph daemon["aranya-daemon"]
+        subgraph consensus_mgr["Consensus Manager"]
+            consensus["Consensus Protocol<br/>(aranya-core)"]
+            fin_policy["Finalization Policy"]
+            consensus --> fin_policy
+        end
+        subgraph sync_mgr["Sync Manager"]
+            sync["Sync Protocol<br/>(aranya-core)"]
+        end
+        subgraph runtime["aranya-core Runtime"]
+            ffis["Finalization FFIs (plugin)"]
+        end
+        subgraph transport["QUIC Transport<br/>(shared by consensus and sync managers)"]
+        end
+        consensus_mgr --> runtime
+        consensus_mgr --> transport
+        sync_mgr --> transport
+    end
 ```
 
 Key architectural boundaries:
@@ -368,7 +356,7 @@ command Init {
         // ... existing init logic ...
 
         // Validate finalizer set (1 to 7 finalizers).
-        // Returns the count of non-None keys, or an error if
+        // Returns the count of provided keys, or an error if
         // no keys are provided or duplicates are found.
         // The runtime defaults to the team owner's signing key
         // before creating this command if none are provided.
@@ -503,7 +491,7 @@ command UpdateFinalizerSet {
         check has_permission(author, UpdateFinalizerSet)
 
         // Validate the new finalizer set.
-        // Returns the count of non-None keys, or an error if
+        // Returns the count of provided keys, or an error if
         // no keys are provided or duplicates are found.
         let new_count = validate_finalizer_keys(
             this.new_finalizer1_pub_sign_key, this.new_finalizer2_pub_sign_key,
@@ -559,7 +547,7 @@ command UpdateFinalizerSet {
 
 FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
-- **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of non-None keys on success, or an error if no keys are provided or if any non-None keys are duplicates. *Required as FFI because the policy language lacks iteration — counting non-None optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
+- **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of provided keys on success, or an error if no keys are provided or if any provided keys are duplicates. *Required as FFI because the policy language lacks iteration — counting provided optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
 - **`verify_certified_quorum(envelope, finalizer_set)`** -- Verifies that the certified envelope contains a quorum of valid certifier signatures from the `FinalizerSet`. MUST fail fast if the number of signatures in the envelope is less than `finalizer_set.quorum_size` — this avoids verifying any signatures when quorum is impossible. Otherwise, verifies signatures one by one: matches each signing key ID against the public signing keys in the finalizer set, then verifies the signature against the command content. MUST return an error if any signature is invalid (bad signature, key not in finalizer set, or duplicate key) — an honest node would never produce an envelope with invalid signatures, so their presence indicates a malformed or tampered command. MUST stop verifying after `quorum_size` valid signatures and return success — remaining signatures beyond quorum do not need to be verified. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
 - **`open_certified(envelope)`** -- Verifies the certified command ID matches the payload and deserializes the fields. Does not verify certifier signatures — that is handled by `verify_certified_quorum` in the policy block. *Required as FFI because cryptographic envelope operations are not available in the policy language.*
@@ -616,8 +604,8 @@ This is safe because the finalizer set is always established by a single authori
 All finalization triggers use the same scheduling mechanism: an effect that sets a delay before the next finalization round. The daemon tracks one pending schedule at a time -- a shorter delay overwrites the current schedule. Finalization scheduling MUST use a delay (not wall clock time); the daemon MUST track the delay locally. **[TRIG-003]**
 
 1. **Periodic scheduling.** The `Init` command MUST emit an effect that schedules the first finalization after a configured delay. **[TRIG-001]** Each successful `Finalize` command MUST emit an effect scheduling the next one. **[TRIG-002]**
-2. **Daemon restart.** When a finalizer daemon starts or restarts, it MUST attempt to trigger finalization unconditionally. **[TRIG-004]** The daemon MUST NOT skip the attempt based on local delay state -- it relies on other finalizers to prevote nil if finalization was too recent. This avoids the daemon needing to persist scheduling state across restarts.
-3. **On-demand.** Any finalizer MUST be able to request immediate finalization by emitting a scheduling effect with a zero delay. **[TRIG-006]** This overwrites any pending periodic schedule, triggering finalization immediately. After the resulting `Finalize` command completes, the normal periodic schedule is re-established.
+2. **Daemon restart.** When a finalizer daemon starts or restarts, it MUST attempt to trigger finalization unconditionally. **[TRIG-004]** The daemon MUST NOT skip the attempt based on local delay state. This avoids the daemon needing to persist scheduling state across restarts. If there are no unfinalized commands since the last Finalize, the proposer's proposal will be for the same parent and the round will succeed harmlessly (producing a no-op finalization) or other finalizers will already be at a higher height (if finalization occurred while this daemon was offline) and Malachite will handle the height mismatch.
+3. **On-demand.** Any finalizer MUST be able to request immediate finalization. **[TRIG-006]** This is a daemon-level API — the daemon directly resets its local finalization schedule to zero delay, triggering finalization immediately without requiring a policy command or on-graph action. No new policy action is needed because the scheduling state is daemon-local (not on-graph) and other finalizers do not gate participation on timing — they validate the proposal content (height, merkle root, proposer) regardless of their own local schedule. After the resulting `Finalize` command completes, the normal periodic schedule is re-established by the `ScheduleFinalization` effect emitted in the Finalize command's finish block.
 
 In all cases, the initiator MUST NOT necessarily become the proposer -- the proposer MUST be selected by the deterministic proposer rotation of the BFT algorithm (see [Agreement](#phase-1-agreement)). **[TRIG-007]** If multiple finalizers initiate concurrently, the consensus protocol MUST resolve to a single proposal. **[TRIG-005]** Redundant initiation attempts are harmless.
 
@@ -629,7 +617,7 @@ A finalization round produces a single Finalize command for a specific sequence 
 
 Before voting in consensus, each finalizer MUST independently validate the proposed FactDB Merkle root **[VAL-001]** by evaluating the `VerifyFinalizationProposal` ephemeral command (see [FactDB Merkle Root Verification](#factdb-merkle-root-verification)) at the proposed parent. The Finalize command does not exist yet at this point -- finalizers are validating the proposer's claimed state, not a command. This ensures that signatures certify verified state agreement, not just trust in the proposer.
 
-Finalizers that do not have the proposed parent MUST sync with the proposer to obtain it and all ancestor commands before validation. **[VAL-002]** Each finalizer then:
+Finalizers that do not have the proposed parent MUST sync with the proposer to obtain it and all ancestor commands before validation. **[VAL-002]** A single sync request may not be sufficient if many commands are missing — the finalizer MUST continue syncing with the proposer until the local graph head stabilizes (i.e., no new commands are received in a sync round), indicating all available commands have been obtained. Each finalizer then:
 
 1. **Computes the FactDB Merkle root** -- Each finalizer MUST compute the FactDB Merkle root at the proposed parent (via the `verify_factdb_merkle_root` FFI) and verify it matches the proposed `factdb_merkle_root`. **[VAL-003]** This is the core check -- it proves agreement on the state being finalized. If two nodes have the same parent command, the FactDB is guaranteed identical at that point.
 2. **Checks the finalization epoch** -- The sequence number is not an explicit field in the proposal data — it is the Malachite `Height`, which Malachite includes in all protocol messages (proposals, votes). Each finalizer MUST derive the height from `LatestFinalizeSeq` in its local FactDB and pass it to Malachite. Malachite MUST drop proposals whose height does not match the finalizer's current height, preventing re-finalization of already-finalized history. **[VAL-004]** If a finalizer's head has already advanced past the proposed height (another Finalize was committed), Malachite handles this as a stale-height message.
