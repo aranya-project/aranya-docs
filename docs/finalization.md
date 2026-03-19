@@ -915,152 +915,161 @@ let consensus = ConsensusProtocol::new(keystore, finalizer_set, my_finalizer_id,
 consensus.start_height(next_height, finalizer_set)
 
 // --- Main event loop ---
+//
+// Each finalization round runs as a loop over consensus rounds.
+// Variables scoped to a consensus round (e.g. accumulated_signatures)
+// are created fresh each iteration.
 
 loop {
-    select {
-        // Incoming consensus message bytes from a finalizer peer.
-        // The daemon delivers raw bytes; aranya-core verifies the
-        // signature and decodes the message internally. [COMM-006, COMM-007]
-        bytes = recv_from_peer() => {
-            let msg = match consensus.verify_and_decode(bytes, finalizer_set) {
-                Ok(msg) => msg,
-                Err(_) => continue,  // Invalid signature or non-finalizer
+    // --- Consensus round loop ---
+    // A finalization round may span multiple consensus rounds if
+    // proposals fail or time out. accumulated_signatures is scoped
+    // to each consensus round and dropped on round advancement.
+    let accumulated_signatures = SignatureSet::new()
+
+    loop {
+        select {
+            // Incoming consensus message bytes from a finalizer peer.
+            // aranya-core verifies the signature and decodes the
+            // message internally. [COMM-006, COMM-007]
+            bytes = recv_from_peer() => {
+                // verify_and_decode checks: valid signature, sender is
+                // in finalizer set, and not a duplicate vote (same sender,
+                // same phase, same round). Duplicates are dropped.
+                let msg = match consensus.verify_and_decode(bytes, finalizer_set) {
+                    Ok(msg) => msg,
+                    Err(_) => continue,
+                }
+
+                match msg.type {
+                    Proposal => {
+                        // Fail-fast: check proposer matches expected rotation
+                        // before syncing or validating. [VAL-005]
+                        if !consensus.is_designated_proposer(msg.signing_key_id, next_height, msg.round) {
+                            continue
+                        }
+
+                        // If we don't have the proposed parent, sync until
+                        // graph head stabilizes. [VAL-002]
+                        if !have_command(msg.proposal.parent_id) {
+                            sync_until_stable(msg.sender)
+                        }
+
+                        // Validate proposal: run ephemeral action at proposed
+                        // parent. [VAL-001, VAL-003, CMT-009]
+                        if !verify_finalization_proposal(
+                            msg.proposal.merkle_root,
+                            at_parent: msg.proposal.parent_id,
+                        ) {
+                            continue
+                        }
+
+                        // Feed valid proposal to Malachite. Malachite checks
+                        // height/round and will output a Prevote for the proposal.
+                        consensus.receive_proposal(msg.proposal)
+                    }
+
+                    Prevote => {
+                        // Sender already verified above. Malachite validates
+                        // height/round and handles equivocation.
+                        consensus.receive_prevote(msg.prevote)
+                    }
+
+                    Precommit => {
+                        // Feed vote to Malachite for state management. [CONS-010]
+                        // Malachite validates height/round.
+                        consensus.receive_precommit(msg.precommit)
+
+                        // Accumulate certified signature. Precommit messages
+                        // always carry a certified signature (nil precommits
+                        // are a separate message type with no signature).
+                        accumulated_signatures.insert(msg.certified_signature)
+
+                        // Check if we have a quorum of certified signatures.
+                        // Quorum threshold from Malachite's threshold params.
+                        if accumulated_signatures.len() >= threshold_params.quorum_size {
+                            // Build certified envelope and commit. [CMT-001]
+                            let envelope = build_finalize_envelope(
+                                proposal.parent_id,
+                                proposal.merkle_root,
+                                accumulated_signatures,
+                            )
+                            commit_at_parent(envelope, proposal.parent_id)
+
+                            // Notify Malachite the height is decided. [CONS-011]
+                            // The next finalization round starts after the
+                            // ScheduleFinalization delay (emitted by the
+                            // Finalize command's finish block), not immediately.
+                            next_height += 1
+                            consensus.start_height(next_height, finalizer_set)
+
+                            // Break inner loop — accumulated_signatures is
+                            // dropped. A new collection is created for the
+                            // next consensus round.
+                            break
+                        }
+                    }
+
+                    NilVote => {
+                        // Nil vote (prevote or precommit) — no payload.
+                        // Feed to Malachite for round advancement.
+                        consensus.receive_nil_vote(msg.phase, msg.round)
+                    }
+                }
             }
 
-            match msg.type {
-                Proposal => {
-                    // Fail-fast: check proposer matches expected rotation
-                    // before syncing or validating. [VAL-005]
-                    if !consensus.is_designated_proposer(msg.signing_key_id, next_height, msg.round) {
-                        continue
+            // Consensus protocol output: aranya-core has a message to send.
+            // Messages are signed by aranya-core on the daemon's behalf.
+            // The daemon delivers the resulting bytes over QUIC.
+            output = consensus.poll_output() => {
+                match output {
+                    SendProposal => {
+                        // We are the proposer. Use our current graph head
+                        // as the finalization point.
+                        let parent_id = graph.head()
+                        let merkle_root = storage.merkle_root_at(parent_id)
+                        let bytes = consensus.build_proposal(parent_id, merkle_root)
+                        send_to_finalizer_peers(bytes)
                     }
 
-                    // If we don't have the proposed parent, sync until
-                    // graph head stabilizes. [VAL-002]
-                    if !have_command(msg.proposal.parent_id) {
-                        sync_until_stable(msg.sender)
+                    SendPrevote(prevote) => {
+                        let bytes = consensus.sign_and_encode(prevote)
+                        send_to_finalizer_peers(bytes)
                     }
 
-                    // Validate proposal: run ephemeral action at proposed
-                    // parent. [VAL-001, VAL-003, CMT-009]
-                    if !verify_finalization_proposal(
-                        msg.proposal.merkle_root,
-                        at_parent: msg.proposal.parent_id,
-                    ) {
-                        continue
-                    }
-
-                    // Feed valid proposal to Malachite. Malachite checks
-                    // height/round and will output a Prevote for the proposal.
-                    consensus.receive_proposal(msg.proposal)
-                }
-
-                Prevote => {
-                    // Sender already verified above. Malachite validates
-                    // height/round and handles duplicates/equivocation.
-                    consensus.receive_prevote(msg.prevote)
-                }
-
-                Precommit => {
-                    // Feed vote to Malachite for state management. [CONS-010]
-                    // Malachite validates height/round.
-                    consensus.receive_precommit(msg.precommit)
-
-                    // Accumulate certified signature. Precommit messages
-                    // always carry a certified signature (nil precommits
-                    // are a separate message type with no signature).
-                    let (key_id, sig) = msg.certified_signature
-                    accumulated_signatures.insert(key_id, sig)
-
-                    // Check if we have a quorum of certified signatures.
-                    // Quorum threshold from Malachite's threshold params.
-                    if accumulated_signatures.len() >= threshold_params.quorum_size {
-                        // Build certified envelope and commit. [CMT-001]
-                        let envelope = build_finalize_envelope(
+                    SendPrecommit(precommit) => {
+                        // Sign the Finalize command (certified signature). [SIG-003]
+                        // Malachite ensures precommit is only for a value that
+                        // received prevote quorum — no additional check needed.
+                        let certified_sig = consensus.sign_finalize(
                             proposal.parent_id,
                             proposal.merkle_root,
-                            accumulated_signatures,
                         )
-                        commit_at_parent(envelope, proposal.parent_id)
-
-                        // Notify Malachite the height is decided. [CONS-011]
-                        // The next finalization round starts after the
-                        // ScheduleFinalization delay (emitted by the
-                        // Finalize command's finish block), not immediately.
-                        next_height += 1
-                        consensus.start_height(next_height, finalizer_set)
-
-                        // accumulated_signatures falls out of scope here;
-                        // a new collection is created for the next round.
+                        accumulated_signatures.insert(certified_sig)
+                        let bytes = consensus.sign_and_encode_precommit(precommit, certified_sig)
+                        send_to_finalizer_peers(bytes)
                     }
-                }
 
-                NilVote => {
-                    // Nil vote (prevote or precommit) — no payload.
-                    // Feed to Malachite for round advancement.
-                    consensus.receive_nil_vote(msg.phase, msg.round)
-                }
-            }
-        }
+                    SendNilVote(phase) => {
+                        let bytes = consensus.sign_and_encode_nil(phase)
+                        send_to_finalizer_peers(bytes)
+                    }
 
-        // Consensus protocol output: aranya-core has a message to send.
-        // Messages are signed by aranya-core on the daemon's behalf.
-        // The daemon delivers the resulting bytes over QUIC.
-        output = consensus.poll_output() => {
-            match output {
-                SendProposal => {
-                    // We are the proposer. Use our current graph head as the
-                    // finalization point.
-                    let parent_id = graph.head()
-                    let merkle_root = storage.merkle_root_at(parent_id)
-                    // aranya-core signs the proposal internally.
-                    let bytes = consensus.build_proposal(parent_id, merkle_root)
-                    send_to_finalizer_peers(bytes)
-                }
+                    ScheduleTimeout(phase, duration) => {
+                        start_timer(phase, duration)
+                    }
 
-                SendPrevote(prevote) => {
-                    // aranya-core signs the prevote internally.
-                    let bytes = consensus.sign_and_encode(prevote)
-                    send_to_finalizer_peers(bytes)
-                }
-
-                SendPrecommit(precommit) => {
-                    // Sign the Finalize command (certified signature). [SIG-003]
-                    // Malachite ensures precommit is only for a value that
-                    // received prevote quorum — no additional check needed.
-                    // aranya-core signs both the certified command and the
-                    // consensus message internally using the keystore.
-                    let (key_id, sig) = consensus.sign_finalize(
-                        proposal.parent_id,
-                        proposal.merkle_root,
-                    )
-                    // Also accumulate our own signature.
-                    accumulated_signatures.insert(key_id, sig)
-                    let bytes = consensus.sign_and_encode_precommit(precommit, key_id, sig)
-                    send_to_finalizer_peers(bytes)
-                }
-
-                SendNilVote(phase) => {
-                    let bytes = consensus.sign_and_encode_nil(phase)
-                    send_to_finalizer_peers(bytes)
-                }
-
-                ScheduleTimeout(phase, duration) => {
-                    start_timer(phase, duration)
-                }
-
-                Decide(round, proposal) => {
-                    // Ignored — we commit based on signature quorum, which
-                    // is reached at the same time or before Malachite's
-                    // internal decision (a quorum of non-nil precommits
-                    // implies a quorum of certified signatures).
+                    // Malachite's Decide output is intentionally unhandled —
+                    // we commit based on signature quorum, which is reached
+                    // at the same time or before Malachite's internal decision.
+                    _ => {}
                 }
             }
-        }
 
-        // Timer expired for a consensus phase.
-        timeout = timer_expired() => {
-            consensus.timeout(timeout.phase)
+            // Timer expired for a consensus phase.
+            timeout = timer_expired() => {
+                consensus.timeout(timeout.phase)
+            }
         }
     }
 }
