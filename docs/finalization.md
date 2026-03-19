@@ -204,10 +204,12 @@ Note: The exact structure (whether payload is inside the envelope or separate) s
 
 **Finalization runtime module (new crate or module in `aranya-core`):**
 
-Daemon-facing API (construction):
+Low-level API (construction):
 - `certified_command_id(command_name, parent_id, payload)` → `CmdId` -- Computes the certified digest and derives the command ID as described above. Used by the proposer to include the command ID in the proposal, and by each finalizer to verify it matches before signing.
 - `sign_certified(signing_key, command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it with the provided signing key. Returns the signer's key ID and signature. Each certifier signs the same digest, producing a different signature over identical content. Used by each finalizer during the precommit phase.
 - `build_certified_envelope(command_name, parent_id, payload, signatures)` → `CertifiedEnvelope` -- Constructs the complete envelope. Computes the command ID internally via `certified_command_id`. The `signatures` parameter contains all `(SigningKeyId, Signature)` pairs collected from precommit messages. Used by each finalizer when committing the Finalize command.
+
+The daemon SHOULD wrap these low-level APIs with higher-level finalization-specific methods that hard-code the Finalize command name and accept only the finalization-specific parameters (parent command ID, FactDB Merkle root, signing key, signatures). This reduces the risk of passing incorrect `command_name` or `parent_id` values at call sites.
 
 Policy-facing API (verification, exposed as FFIs):
 - `open_certified(envelope)` → deserialized command fields -- Recomputes `certified_command_id(command_name, parent_id, payload)` from the envelope's fields and verifies it matches the envelope's `command_id`. Returns an error if the ID does not match (indicating a tampered or malformed envelope). On success, deserializes and returns the command fields. Does not verify certifier signatures — that is handled separately by `verify_certified_quorum`.
@@ -227,9 +229,9 @@ The set of commands that happen before a Finalize command is strictly the set of
 
 Properties:
 
-- **Priority**: The Finalize command MUST carry the `finalize: true` attribute, which gives it the highest possible priority in the braid -- higher than any numeric priority value any other command can hold. **[FPOL-001]** This priority is not a numeric value -- it is enforced by the runtime as an absolute ordering above all other commands. The runtime's braid ordering logic MUST recognize this attribute as a special case and sort any command carrying it before all siblings regardless of their numeric priority. This is distinct from the existing numeric priority system and requires a dedicated ordering rule in the braid construction code. Other commands may be appended to the same parent as siblings, but the `finalize: true` attribute guarantees the Finalize command precedes them. The runtime MUST ensure that finalized commands can never be preceded by new commands in the braid -- this is enforced by the `finalize: true` attribute's braid ordering guarantee combined with the requirement that new commands can only be appended to the Finalize command or its descendants. **[FIN-007]**
+- **Priority**: The Finalize command MUST carry the `finalize: true` attribute, which gives it the highest possible priority in the braid -- higher than any numeric priority value any other command can hold. **[FPOL-001]** The `finalize: true` attribute is already implemented by the policy language and braid algorithm. The runtime's braid ordering logic recognizes this attribute as a special case and sorts any command carrying it before all siblings regardless of their numeric priority. Other commands may be appended to the same parent as siblings, but the `finalize: true` attribute guarantees the Finalize command precedes them. The runtime MUST ensure that finalized commands can never be preceded by new commands in the braid -- this is enforced by the `finalize: true` attribute's braid ordering guarantee combined with the requirement that new commands can only be appended to the Finalize command or its descendants. **[FIN-007]**
 - **Fields**:
-  - The Finalize command MUST contain exactly one payload field: `factdb_merkle_root` (typed as `struct FactRoot`) **[FPOL-002]** -- the FactDB Merkle root at the parent of the Finalize command. The parent position in the graph is determined by action-at-parent (see [Action-at-Parent](#action-at-parent)), not by a payload field. Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `LatestFinalizeSeq`, finalizer set from the `FinalizerSet` fact, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
+  - The Finalize command MUST contain exactly one payload field: `factdb_merkle_root` (typed as `struct FactRoot`) **[FPOL-002]** -- the FactDB Merkle root at the parent of the Finalize command. The parent command ID — the finalization point in the graph — is part of the command envelope (as `parent_id` in the `CertifiedEnvelope`), not a payload field. It is included in the certified digest (`H("CertifiedPolicyCommand-v1", command_name, parent_id, payload)`) and committed via action-at-parent (see [Action-at-Parent](#action-at-parent)). Everything else is either implicit in the DAG position or derivable from the FactDB state that the Merkle root certifies (sequence number from `LatestFinalizeSeq`, finalizer set from the `FinalizerSet` fact, pending updates from `PendingFinalizerSetUpdate`). Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can receive the FactDB at a finalization point and verify it against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
 - **Envelope**: Contains multiple `(signing_key_id, signature)` pairs from the finalizers that certified this command. Only finalizers that participated are included.
 - **Policy checks**:
   - The Finalize command policy MUST verify that the envelope contains a quorum of valid signatures from unique members of the current finalizer set (via `verify_certified_quorum`). **[FPOL-003]**
@@ -251,12 +253,14 @@ All Finalize commands in the graph MUST form a chain -- for any two Finalize com
 
 ### Action-at-Parent
 
-The Finalize command must be committed at a specific parent — the graph command that consensus agreed upon — rather than at the current head of the graph. This is necessary because unrelated commands may arrive between consensus completing and the Finalize command being committed. If the Finalize command were always appended to the head, the parent could change from what was agreed upon, invalidating the FactDB Merkle root.
+The Finalize command MUST be committed at the specific parent that consensus agreed upon, rather than at the current head of the graph. **[CMT-005]** This is necessary because unrelated commands may arrive between consensus completing and the Finalize command being committed. If the Finalize command were always appended to the head, the parent could change from what was agreed upon, invalidating the FactDB Merkle root.
 
 This requires a change to the runtime's action API. Currently, all actions append to the head of the graph. The runtime's action API MUST accept an optional parent parameter: **[CMT-003]**
 
-- **`action(command, parent: None)`** — Current behavior. The command MUST be appended to the head of the graph. All existing commands continue to use this mode.
-- **`action(command, parent: Some(command_id))`** — The command MUST be appended to the specified parent instead of the head. The runtime MUST verify the specified parent exists in the local graph before committing; if it does not exist, the action MUST fail.
+- **`action(command, parent: None)`** — Current behavior. The command MUST be appended to the head of the graph. **[CMT-006]** All existing commands continue to use this mode.
+- **`action(command, parent: Some(command_id))`** — The command MUST be appended to the specified parent instead of the head. **[CMT-007]** The runtime MUST verify the specified parent exists in the local graph before committing; if it does not exist, the action MUST fail. **[CMT-008]**
+
+**FactDB evaluation context.** When using action-at-parent, the runtime MUST evaluate the command's policy against the FactDB state at the specified parent, not the FactDB state at the current head of the graph. **[CMT-010]** This is critical for finalization: the `verify_factdb_merkle_root` check and `FinalizerSet` lookup in the Finalize command's policy must operate on the FactDB at the agreed-upon parent, which may differ from the head if additional commands have been appended since consensus completed. If the runtime maintains a single FactDB reflecting the head, it MUST be able to reconstruct the FactDB state at the specified parent for action-at-parent evaluation. The runtime reconstructs the FactDB at a given point by replaying graph commands from a weave up to that point — snapshotting the FactDB at every command would require too much memory.
 
 The Finalize command is the only command that uses the explicit parent mode. The daemon passes the agreed-upon parent from consensus when committing the Finalize command.
 
@@ -286,7 +290,7 @@ ephemeral command VerifyFinalizationProposal {
 }
 ```
 
-The finalizer evaluates this ephemeral command at the proposed parent. If it succeeds, the Merkle roots match and the finalizer proceeds to vote. If it fails, the finalizer prevotes nil.
+The finalizer evaluates this ephemeral command at the proposed parent (not at the current head). This is critical — the FactDB state at the head may differ from the state at the proposed parent if additional commands have been appended since the proposal. The action-at-parent mechanism (see [Action-at-Parent](#action-at-parent)) MUST support ephemeral actions in addition to regular actions so that the ephemeral command is evaluated against the correct FactDB state. **[CMT-009]** If the ephemeral command succeeds, the Merkle roots match and the finalizer proceeds to vote. If it fails, the finalizer prevotes nil.
 
 ### Policy Definitions
 
@@ -388,6 +392,8 @@ command Init {
                 f6_pub_sign_key: this.finalizer6_pub_sign_key,
                 f7_pub_sign_key: this.finalizer7_pub_sign_key,
             }
+            // Schedule the first finalization round after the configured delay. [TRIG-001]
+            emit ScheduleFinalization {delay: configured_finalization_delay}
         }
     }
 }
@@ -402,6 +408,9 @@ command Finalize {
     }
 
     fields {
+        // The parent command ID (finalization point) is implicit —
+        // it is part of the certified envelope and committed via
+        // action-at-parent, not passed as a payload field.
         factdb_merkle_root struct FactRoot,
     }
 
@@ -449,11 +458,15 @@ command Finalize {
                 }
                 delete PendingFinalizerSetUpdate[]
                 emit FinalizerSetChanged {finalizer_set: finalizer_set}
+                // Schedule the next finalization round. [TRIG-002]
+                emit ScheduleFinalization {delay: configured_finalization_delay}
             }
         } else {
             finish {
                 update LatestFinalizeSeq[] to {seq: next_seq}
                 emit FinalizerSetChanged {finalizer_set: finalizer_set}
+                // Schedule the next finalization round. [TRIG-002]
+                emit ScheduleFinalization {delay: configured_finalization_delay}
             }
         }
     }
