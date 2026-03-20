@@ -232,6 +232,11 @@ Once the issue is identified:
 
 The following improvements have been identified but not yet implemented:
 
+### Process Gaps
+
+- **Rollback procedure** - Document steps for handling failed releases, including yanking crates from crates.io, reverting tags, or issuing hotfixes. See [#183](https://github.com/aranya-project/aranya-docs/issues/183).
+- **Failure handling in Automated Workflow** - Document recovery steps if publish.yml or release.yml fails partway through. See [#183](https://github.com/aranya-project/aranya-docs/issues/183).
+
 ### Automation Opportunities
 
 - **Release issue template in .github repo** - Add the release checklist as a GitHub issue template in the `aranya-project/.github` repo. In the meantime, use `/release checklist [version]` to generate a checklist issue from the current release steps.
