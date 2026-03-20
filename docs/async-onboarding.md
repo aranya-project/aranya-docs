@@ -33,10 +33,55 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 ## Onboarding Sequence
 
 Actors:
-- Admin - the privileged device capable and authorized to initiate the asynchronous onboarding procedure. 
+- Admin - the privileged device capable and authorized to initiate the asynchronous onboarding procedure.
 - Onboarding Server - the server that stores the onboarding bundle and validates the credentials provided for requests.
 - Onboarding Client - a standalone client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
 - New Device - the device that is being onboarded to the team.
+
+### Cryptographic Protocol
+
+```
+// Constants
+salt = "aranya-onboarding-v1"
+
+// --- Admin: Prepare onboarding bundle ---
+
+Admin: entropy = CSPRNG(128 bits)
+Admin: phrase = diceware(entropy)                            // 11 words
+Admin: mailbox_id = HKDF-SHA-512(entropy, salt, "mailbox-id", 16)
+Admin: bundle_key = HKDF-SHA-512(entropy, salt, "bundle-key", 32)
+Admin: authenticator = HKDF-SHA-512(entropy, salt, "authenticator", 32)
+
+Admin: (join_pub, join_priv) = generate_keypair(Ed25519)
+Admin: cert = create_device_certificate(...)
+Admin: bundle_plaintext = serialize(cert, private_key, join_pub, join_priv, sync_info, team_id)
+Admin: bundle_ciphertext = AES-256-GCM-Encrypt(bundle_key, nonce, bundle_plaintext)
+Admin: hmac_value = HMAC-SHA-512(authenticator, mailbox_id)
+
+Admin -> Graph: AllowSelfJoinTeam(join_pub)
+Admin -> Server: store(mailbox_id, hmac_value, bundle_ciphertext)
+Admin -> Client: phrase                                      // out of band
+
+// --- Client: Fetch and decrypt onboarding bundle ---
+
+Client: entropy = diceware_decode(phrase)
+Client: mailbox_id = HKDF-SHA-512(entropy, salt, "mailbox-id", 16)
+Client: bundle_key = HKDF-SHA-512(entropy, salt, "bundle-key", 32)
+Client: authenticator = HKDF-SHA-512(entropy, salt, "authenticator", 32)
+
+Client -> Server: fetch(mailbox_id, authenticator)
+
+Server: verify HMAC-SHA-512(authenticator, mailbox_id) == stored_hmac
+Server -> Client: bundle_ciphertext
+
+Client: bundle_plaintext = AES-256-GCM-Decrypt(bundle_key, nonce, bundle_ciphertext)
+Client: (cert, private_key, join_pub, join_priv, sync_info, team_id) = deserialize(bundle_plaintext)
+
+// --- Client: Join team ---
+
+Client -> Graph: sync(sync_info)
+Client -> Graph: SelfJoinTeam(device_keys, signed_with=join_priv)
+```
 
 ```mermaid
 sequenceDiagram
@@ -45,115 +90,73 @@ sequenceDiagram
     participant Server as Onboarding Server
     participant Client as Onboarding Client
 
-    Note over Admin: Create one-time join keypair
-    Note over Admin: Create signed device certificate
-    Note over Admin: Generate 11-word phrase from CSPRNG
-    Note over Admin: Derive mailbox ID (128 bits)<br/>using HKDF-SHA-512
-    Note over Admin: Derive symmetric encryption key<br/>using HKDF-SHA-512
-    Note over Admin: Derive authenticator<br/>using HKDF-SHA-512
-    Note over Admin: Encrypt cert + private key<br/>using the bundle key
-    Note over Admin: Encrypt one-time join keypair<br/>using the bundle key
-    Note over Admin: Encrypt pairing/syncing info<br/>using the bundle key
-    Note over Admin: Encrypt team ID<br/>using the bundle key
+    Note over Admin: entropy = CSPRNG(128 bits)
+    Note over Admin: phrase = diceware(entropy)
+    Note over Admin: Derive mailbox_id, bundle_key,<br/>authenticator via HKDF-SHA-512
+    Note over Admin: (join_pub, join_priv) = generate_keypair(Ed25519)
+    Note over Admin: bundle_ciphertext = AES-256-GCM-Encrypt(bundle_key, nonce, plaintext)
+    Note over Admin: hmac_value = HMAC-SHA-512(authenticator, mailbox_id)
 
-    Admin->>Graph: Publish one-time onboarding public key<br/>(AllowSelfJoinTeam)
-    Admin->>Server: drop(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
-    Note over Server: Store bundle keyed by mailbox ID
+    Admin->>Graph: AllowSelfJoinTeam(join_pub)
+    Admin->>Server: store(mailbox_id, hmac_value, bundle_ciphertext)
+    Note over Server: Store bundle keyed by mailbox_id
 
-    Admin-->>Client: Send 11-word phrase (out of band)
+    Admin-->>Client: phrase (out of band)
 
-    Note over Client: Derive mailbox ID<br/>using HKDF-SHA-512
-    Note over Client: Derive symmetric encryption key<br/>using HKDF-SHA-512
-    Note over Client: Derive authenticator<br/>using HKDF-SHA-512
+    Note over Client: Derive mailbox_id, bundle_key,<br/>authenticator via HKDF-SHA-512
 
-    Client->>Server: fetch(mailbox ID, authenticator)
-    Note over Server: Validate HMAC(authenticator, mailbox ID)
-    Server->>Client: Encrypted onboarding bundle
+    Client->>Server: fetch(mailbox_id, authenticator)
+    Note over Server: verify HMAC-SHA-512(authenticator, mailbox_id) == stored_hmac
+    Server->>Client: bundle_ciphertext
 
-    Note over Client: Decrypt cert + private key
-    Note over Client: Decrypt one-time join keypair
-    Note over Client: Decrypt pairing/syncing info
-    Note over Client: Decrypt team ID
+    Note over Client: bundle_plaintext = AES-256-GCM-Decrypt(bundle_key, nonce, bundle_ciphertext)
 
-    Note over Client: Add team using decrypted team ID
-    Client->>Graph: Sync with peering point to get graph
-    Client->>Graph: SelfJoinTeam (using one-time join key)
+    Note over Client: Add team using decrypted team_id
+    Client->>Graph: sync(sync_info)
+    Client->>Graph: SelfJoinTeam(device_keys, signed_with=join_priv)
 ```
 
-1. Admin prepares onboarding process
-    1. Admin create one time join key (asymmetric key)
-    2. Admin create signed device certificate
-    3. Admin create onboarding bundle
-        1. Admin creates 11 word phrase from CSPRNG
-        2. Admin derives mailbox ID (128bits) using HKDF-SHA-512 and static salt
-        3. Admin derives symmetric encryption key (AES-256-GCM) for onboarding bundle using HKDF-SHA-512
-        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF-SHA-512
-        5. Admin encrypts certificate + private key using the bundle key
-        6. Admin encrypts one time join keypair using the bundle key
-        7. Admin encrypts pairing/syncing info using the bundle key
-        8. Admin encrypts team ID using the bundle key
-    4. Admin publishes one-time onboarding public key to graph (AllowSelfJoinTeam)
-    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
-    6. send 11 words to new user
-2. Admin sends 11 words to new device:
-    1. New device derives mailbox ID using HKDF-SHA-512
-    2. New device derives symmetric encryption key (AES-256-GCM) for onboarding bundle using HKDF-SHA-512
-3. New device fetches encrypted onboarding bundle using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server
-    1. New device decrypts certificate + private key
-    2. New device decrypts one time join keypair
-    3. New device decrypts pairing/syncing info
-    4. New device decrypts team ID
-4. New device adds team using decrypted team ID
-5. New device syncs with the peering point to get the graph
-6. New device publishes SelfJoinTeam command
+### Requirements
 
+**Admin**
 
-**Admin Requirements**
-
-- Admin MUST send 11 word phrase to new device out of band
+- Admin MUST send 11 word phrase to new device out of band.
 
 **Onboarding Client**
 
-- Onboarding Client MUST be able to complete both the store and fetch proceedure
+- Onboarding Client MUST be able to complete both the store and fetch procedures.
 
-**Onboarding Client store requirements**
+**Store requirements**
 
-- Onboarding Client MUST be able to generate the 11 words for the admin
-- Onboarding Client MUST create a one time symmetric join key
-- Onboarding Client MUST create a signed device certificate
-- Onboarding Client MUST use a CSPRNG to create the 11 word phrase
-- Onboarding Client MUST use diceware to generate the entropy for the 11 word phrase.
-- Onboarding Client MUST derive a mailbox ID using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive an authenticator using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST encrypt the new device certificate and private key using the bundle key
-- Onboarding Client MUST encrypt the one-time-use join keypair using the bundle key
-- Onboarding Client MUST encrypt the pairing/syncing information using the bundle key 
-- Onboarding Client MUST encrypt the team ID using the bundle key
-- Onboarding Client MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
-- Onboarding Client MUST calculate the HMAC-SHA-512(key=authenticator, value=mailbox ID)
-- Onboarding Client MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
+- Onboarding Client MUST generate `entropy` using a CSPRNG (128 bits).
+- Onboarding Client MUST generate `phrase` from `entropy` using diceware (EFF Large wordlist).
+- Onboarding Client MUST generate a one-time join keypair: `(join_pub, join_priv) = generate_keypair(Ed25519)`.
+- Onboarding Client MUST create a signed device certificate for the new device.
+- Onboarding Client MUST derive `mailbox_id = HKDF-SHA-512(entropy, salt, "mailbox-id", 16)`.
+- Onboarding Client MUST derive `bundle_key = HKDF-SHA-512(entropy, salt, "bundle-key", 32)`.
+- Onboarding Client MUST derive `authenticator = HKDF-SHA-512(entropy, salt, "authenticator", 32)`.
+- Onboarding Client MUST encrypt the onboarding bundle: `bundle_ciphertext = AES-256-GCM-Encrypt(bundle_key, nonce, bundle_plaintext)` where `bundle_plaintext = serialize(cert, private_key, join_pub, join_priv, sync_info, team_id)`.
+- Onboarding Client MUST compute `hmac_value = HMAC-SHA-512(authenticator, mailbox_id)`.
+- Onboarding Client MUST publish `AllowSelfJoinTeam(join_pub)` on the graph.
+- Onboarding Client MUST send `store(mailbox_id, hmac_value, bundle_ciphertext)` to the onboarding server.
 
-**Onboarding Client fetch requirements**
+**Fetch requirements**
 
-- Onboarding Client MUST take the 11 words as input 
-- Onboarding Client MUST take the new device keybundle as input
-- Onboarding Client MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive the bundle key using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
-- Onboarding Client MUST decrypt the new device certificate and private key using the bundle key
-- Onboarding Client MUST decrypt the one-time-use join keypair using the bundle key
-- Onboarding Client MUST decrypt the pairing/syncing information using the bundle key 
-- Onboarding Client MUST decrypt the team ID using the bundle key
-- Onboarding Client MUST publish the SelfJoinTeam command using the one-time join key.
+- Onboarding Client MUST take `phrase` (11 words) and the new device's key bundle as input.
+- Onboarding Client MUST derive `entropy = diceware_decode(phrase)`.
+- Onboarding Client MUST derive `mailbox_id`, `bundle_key`, and `authenticator` using the same HKDF-SHA-512 derivations as the store side.
+- Onboarding Client MUST send `fetch(mailbox_id, authenticator)` to the onboarding server.
+- Onboarding Client MUST decrypt the bundle: `bundle_plaintext = AES-256-GCM-Decrypt(bundle_key, nonce, bundle_ciphertext)`.
+- Onboarding Client MUST deserialize `(cert, private_key, join_pub, join_priv, sync_info, team_id)` from `bundle_plaintext`.
+- Onboarding Client MUST publish `SelfJoinTeam(device_keys)` using `join_priv` to sign the command.
 
-**Onboarding Server requirements**
+**Onboarding Server**
 
-- Onboarding Server MUST authenticate users using a certificate when handling requests on the `store` endpoint
-- Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
-- Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
-- Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
-- Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
+- Onboarding Server MUST authenticate `store` requests via PKI (certificate validation).
+- Onboarding Server MUST store `(mailbox_id, hmac_value, bundle_ciphertext)`.
+- Onboarding Server MUST validate `fetch` requests by verifying `HMAC-SHA-512(authenticator, mailbox_id) == stored_hmac`.
+- Onboarding Server MUST expose a `store` endpoint accepting `(mailbox_id, hmac_value, bundle_ciphertext)`.
+- Onboarding Server MUST expose a `fetch` endpoint accepting `(mailbox_id, authenticator)`.
 
 
 
