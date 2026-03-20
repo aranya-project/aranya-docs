@@ -84,6 +84,8 @@ Release workflows ([`release.yml`](https://github.com/aranya-project/aranya/blob
 | Required reviewers | At least 1 team lead or release lead | env-level: `release` | -- | Human approval gate before release workflows proceed |
 | Workflow `environment: release` | Referenced in release jobs | repo (workflow) | [`release.yml`](https://github.com/aranya-project/aranya/blob/main/.github/workflows/release.yml) (aranya), [`release-plz.yml`](https://github.com/aranya-project/aranya-core/blob/main/.github/workflows/release-plz.yml) (aranya-core) | Required for environment protections to take effect |
 
+Required reviewers is a [built-in GitHub feature](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments) for environment protections. When a workflow job references an environment with required reviewers, GitHub pauses the workflow and notifies the designated reviewers. The workflow cannot proceed until a reviewer approves the deployment in the GitHub Actions UI. No third-party actions are needed.
+
 The `release` environment is configured in both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments). The release workflow jobs in both repos reference it:
 
 ```yaml
