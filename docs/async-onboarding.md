@@ -51,7 +51,7 @@ All cryptographic operations listed here will use a CipherSuite. The CipherSuite
 - Pairing/syncing information
 - Team ID
 
-**Derived Keys** — all derived from the 11-word phrase using HKDF with distinct static salts:
+**Derived Keys** — all derived from the 11-word phrase using HKDF with distinct static info fields:
 - **Mailbox ID** (128 bits) — identifies the bundle on the onboarding server
 - **Bundle Key** — symmetric encryption key used to encrypt/decrypt the onboarding bundle
 - **Authenticator** — used by the new device to authenticate to the onboarding server via HMAC
@@ -93,15 +93,15 @@ sequenceDiagram
     2. Admin creates the certificate for the new device and signs it with the root CA
     3. Admin creates the "onboarding bundle"
         1. Admin creates 11 word phrase by encoding 128bits from CSPRNG using diceware
-        2. Admin derives mailbox ID (128bits) using HKDF and static salt
-        3. Admin derives symmetric encryption key for onboarding bundle using HKDF and a different salt. This is the "bundle key"
-        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF and a static salt
+        2. Admin derives mailbox ID (128bits) using HKDF over the entropy and static info field
+        3. Admin derives symmetric encryption key for onboarding bundle using HKDF over the entropy and a different static info field. This is the "bundle key"
+        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF over the entropy and a static info field
 	5. Admin encrypts the onboarding bundle
 		1. Admin encrypts certificate + private key using the bundle key
 		2. Admin encrypts one time join keypair using the bundle key
 		3. Admin encrypts pairing/syncing info using the bundle key
 		4. Admin encrypts team ID using the bundle key
-    4. Admin publishes the public portion of the join key to the graph (AllowSelfJoinTeam)
+    4. Admin publishes the public portion of the join key to the graph (AllowSelfJoinTeam) along with the values that will be associated with the new device like rank, role, etc.
     5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, CipherSuite ID, and HMAC of authenticator against mailbox ID
 2. Admin sends 11 words to new device:
     1. New device derives mailbox ID using HKDF
