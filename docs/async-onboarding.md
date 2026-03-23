@@ -43,6 +43,19 @@ Actors:
 
 All cryptographic operations listed here will use a CipherSuite. The CipherSuite may have different algorithms in use depending on the deployment. The onboarding client and onboarding server MUST use the same cipher suite during the onboarding process.
 
+### Definitions
+
+**Onboarding Bundle** — the encrypted payload stored on the onboarding server, containing:
+- Device certificate + private key (signed by root CA)
+- Join key (one-time-use asymmetric keypair)
+- Pairing/syncing information
+- Team ID
+
+**Derived Keys** — all derived from the 11-word phrase using HKDF with distinct static salts:
+- **Mailbox ID** (128 bits) — identifies the bundle on the onboarding server
+- **Bundle Key** — symmetric encryption key used to encrypt/decrypt the onboarding bundle
+- **Authenticator** — used by the new device to authenticate to the onboarding server via HMAC
+
 ```mermaid
 sequenceDiagram
     participant Admin
@@ -50,39 +63,29 @@ sequenceDiagram
     participant Server as Onboarding Server
     participant Client as Onboarding Client
 
-    Note over Admin: Create one-time join keypair
+    Note over Admin: Create join key
     Note over Admin: Create signed device certificate
     Note over Admin: Generate 11-word phrase from CSPRNG
-    Note over Admin: Derive mailbox ID (128 bits)<br/>using HKDF
-    Note over Admin: Derive symmetric encryption key<br/>using HKDF
-    Note over Admin: Derive authenticator<br/>using HKDF
-    Note over Admin: Encrypt cert + private key<br/>using the bundle key
-    Note over Admin: Encrypt one-time join keypair<br/>using the bundle key
-    Note over Admin: Encrypt pairing/syncing info<br/>using the bundle key
-    Note over Admin: Encrypt team ID<br/>using the bundle key
+    Note over Admin: Derive mailbox ID, bundle key,<br/>and authenticator using HKDF
+    Note over Admin: Encrypt onboarding bundle<br/>using the bundle key
 
-    Admin->>Graph: Publish one-time onboarding public key<br/>(AllowSelfJoinTeam)
-    Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
+    Admin->>Graph: Publish join key public portion<br/>(AllowSelfJoinTeam)
+    Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext, CipherSuite ID)
     Note over Server: Store bundle keyed by mailbox ID
 
     Admin-->>Client: Send 11-word phrase (out of band)
 
-    Note over Client: Derive mailbox ID<br/>using HKDF
-    Note over Client: Derive symmetric encryption key<br/>using HKDF
-    Note over Client: Derive authenticator<br/>using HKDF
+    Note over Client: Derive mailbox ID, bundle key,<br/>and authenticator using HKDF
 
     Client->>Server: fetch(mailbox ID, authenticator)
     Note over Server: Validate HMAC(authenticator, mailbox ID)
     Server->>Client: Encrypted onboarding bundle
 
-    Note over Client: Decrypt cert + private key
-    Note over Client: Decrypt one-time join keypair
-    Note over Client: Decrypt pairing/syncing info
-    Note over Client: Decrypt team ID
+    Note over Client: Decrypt onboarding bundle<br/>using the bundle key
 
     Note over Client: Add team using decrypted team ID
     Client->>Graph: Sync with peering point to get graph
-    Client->>Graph: SelfJoinTeam (using one-time join key)
+    Client->>Graph: SelfJoinTeam (using join key)
 ```
 
 1. Admin prepares onboarding process
