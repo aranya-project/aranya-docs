@@ -33,7 +33,7 @@ Finalization has two components:
 | Prevote | First-stage vote indicating a finalizer considers the proposal valid |
 | Precommit | Second-stage vote indicating a finalizer is ready to commit the proposal |
 | Byzantine finalizer | A finalizer that is malicious or arbitrarily faulty — it may crash, withhold messages, send conflicting votes, or otherwise deviate from the protocol. The BFT consensus protocol guarantees safety as long as the number of Byzantine finalizers does not exceed `f`. |
-| Fault tolerance (`f`) | The maximum number of Byzantine finalizers the protocol can tolerate. Derived as `⌊(n - 1) / 3⌋` (see [Formulas](#formulas)). |
+| Fault tolerance (`f`) | The maximum number of Byzantine finalizers the protocol can tolerate (see [Formulas](#formulas)). |
 | Quorum (`q`) | The minimum number of finalizers required for a consensus decision. Ensures safety as long as at most `f` finalizers are Byzantine. |
 | Sequence number (seq) | Identifies a finalization round; increments with each successful Finalize command |
 
