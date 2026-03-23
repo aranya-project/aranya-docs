@@ -2,22 +2,23 @@
 
 Aranya currently requires synchronous exchange of information to onboard a new device. This specification provides a mechanism for devices to onboard themselves with a single exchange of information with a privileged device.
 
-The system uses an 11 word phrase to exchange entropy used to derive cryptographic material. The privileged device uses the derived key to encrypt an onboarding bundle. The encrypted onboarding bundle is then dropped in the onboarding server, and a one time key is added to the graph by the privileged device. The new device uses the 11 words (exchanged out of band) to derive the keys and information reiquired to fetch the onboarding bundle and decrypt it. The new device then uses the single-use onboarding key posted to graph to self join the team.
+The system uses an 11 word phrase to exchange entropy used to derive cryptographic material. The privileged device uses the derived key to encrypt an onboarding bundle. The encrypted onboarding bundle is then stored in the onboarding server, and a one time key is added to the graph by the privileged device. The new device uses the 11 words (exchanged out of band) to derive the keys and information reiquired to fetch the onboarding bundle and decrypt it. The new device then uses the single-use onboarding key posted to graph to self join the team.
 
 
 ## Architecture
 
-async-onboarding uses a standalone server to mediate asynchronous onboarding operations. This server is not a participant in the aranya team, but instead receives and distributes onboarding information according to a process that protects sensitive join information from the onboarding server. 
+async-onboarding uses a standalone server to mediate asynchronous onboarding operations and provide greater availability during the onboarding process. This server is not a participant in the aranya team, but instead receives and distributes onboarding information according to a process that protects sensitive join information from the onboarding server. 
 
-The server provides two endpoints: `store` and `fetch`. These endpoints correspond to the privileged device dropping an encrypted onboarding bundle, and the new device fetching the onboarding bundle. 
+The server provides two endpoints: `store` and `fetch`. These endpoints correspond to the privileged device storing an encrypted onboarding bundle, and the new device fetching the onboarding bundle. 
 
 ### `store`
 
-The `store` endpoint is authenticated by validating that the certificate presented matches a list of expected certificates, and that it is signed by a specific root authority. Requests against this endpoint require authentication via PKI. Drop takes three arguments:
+The `store` endpoint is authenticated by validating that the certificate presented matches a list of expected certificates provided at startup, and that it is signed by a specific root authority. Requests against this endpoint require authentication via PKI. Store takes the following arguments:
 
 1. The mailbox ID
 2. The HMAC of the authenticator and mailbox
 3. The ciphertext of the onboarding bundle
+4. The CipherSuite ID
 
 The onboarding server then stores this data for use with the `fetch` endpoint.
 
@@ -29,6 +30,8 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 1. The mailbox ID
 2. The authenticator
 
+The CipherSuite ID does not need to be presented during fetch. The CipherSuite ID is available by looking up the given mailbox ID, and using that result to choose the correct algorithm for validating the authenticator.
+
 
 ## Onboarding Sequence
 
@@ -37,6 +40,8 @@ Actors:
 - Onboarding Server - the server that stores the onboarding bundle and validates the credentials provided for requests.
 - Onboarding Client - a standalone client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
 - New Device - the device that is being onboarded to the team.
+
+All cryptographic operations listed here will use a CipherSuite. The CipherSuite may have different algorithms in use depending on the deployment. The onboarding client and onboarding server MUST use the same cipher suite during the onboarding process.
 
 ```mermaid
 sequenceDiagram
@@ -48,23 +53,23 @@ sequenceDiagram
     Note over Admin: Create one-time join keypair
     Note over Admin: Create signed device certificate
     Note over Admin: Generate 11-word phrase from CSPRNG
-    Note over Admin: Derive mailbox ID (128 bits)<br/>using HKDF-SHA-512
-    Note over Admin: Derive symmetric encryption key<br/>using HKDF-SHA-512
-    Note over Admin: Derive authenticator<br/>using HKDF-SHA-512
+    Note over Admin: Derive mailbox ID (128 bits)<br/>using HKDF
+    Note over Admin: Derive symmetric encryption key<br/>using HKDF
+    Note over Admin: Derive authenticator<br/>using HKDF
     Note over Admin: Encrypt cert + private key<br/>using the bundle key
     Note over Admin: Encrypt one-time join keypair<br/>using the bundle key
     Note over Admin: Encrypt pairing/syncing info<br/>using the bundle key
     Note over Admin: Encrypt team ID<br/>using the bundle key
 
     Admin->>Graph: Publish one-time onboarding public key<br/>(AllowSelfJoinTeam)
-    Admin->>Server: drop(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
+    Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
     Note over Server: Store bundle keyed by mailbox ID
 
     Admin-->>Client: Send 11-word phrase (out of band)
 
-    Note over Client: Derive mailbox ID<br/>using HKDF-SHA-512
-    Note over Client: Derive symmetric encryption key<br/>using HKDF-SHA-512
-    Note over Client: Derive authenticator<br/>using HKDF-SHA-512
+    Note over Client: Derive mailbox ID<br/>using HKDF
+    Note over Client: Derive symmetric encryption key<br/>using HKDF
+    Note over Client: Derive authenticator<br/>using HKDF
 
     Client->>Server: fetch(mailbox ID, authenticator)
     Note over Server: Validate HMAC(authenticator, mailbox ID)
@@ -81,23 +86,23 @@ sequenceDiagram
 ```
 
 1. Admin prepares onboarding process
-    1. Admin create one time join key (asymmetric key)
-    2. Admin create signed device certificate
-    3. Admin create onboarding bundle
-        1. Admin creates 11 word phrase from CSPRNG
-        2. Admin derives mailbox ID (128bits) using HKDF-SHA-512 and static salt
-        3. Admin derives symmetric encryption key (AES-256-GCM) for onboarding bundle using HKDF-SHA-512
-        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF-SHA-512
-        5. Admin encrypts certificate + private key using the bundle key
-        6. Admin encrypts one time join keypair using the bundle key
-        7. Admin encrypts pairing/syncing info using the bundle key
-        8. Admin encrypts team ID using the bundle key
-    4. Admin publishes one-time onboarding public key to graph (AllowSelfJoinTeam)
-    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
-    6. send 11 words to new user
+    1. Admin creates the one time join key (asymmetric key) aka the "join key"
+    2. Admin creates the certificate for the new device and signs it with the root CA
+    3. Admin creates the "onboarding bundle"
+        1. Admin creates 11 word phrase by encoding 128bits from CSPRNG using diceware
+        2. Admin derives mailbox ID (128bits) using HKDF and static salt
+        3. Admin derives symmetric encryption key for onboarding bundle using HKDF and a different salt. This is the "bundle key"
+        4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF and a static salt
+	5. Admin encrypts the onboarding bundle
+		1. Admin encrypts certificate + private key using the bundle key
+		2. Admin encrypts one time join keypair using the bundle key
+		3. Admin encrypts pairing/syncing info using the bundle key
+		4. Admin encrypts team ID using the bundle key
+    4. Admin publishes the public portion of the join key to the graph (AllowSelfJoinTeam)
+    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, CipherSuite ID, and HMAC of authenticator against mailbox ID
 2. Admin sends 11 words to new device:
-    1. New device derives mailbox ID using HKDF-SHA-512
-    2. New device derives symmetric encryption key (AES-256-GCM) for onboarding bundle using HKDF-SHA-512
+    1. New device derives mailbox ID using HKDF
+    2. New device derives the bundle key using HKDF
 3. New device fetches encrypted onboarding bundle using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server
     1. New device decrypts certificate + private key
     2. New device decrypts one time join keypair
@@ -114,18 +119,18 @@ sequenceDiagram
 
 **Onboarding Client**
 
-- Onboarding Client MUST be able to complete both the store and fetch proceedure
+- Onboarding Client MUST be able to complete both the store and fetch procedure
 
 **Onboarding Client store requirements**
 
 - Onboarding Client MUST be able to generate the 11 words for the admin
 - Onboarding Client MUST create a one time symmetric join key
-- Onboarding Client MUST create a signed device certificate
+- Onboarding Client MUST create a device certificate signed by the root CA
 - Onboarding Client MUST use a CSPRNG to create the 11 word phrase
 - Onboarding Client MUST use diceware to generate the entropy for the 11 word phrase.
-- Onboarding Client MUST derive a mailbox ID using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive an authenticator using HKDF-SHA-512 from the 11 words
+- Onboarding Client MUST derive a mailbox ID using HKDF from the 11 words
+- Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF from the 11 words
+- Onboarding Client MUST derive an authenticator using HKDF from the 11 words
 - Onboarding Client MUST encrypt the new device certificate and private key using the bundle key
 - Onboarding Client MUST encrypt the one-time-use join keypair using the bundle key
 - Onboarding Client MUST encrypt the pairing/syncing information using the bundle key 
@@ -138,8 +143,8 @@ sequenceDiagram
 
 - Onboarding Client MUST take the 11 words as input 
 - Onboarding Client MUST take the new device keybundle as input
-- Onboarding Client MUST derive the mailbox ID using HKDF-SHA-512 from the 11 words
-- Onboarding Client MUST derive the bundle key using HKDF-SHA-512 from the 11 words
+- Onboarding Client MUST derive the mailbox ID using HKDF from the 11 words
+- Onboarding Client MUST derive the bundle key using HKDF from the 11 words
 - Onboarding Client MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
 - Onboarding Client MUST decrypt the new device certificate and private key using the bundle key
 - Onboarding Client MUST decrypt the one-time-use join keypair using the bundle key
@@ -159,10 +164,15 @@ sequenceDiagram
 
 ## Algorithms used
 
-- HKDF-SHA-512 for KDF
-- HMAC-SHA-512 for HMAC
-- AES-256-GCM for symmetric encryption
-- Ed25519 for signing
+The async onboarding process will use an instance of the CipherSuite provided by aranya-core. This suite will provide the set of cryptographic tools reqquired to carry out the process. The DefaultCipherSuite uses the following algorithms:
+
+- AEAD: AES-256-GCM
+- Hash: SHA-512
+- KDF: HKDF-SHA-512
+- KEM: DH-KEM(P-256, HKDF-SHA-256)
+- MAC: HMAC-SHA-512
+- Signatures: Ed25519
+
 
 ## Aranya changes
 
@@ -210,7 +220,9 @@ command SelfJoinTeam {
 
 
 	policy {
-		// mark the key used, fail if already used
+		// check if key already used
+		// if already used, invalidate all devices added using this key
+		// mark the key used
 		// normal device setup
 	}
 }
@@ -264,7 +276,7 @@ function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
 
 ## Diceware
 
-Diceware is used to generate a secure passphrase using a wordlist. The wordlist SHOULD be the EEF Large wordlist. Generating 11 words should provide 128 bits.
+Diceware is used to generate a secure passphrase using a wordlist. The wordlist SHOULD be the EEF Large wordlist. The diceware encoding will use 11 words to encode 128bits of information.
 
 https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 
