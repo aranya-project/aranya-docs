@@ -219,7 +219,7 @@ Policy-facing API (verification, exposed as FFIs):
 
 ### Finalize Command
 
-All ancestors of a Finalize command become permanent. The Finalize command is the only graph command produced by finalization.
+The set of commands that happen before a Finalize command is strictly the set of its ancestors. The Finalize command is the only graph command produced by finalization.
 
 Properties:
 
