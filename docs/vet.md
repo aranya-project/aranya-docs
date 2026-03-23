@@ -139,18 +139,25 @@ Large diffs often consist mostly of auto-generated code:
 
 ### 3. Audit Unsafe Code
 
-Count and compare unsafe usage between versions:
+List all unsafe locations in both versions and compare them directly. Counting alone is not reliable — if the same number of unsafe blocks were added and removed, the counts would match but the code could be entirely different.
 
 ```bash
-# Count unsafe blocks in old vs new (adjust paths for your crate)
-grep -r "unsafe {" ~/.cache/cargo-vet/src/<crate>-<old>/src/ ~/.cache/cargo-vet/src/<crate>-<old>/builder/ | wc -l
-grep -r "unsafe {" ~/.cache/cargo-vet/src/<crate>-<new>/src/ ~/.cache/cargo-vet/src/<crate>-<new>/builder/ | wc -l
+# List all unsafe locations in old version
+grep -rn "unsafe {" ~/.cache/cargo-vet/src/<crate>-<old>/src/lib.rs \
+  ~/.cache/cargo-vet/src/<crate>-<old>/builder/ | sed 's|.*/src/||'
 
-# Show all unsafe locations in both versions
-grep -rn "unsafe {" ~/.cache/cargo-vet/src/<crate>-<new>/src/lib.rs ~/.cache/cargo-vet/src/<crate>-<new>/builder/
+# List all unsafe locations in new version
+grep -rn "unsafe {" ~/.cache/cargo-vet/src/<crate>-<new>/src/lib.rs \
+  ~/.cache/cargo-vet/src/<crate>-<new>/builder/ | sed 's|.*/src/||'
+
+# Diff the two lists to see exactly what was added/removed
+diff <(grep -rn "unsafe {" ~/.cache/cargo-vet/src/<crate>-<old>/src/lib.rs \
+       ~/.cache/cargo-vet/src/<crate>-<old>/builder/ | sed 's|.*/src/||; s|.*/builder/|builder/|') \
+     <(grep -rn "unsafe {" ~/.cache/cargo-vet/src/<crate>-<new>/src/lib.rs \
+       ~/.cache/cargo-vet/src/<crate>-<new>/builder/ | sed 's|.*/src/||; s|.*/builder/|builder/|')
 ```
 
-For each new unsafe block, verify it falls into an expected category (FFI calls, static mut reads, env::set_var) and is not introducing a new unsafe pattern.
+For each new unsafe block, review the surrounding context and verify it falls into an expected category (FFI calls, static mut reads, env::set_var) and is not introducing a new unsafe pattern. For each removed unsafe block, verify the replacement is correct (e.g., safe Rust arithmetic replacing an FFI call).
 
 ### 4. Audit Networking and File Operations
 
