@@ -117,7 +117,7 @@ cargo make cargo-vet
 
 ## Auditing Large Diffs
 
-Some dependencies produce diffs that are too large to review line-by-line (e.g., `-sys` crates with vendored C code, crates with auto-generated bindings). This section describes a structured process for auditing these diffs. See [#191](https://github.com/aranya-project/aranya-docs/issues/191) for background and [aranya PR #758](https://github.com/aranya-project/aranya/pull/758) for a concrete example (aws-lc-sys 413K-line diff reduced to 7 reviewable files).
+Some dependencies produce diffs that are too large to review line-by-line (e.g., `-sys` crates with vendored C code, crates with auto-generated bindings). As a guideline, diffs over **1,000 lines** should use this structured process to narrow the review surface to a manageable size. See [#191](https://github.com/aranya-project/aranya-docs/issues/191) for background and [aranya PR #758](https://github.com/aranya-project/aranya/pull/758) for a concrete example (aws-lc-sys 413K-line diff reduced to 7 reviewable files).
 
 ### 1. Narrow the Review Surface
 
