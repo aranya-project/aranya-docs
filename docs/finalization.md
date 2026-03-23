@@ -219,7 +219,7 @@ Policy-facing API (verification, exposed as FFIs):
 
 ### Finalize Command
 
-The set of commands that happen before a Finalize command is strictly the set of its ancestors. This makes all ancestors permanent. The Finalize command is the only graph command produced by finalization.
+All ancestors of a Finalize command become permanent. The Finalize command is the only graph command produced by finalization.
 
 Properties:
 
@@ -849,7 +849,7 @@ Consensus rounds can also fail fast without waiting for timeouts. If a finalizer
 
 ### Daemon Startup and Fault Tolerance
 
-Consensus state MUST NOT be persisted -- all consensus messages are ephemeral. **[FAULT-001]** When a daemon starts or restarts, any in-progress finalization round MUST be abandoned. The daemon MUST determine finalization state from its local FactDB **[FAULT-002]** and automatically attempts to start a new finalization round (since it does not know when the last one occurred):
+Consensus state MUST NOT be persisted. **[FAULT-001]** On startup, the daemon MUST determine finalization state from its local FactDB **[FAULT-002]** and automatically attempt to start a new finalization round:
 
 1. The daemon MUST query the `LatestFinalizeSeq` fact to determine the last completed finalization sequence number. The daemon derives the next height as `seq + 1` and sends a `StartHeight` input to Malachite with this height and the current validator set (derived from the `FinalizerSet` fact). Malachite is stateless — it does not track or auto-increment heights. The caller is responsible for providing the height on startup and after each decision. Malachite uses the height to match incoming messages to the correct finalization round (dropping messages for lower heights, buffering messages for higher heights).
 2. The daemon MUST check if this device is in the current finalizer set (query the `FinalizerSet` fact). On startup, the daemon runs this query directly. Subsequently, the daemon MUST maintain its membership state by listening for the `FinalizerSetChanged` effect emitted by `Finalize` commands.
