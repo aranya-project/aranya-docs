@@ -110,7 +110,7 @@ Common categories of auto-generated or vendored content:
   5. **Run sanitizers** — ASan, MSan, and UBSan operate at the process level across the Rust/C FFI boundary. Running tests with sanitizers enabled can catch memory safety issues that static analysis misses.
   6. **Manual review against security standards** — For high-risk dependencies (e.g., crypto libraries), review vendored C code against the [SEI CERT C Coding Standard](https://wiki.sei.cmu.edu/confluence/display/c/SEI+CERT+C+Coding+Standard) or [CWE Top 25](https://cwe.mitre.org/top25/archive/2024/2024_cwe_top25.html). This is expensive and typically reserved for dependencies where formal verification is not available.
 
-  Covered by exemptions when full review is not feasible.
+  Alternatively, consider whether the vendored C/C++ dependency can be avoided entirely — either by identifying a pure Rust alternative that provides the same functionality, or by reimplementing the required functionality in Rust (significant effort, but eliminates C/C++ safety concerns). Covered by exemptions when full review is not feasible and no alternative exists.
 - **Generated headers** - Typically symbol renaming macros. Verify no executable code.
 - **Per-platform build configs** - Often auto-generated source file lists. Verify entries are only source files (`.c`, `.S`, `.asm`), not scripts or executables.
 
