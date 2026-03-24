@@ -99,7 +99,7 @@ In the future, finalizers may not need to be devices at all, since all that matt
 
 ### Initialization
 
-The initial finalizer set MUST be established in the team's `Init` command. **[FSET-001]** The `Init` command MUST support up to 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key. **[FSET-002]** If no finalizers are specified in `Init`, the team owner's public signing key MUST be used as the sole initial finalizer. **[FSET-003]** All specified finalizer keys MUST be unique and well-formed public signing keys. **[FSET-011]**
+The initial finalizer set MUST be established in the team's `Init` command. **[FSET-001]** The `Init` command MUST support up to 7 optional finalizer fields (`finalizer1` through `finalizer7`), each containing a public signing key. **[FSET-002]** This assumes the finalizer devices have been initialized (generating their key bundles) prior to team creation, and their public signing keys have been provided to the owner out-of-band. If no finalizers are specified in `Init`, the team owner's public signing key MUST be used as the sole initial finalizer. **[FSET-003]** The owner can then add additional finalizers later via `UpdateFinalizerSet`. All specified finalizer keys MUST be unique and well-formed public signing keys. **[FSET-011]**
 
 Public signing keys are stored on-graph because they are required for signature verification during consensus. The finalizer count and quorum are stored explicitly in the `FinalizerSet` fact so that the consensus protocol does not need to derive them implicitly.
 
