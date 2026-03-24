@@ -433,7 +433,7 @@ command Finalize {
         check team_exists()
 
         // Look up the current finalizer set for quorum verification.
-        let finalizer_set = lookup FinalizerSet[]
+        let finalizer_set = check_unwrap query FinalizerSet[]
 
         // Verify that the envelope has a quorum of valid, unique
         // certifier signatures from the finalizer set.
@@ -443,13 +443,13 @@ command Finalize {
         check verify_factdb_merkle_root(this.factdb_merkle_root)
 
         // Derive the next sequence number from the LatestFinalizeSeq singleton.
-        let latest = lookup LatestFinalizeSeq[]
+        let latest = check_unwrap query LatestFinalizeSeq[]
         let next_seq = latest.seq + 1
 
         // Check for a pending finalizer set update before the finish block.
         // Agreement on the parent guarantees all finalizers agree on
         // whether a pending update exists.
-        let pending = lookup PendingFinalizerSetUpdate[]
+        let pending = query PendingFinalizerSetUpdate[]
 
         // Policy terminates after executing a finish block, so use
         // branching to handle both cases in a single finish.
@@ -524,14 +524,14 @@ command UpdateFinalizerSet {
         )
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
-        let current = lookup FinalizerSet[]
+        let current = check_unwrap query FinalizerSet[]
         if current.num_finalizers >= 4 {
             check new_count >= 4
         }
 
         // Stage the update. The next Finalize command will apply it
         // automatically. If a pending update already exists, replace it.
-        let existing = lookup PendingFinalizerSetUpdate[]
+        let existing = query PendingFinalizerSetUpdate[]
         if existing is some {
             finish {
                 delete PendingFinalizerSetUpdate[]
@@ -604,7 +604,7 @@ ephemeral command QueryLatestFinalizeSeq {
 
     policy {
         check team_exists()
-        let latest = lookup LatestFinalizeSeq[]
+        let latest = check_unwrap query LatestFinalizeSeq[]
         finish {
             emit QueryLatestFinalizeSeqResult {seq: latest.seq}
         }
@@ -634,7 +634,7 @@ ephemeral command QueryFinalizerSet {
 
     policy {
         check team_exists()
-        let fs = lookup FinalizerSet[]
+        let fs = check_unwrap query FinalizerSet[]
         finish {
             emit QueryFinalizerSetResult {
                 num_finalizers: fs.num_finalizers,
