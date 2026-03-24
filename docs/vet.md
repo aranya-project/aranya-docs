@@ -108,7 +108,7 @@ Common categories of auto-generated or vendored content:
 
 Everything else is hand-written code and the primary focus of manual review. When in doubt, compare the file's structure against known auto-generated files in the same crate — auto-generated files within a project are structurally consistent with each other.
 
-For auto-generated files, consider regenerating from source using the same tool version (noted in the file header, e.g., `rust-bindgen 0.72.1`) and comparing against the checked-in version. This can catch code injection hiding in auto-generated files.
+For auto-generated files, consider regenerating from source using the same tool version (noted in the file header, e.g., `rust-bindgen 0.72.1`) and comparing against the checked-in version. This can catch code injection hiding in auto-generated files. If the crate does not document how to reproduce its auto-generated code, or the reproduction process is unclear, this could indicate insufficient build process maturity and should factor into the decision of whether to adopt the dependency.
 
 #### 3. Audit Unsafe Code
 
