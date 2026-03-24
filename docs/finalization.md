@@ -237,7 +237,7 @@ Properties:
 
 ### Finalize Ordering Guarantee
 
-All Finalize commands in the graph MUST form a chain -- for any two Finalize commands, one MUST be an ancestor of the other. **[FIN-004]** Policy MUST reject Finalize commands with a duplicate sequence number; multiple Finalize commands MAY exist in the graph as part of the finalization chain, but no two MAY share the same seq. **[FPOL-007]** This is enforced by:
+All Finalize commands in the graph MUST form a chain -- for any two Finalize commands, one MUST be an ancestor of the other. **[FIN-004]** Multiple Finalize commands MAY exist in the graph as part of the finalization chain, but two Finalize commands MUST NOT share the same sequence number. **[FPOL-007]** This is enforced by:
 
 1. The BFT consensus protocol ensures only one Finalize command is produced per finalization round.
 2. The sequence number is derived from the FactDB (`LatestFinalizeSeq.seq + 1`), so each Finalize command deterministically advances the sequence. Since the `LatestFinalizeSeq` is updated by the prior Finalize command, the new Finalize MUST be a descendant of it in the graph. Because finalization covers ancestors, and each Finalize is a descendant of the prior one, the finalized set can only grow forward -- it is impossible to finalize an older point after a newer one.
