@@ -159,9 +159,7 @@ Key properties of certified commands:
 
 - **Signatures MUST be stored in the envelope, not the payload.** **[CERT-002]** The envelope MUST carry up to 7 optional `(signing_key_id, signature)` pairs, matching the maximum finalizer set size. The payload contains only the command fields (factdb_merkle_root). Unlike regular commands (where the command ID includes the author sign ID and signature), the certified command ID MUST be computed from the payload only — excluding all signatures and signer identities. Different valid subsets of certifier signatures MUST produce the same command ID for the same payload. **[CERT-003]**
 - **Multiple certifiers.** Instead of a single `get_author()` check, the policy verifies that the envelope contains a quorum of valid signatures from the current finalizer set. Each signature is a certifier endorsing the command.
-- **Construction and verification are separated.** Unlike regular commands where seal and open are both policy blocks, certified commands split these responsibilities:
-  - **Construction (daemon-side):** The daemon constructs the certified envelope using a dedicated finalization runtime module (see [Certified Command Implementation](#certified-command-implementation)). This happens outside the policy pipeline — there is no seal block for certified commands.
-  - **Verification (policy-side):** The policy uses two separate FFIs: `open_certified(envelope)` in the `open` block to verify the command ID and deserialize the payload, and `verify_certified_quorum(envelope, finalizer_set)` in the `policy` block to verify the signature quorum (see [New FFIs](#new-ffis)). These are separate because the `open` block does not have access to the FactDB — the `FinalizerSet` fact needed for quorum verification can only be looked up in the `policy` block.
+- **Construction and verification use the standard seal/open pattern.** The `seal` block uses a `seal_certified` FFI to construct the certified envelope from the provided inputs (parent command ID, FactDB Merkle root, signatures). The `open` block uses `open_certified` to verify and deserialize. Quorum verification (`verify_certified_quorum`) runs in the `policy` block because it requires the `FinalizerSet` fact from the FactDB, which is not available in the `open` block. This keeps the daemon decoupled from envelope construction — it only provides inputs to the policy action.
 
 #### Certified Command Implementation
 
@@ -196,25 +194,25 @@ Note: The exact structure (whether payload is inside the envelope or separate) s
 
 The finalization runtime module receives the keystore from the daemon at initialization (consistent with how aranya-core handles crypto for sync and policy). The daemon relies on aranya-core runtime crates to sign and verify on its behalf — all signing operations use the keystore internally.
 
-Low-level API (construction):
-- `certified_command_id(command_name, parent_id, payload)` → `CmdId` -- Computes the certified digest and derives the command ID as described above. Used by the proposer to include the command ID in the proposal, and by each finalizer to verify it matches before signing.
-- `sign_certified(command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it using the keystore. Returns the signer's key ID and signature. Each certifier signs the same digest, producing a different signature over identical content. Used by each finalizer during the precommit phase.
-- `build_certified_envelope(command_name, parent_id, payload, signatures)` → `CertifiedEnvelope` -- Constructs the complete envelope. Computes the command ID internally via `certified_command_id`. The `signatures` parameter contains all `(SigningKeyId, Signature)` pairs collected from precommit messages. Used by each finalizer when committing the Finalize command.
+Consensus API (used by the daemon during consensus, not during command commit):
+- `certified_command_id(command_name, parent_id, payload)` → `CmdId` -- Computes the certified digest and derives the command ID. Used during consensus to verify the proposal's command ID before signing.
+- `sign_certified(command_name, parent_id, payload)` → `(SigningKeyId, Signature)` -- Computes the certified digest and signs it using the keystore. Used by each finalizer during the precommit phase.
 
 Consensus message API (signing and verification):
 - `sign_consensus_message(message)` → `SignedMessage` -- Serializes the message, signs it using the keystore, and attaches the sender's signing key ID. Used for all outgoing consensus messages (proposals, prevotes, precommits). The daemon delivers the resulting bytes over QUIC.
 - `verify_and_decode_consensus_message(bytes, finalizer_set)` → `Message` -- Verifies the sender's signature against the `FinalizerSet`, checks that the signing key ID belongs to a current finalizer, and deserializes the message. Returns an error if verification fails. Used for all incoming consensus messages.
 
-The module SHOULD provide higher-level finalization-specific wrappers that hard-code the Finalize command name and accept only the finalization-specific parameters (parent command ID, FactDB Merkle root, signatures). This reduces the risk of passing incorrect `command_name` or `parent_id` values at call sites.
+The module SHOULD provide higher-level finalization-specific wrappers that hard-code the Finalize command name and accept only the finalization-specific parameters (parent command ID, FactDB Merkle root). This reduces the risk of passing incorrect `command_name` or `parent_id` values at call sites.
 
-Policy-facing API (verification, exposed as FFIs):
-- `open_certified(envelope)` → deserialized command fields -- Recomputes `certified_command_id(command_name, parent_id, payload)` from the envelope's fields and verifies it matches the envelope's `command_id`. Returns an error if the ID does not match (indicating a tampered or malformed envelope). On success, deserializes and returns the command fields. Does not verify certifier signatures — that is handled separately by `verify_certified_quorum`.
+Policy-facing API (exposed as FFIs):
+- `seal_certified(payload, signatures)` → certified envelope -- Constructs the certified envelope from the serialized payload and collected signatures. Computes the command ID internally. Used in the `seal` block of certified commands.
+- `open_certified(envelope)` → deserialized command fields -- Verifies the certified command ID matches the payload and deserializes the fields. Does not verify certifier signatures.
 - `verify_certified_quorum(envelope, finalizer_set)` -- Verifies a quorum of valid certifier signatures (see [New FFIs](#new-ffis) for detailed behavior including fail-fast optimizations).
 
 **Runtime action API:**
-- A new action type MUST accept a pre-built `CertifiedEnvelope` and a parent command ID for commit. **[CMT-004]** The runtime:
+- The runtime action for certified commands accepts the parent command ID, payload fields, and collected signatures. **[CMT-004]** The runtime:
   1. Verifies the specified parent exists in the local graph (action-at-parent).
-  2. Skips the seal block — the envelope is already constructed by the daemon.
+  2. Runs the command's `seal` block (`seal_certified`) to construct the certified envelope.
   3. Runs the command's `open` block (`open_certified`) to verify the command ID and deserialize the payload.
   4. Runs the command's `policy` block (quorum verification, Merkle root check, sequence check, pending update application).
   5. If all checks pass, commits the command to the graph at the specified parent.
@@ -429,8 +427,7 @@ command Finalize {
         factdb_merkle_root struct FactRoot,
     }
 
-    // No seal block — the daemon constructs the certified envelope
-    // directly using the finalization runtime module.
+    seal { return seal_certified(serialize(this)) }
     open { return deserialize(open_certified(envelope)) }
 
     policy {
@@ -575,9 +572,10 @@ command UpdateFinalizerSet {
 FFI functions must be pure functions — they take inputs and return outputs without side effects. Each FFI below exists because the operation cannot be expressed in the policy language. All fact operations and effect emissions are performed in policy code.
 
 - **`validate_finalizer_keys(f1..f7)`** -- Takes up to 7 `option[bytes]` keys. Returns the count of provided keys on success, or an error if no keys are provided or if any provided keys are duplicates. *Required as FFI because the policy language lacks iteration — counting provided optional fields and checking all 21 pairwise combinations cannot be expressed inline.* Used by `Init` and `UpdateFinalizerSet` commands.
+- **`seal_certified(payload, signatures)`** -- Constructs the certified envelope from the serialized payload and collected signatures. Computes the certified command ID internally. Used in the `seal` block of certified commands. *Required as FFI because cryptographic digest computation and envelope construction are not available in the policy language.*
+- **`open_certified(envelope)`** -- Verifies the certified command ID matches the payload and deserializes the fields. Does not verify certifier signatures — that is handled by `verify_certified_quorum` in the policy block. *Required as FFI because cryptographic envelope operations are not available in the policy language.*
 - **`verify_certified_quorum(envelope, finalizer_set)`** -- Verifies that the certified envelope contains a quorum of valid certifier signatures from the `FinalizerSet`. MUST fail fast if the number of signatures in the envelope is less than `finalizer_set.quorum_size` — this avoids verifying any signatures when quorum is impossible. Otherwise, verifies signatures one by one: matches each signing key ID against the public signing keys in the finalizer set, then verifies the signature against the command content. MUST return an error if any signature is invalid (bad signature, key not in finalizer set, or duplicate key) — an honest node would never produce an envelope with invalid signatures, so their presence indicates a malformed or tampered command. MUST stop verifying after `quorum_size` valid signatures and return success — remaining signatures beyond quorum do not need to be verified. *Required as FFI because cryptographic signature verification is not available in the policy language.*
 - **`verify_factdb_merkle_root(expected_root)`** -- Compares the expected root against the current FactDB Merkle root. Returns true if the roots match. Used by both the `Finalize` command and the `VerifyFinalizationProposal` ephemeral command. *Required as FFI because the Merkle root is computed by the storage layer and passed into the policy VM via context — the policy language has no way to access storage-layer state directly.*
-- **`open_certified(envelope)`** -- Verifies the certified command ID matches the payload and deserializes the fields. Does not verify certifier signatures — that is handled by `verify_certified_quorum` in the policy block. *Required as FFI because cryptographic envelope operations are not available in the policy language.*
 
 #### Finalizer Set Validation
 
