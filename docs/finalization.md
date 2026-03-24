@@ -230,9 +230,8 @@ Properties:
 - **Policy checks**:
   - The Finalize command policy MUST verify that the envelope contains a quorum of valid signatures from unique members of the current finalizer set (via `verify_certified_quorum`). **[FPOL-003]**
   - The Finalize command policy MUST verify that the `factdb_merkle_root` matches the FactDB Merkle root at the parent of the Finalize command (obtained via the `verify_factdb_merkle_root` FFI). **[FPOL-004]** Finalizers independently compute this from their local FactDB and verify it matches before voting in consensus (see [Pre-Consensus Validation](#pre-consensus-validation)). The Merkle root also enables FactDB distribution: new members can verify a received FactDB against the Merkle root without replaying the entire graph (see [Future Work](#future-work)).
-  - The derived sequence number (`LatestFinalizeSeq.seq + 1`) MUST be sequential.
 - **Side effects**:
-  - The Finalize command MUST update the `LatestFinalizeSeq` singleton fact to the next sequence number, derived as `LatestFinalizeSeq.seq + 1`. **[FPOL-005]**
+  - The Finalize command MUST derive the next sequence number as `LatestFinalizeSeq.seq + 1` and update the `LatestFinalizeSeq` singleton fact. **[FPOL-005]** Duplicate sequence numbers are rejected by **[FPOL-007]**.
   - If a `PendingFinalizerSetUpdate` fact exists when the Finalize command is evaluated, the Finalize command MUST apply it atomically (see [Changing the Finalizer Set](#changing-the-finalizer-set)). **[FPOL-006]** Agreement on the parent guarantees all finalizers agree on whether a pending update exists.
   - The Finalize command MUST emit a `FinalizerSetChanged` effect containing the current `FinalizerSet` so the daemon can update its consensus participation state and peer set. **[FPOL-009]**
 
