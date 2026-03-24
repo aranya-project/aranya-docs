@@ -133,7 +133,7 @@ This two-phase approach ensures two properties:
 1. **All finalizers MUST agree on the current finalizer set before voting.** **[FSET-012]** Agreement on a common parent during consensus ensures all finalizers share the same `FinalizerSet` fact (and therefore the same quorum threshold) when validating proposals and casting votes. If the `UpdateFinalizerSet` command directly modified the `FinalizerSet` fact, different finalizers could have different views of the set depending on which graph commands they had synced, causing quorum verification to produce inconsistent results across devices.
 2. **All finalizers MUST transition to the same updated finalizer set after voting.** **[FSET-013]** Agreement on the common parent also guarantees all finalizers agree on whether a `PendingFinalizerSetUpdate` exists. The `Finalize` command atomically applies the pending update, so all devices that process the same `Finalize` command transition to the same new set.
 
-The set can grow or shrink freely, but the policy SHOULD enforce a minimum set size to prevent losing BFT safety once established. **[FSET-008]** The minimum threshold is not hardcoded in policy — it is provided by the daemon as a parameter, consistent with how `n` and `q` are external to policy. The recommended minimum is 4 (the smallest set size with f=1 Byzantine fault tolerance).
+The set can grow or shrink freely. The daemon SHOULD validate that a new finalizer set does not lose BFT safety (e.g., shrinking below 4, the smallest set size with f=1) before calling `UpdateFinalizerSet`. **[FSET-008]** This validation is the caller's responsibility, not the policy's — the policy does not enforce consensus-specific thresholds.
 
 The owner determines the initial set in `Init` and controls which devices receive the `UpdateFinalizerSet` permission.
 
@@ -498,10 +498,9 @@ command UpdateFinalizerSet {
         new_finalizer5_pub_sign_key option[bytes],
         new_finalizer6_pub_sign_key option[bytes],
         new_finalizer7_pub_sign_key option[bytes],
-        // Quorum size and minimum set size computed by the daemon
-        // from the consensus protocol.
+        // Quorum size computed by the daemon from the consensus
+        // protocol (malachite ThresholdParam::min_expected).
         quorum_size int,
-        min_finalizers int,
     }
 
     seal { return seal(serialize(this)) }
@@ -524,12 +523,6 @@ command UpdateFinalizerSet {
             this.new_finalizer7_pub_sign_key,
         )
 
-        // Prevent shrinking below the minimum set size for BFT safety.
-        // The minimum threshold is provided by the daemon, not hardcoded.
-        let current = check_unwrap query FinalizerSet[]
-        if current.num_finalizers >= this.min_finalizers {
-            check new_count >= this.min_finalizers
-        }
 
         // Stage the update. The next Finalize command will apply it
         // automatically. If a pending update already exists, replace it.
