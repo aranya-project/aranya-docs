@@ -139,7 +139,7 @@ The owner determines the initial set in `Init` and controls which devices receiv
 
 Because set changes are only applied atomically by `Finalize` commands, the finalizer set is always globally consistent -- all devices that have processed the same `Finalize` commands agree on the same set.
 
-If a second `UpdateFinalizerSet` is published before the next finalization, the `PendingFinalizerSetUpdate` fact MUST be replaced with the new values. **[FSET-010]** The next finalization round picks up whatever pending update exists at that point.
+If a second `UpdateFinalizerSet` is published before the next finalization, the `PendingFinalizerSetUpdate` fact MUST be replaced with the new values. **[FSET-010]** The next finalization round picks up whatever pending update exists at that point. After applying the update, the `Finalize` command deletes the `PendingFinalizerSetUpdate` fact (see **[FSET-007]**).
 
 **Known limitation:** Because finalizer set changes are applied through the `Finalize` command, a set change cannot proceed if finalization itself is stalled.
 
