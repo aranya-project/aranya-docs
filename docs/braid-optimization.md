@@ -327,3 +327,54 @@ Keeping two chunks avoids thrashing at boundaries: the strand heap processes com
 #### Storage format
 
 Each chunk is a sorted array of `(Location, count)` pairs, enabling binary search for point lookups. The chunks are ephemeral — computed per-braid and discarded after the braid completes.
+
+## Bounding strand heap memory
+
+### Problem
+
+The `StrandHeap` wraps a `BinaryHeap<Strand<S>>` that grows with each merge expansion during braiding. A `Strand` contains a `(Priority, CmdId)` key (Priority is an enum ~8 bytes, CmdId is 32 bytes), a `Location` (2 x usize = 16 bytes), and a segment handle `S`. The fixed fields total ~56 bytes plus `size_of::<S>()`.
+
+The strand count tracks DAG width — bounded by peer count for typical graphs — but the heap has no explicit capacity limit. This is a problem for `no_alloc` targets.
+
+### Bounded heap
+
+The `StrandHeap` is replaced with a fixed-capacity implementation using `heapless::BinaryHeap<Strand<S>, STRAND_CAPACITY>`, matching the pattern used by `TraversalQueue`. `STRAND_CAPACITY` is set equal to `QUEUE_CAPACITY` (512), which is sufficient for the maximum expected DAG width.
+
+The `push` method returns an error when the heap is full, surfaced as a new `StorageError::StrandHeapOverflow(usize)` variant. The `ParallelFinalize` constraint is unchanged.
+
+Since strands are bounded by graph width at any given level, and each merge expansion adds at most 2 new strands while consuming 1, the active strand count cannot exceed the total number of concurrent branches in the diamond — the same bound that governs `TraversalQueue`.
+
+## Bounding braid result memory
+
+### Problem
+
+The braid result is collected into a `Vec<Location>` that grows with the number of commands in the diamond. For large diamonds (thousands of commands), this is an unbounded allocation.
+
+### `BraidResult`
+
+The braid result is written incrementally to a chunked structure during computation, then returned as a `BraidResult` that provides iteration over the locations without requiring the full result in memory.
+
+#### Writing during braiding
+
+During the main braid loop, locations are appended to an in-memory buffer. When the buffer reaches `CHUNK_SIZE`, it is flushed to disk and cleared. After the loop completes, the in-memory buffer holds the final (partial) chunk. Since the braid is built in reverse order and reversed at the end, the chunks are written in reverse and read back in forward order.
+
+#### `BraidResult`
+
+`BraidResult` provides an iterator over `Location` values:
+
+```
+BraidResult {
+    /// In-memory locations when the braid fits in a single chunk.
+    mem: Option<heapless::Vec<Location, CHUNK_SIZE>>,
+    /// Disk-backed chunk reader when the braid exceeded one chunk.
+    disk: Option<DiskReader>,
+}
+```
+
+`BraidResult` implements `Iterator<Item = Result<Location, StorageError>>`. The `Result` return type is required because disk reads can fail. When the entire braid fits in memory (`disk` is `None`), iteration is infallible — the errors come only from the disk path.
+
+For the common case (small diamonds), the braid fits in a single chunk and is never written to disk. The caller iterates directly over the in-memory buffer with no I/O.
+
+#### Chunk ordering
+
+The braid is built back-to-front (highest `max_cut` first, then reversed). Chunks are flushed to disk in the order they fill — oldest locations first after reversal. When reading back, the disk chunks are read sequentially from first to last, followed by the in-memory remainder. This produces the final forward-order braid without a global reverse.
