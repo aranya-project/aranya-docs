@@ -192,6 +192,24 @@ When convergence points are nested (one below another), the visit-once rule keep
 
 `y` is visited twice (count=2) but only the first visit continues, reaching `x` once. If `x` is also reachable from an independent path, `x` gets count=2 — not 3, because the strand pruned at `y` never reaches `x`. In braiding: 2 strands arrive at `y`, one is dropped. The survivor plus one independent strand reach `x` — matching the count.
 
+### Non-LCA convergence
+
+Not every convergence point is the LCA of a merge command. A node can be a convergence point simply because multiple BFS paths reach it, even if no merge's skip list points to it:
+
+```
+        M2           ← merge(M1, C), LCA = LCA
+       / \
+      M1   C
+     / \   |
+    A    B-+         ← B is convergence (count=2), not an LCA
+     \  /
+      LCA
+```
+
+LCA has two children A and B. M1 merges A and B. B has a child C. M2 merges M1 and C. Both M1 and M2 have LCA as their LCA.
+
+The pre-pass BFS from M1 and C: M1 expands to A and B. C's parent is B. B is enqueued twice and popped with count=2, making it a convergence point. But no merge's skip list points to B since it is not any merge's LCA. This means approaches that track only merge LCAs (e.g. per-head LCA stacks from skip lists) would miss this convergence point, potentially creating duplicate strands and incorrect braid output.
+
 ## Changes
 
 ### `braid` signature
