@@ -391,9 +391,6 @@ command Init {
             this.finalizer7_pub_sign_key,
         )
 
-        // Validate quorum size matches the expected formula for n finalizers.
-        check this.quorum_size == (n * 2) / 3 + 1
-
         finish {
             create LatestFinalizeSeq[]=>{seq: 0}
             create FinalizerSet[]=>{
@@ -525,9 +522,6 @@ command UpdateFinalizerSet {
             this.new_finalizer5_pub_sign_key, this.new_finalizer6_pub_sign_key,
             this.new_finalizer7_pub_sign_key,
         )
-
-        // Validate quorum size matches the expected formula for new_count finalizers.
-        check this.quorum_size == (new_count * 2) / 3 + 1
 
         // Once a team has 4+ finalizers, it cannot shrink below 4.
         let current = check_unwrap query FinalizerSet[]
