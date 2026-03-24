@@ -108,6 +108,8 @@ Common categories of auto-generated or vendored content:
 
 Everything else is hand-written code and the primary focus of manual review. When in doubt, compare the file's structure against known auto-generated files in the same crate — auto-generated files within a project are structurally consistent with each other.
 
+For auto-generated files, consider regenerating from source using the same tool version (noted in the file header, e.g., `rust-bindgen 0.72.1`) and comparing against the checked-in version. This can catch code injection hiding in auto-generated files.
+
 #### 3. Audit Unsafe Code
 
 List all unsafe locations in both versions and compare them directly. Counting alone is not reliable — if the same number of unsafe blocks were added and removed, the counts would match but the code could be entirely different.
@@ -168,8 +170,6 @@ diff <(find ~/.cache/cargo-vet/src/<crate>-<old>/ -name "*.obj" -exec basename {
 ```
 
 Verify that binaries can be reproduced from source. Rebuild one or more from the vendored source and compare. Binary diffs should only contain timestamps and build paths, not code differences.
-
-Similarly, if the crate includes auto-generated code (e.g., FFI bindings), consider regenerating it from source using the same tool version (noted in the file header) and comparing against the checked-in version. This can catch code injection hiding in auto-generated files.
 
 #### 6. Cross-Reference Release Notes
 
