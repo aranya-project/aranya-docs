@@ -18,8 +18,9 @@ The `store` endpoint is authenticated by validating that the certificate present
 1. The mailbox ID
 2. The HMAC of the authenticator and mailbox
 3. The ciphertext of the onboarding bundle
+4. An expiration time after which the onboarding bundle will no longer be available for fetching
 
-The onboarding server then stores this data for use with the `fetch` endpoint.
+The onboarding server then stores this data for use with the `fetch` endpoint. After the expiration time has elapsed, the server MUST delete the stored bundle and reject any fetch requests for that mailbox ID.
 
 
 ### `fetch`
@@ -163,8 +164,9 @@ sequenceDiagram
 
 - Onboarding Server MUST authenticate users using a certificate when handling requests on the `store` endpoint
 - Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
-- Onboarding Server MUST store the mailbox ID, HMAC of authenticator, and ciphertext.
-- Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
+- Onboarding Server MUST store the mailbox ID, HMAC of authenticator, ciphertext, and expiration time.
+- Onboarding Server MUST reject fetch requests for bundles whose expiration time has elapsed and delete the expired bundle.
+- Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, ciphertext, and expiration time
 - Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
 
 - Onboarding Server MUST reject store requests with a duplicate mailbox ID
