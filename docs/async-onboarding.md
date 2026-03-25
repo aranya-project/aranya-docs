@@ -18,7 +18,6 @@ The `store` endpoint is authenticated by validating that the certificate present
 1. The mailbox ID
 2. The HMAC of the authenticator and mailbox
 3. The ciphertext of the onboarding bundle
-4. The CipherSuite ID
 
 The onboarding server then stores this data for use with the `fetch` endpoint.
 
@@ -30,7 +29,6 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 1. The mailbox ID
 2. The authenticator
 
-The CipherSuite ID does not need to be presented during fetch. The CipherSuite ID is available by looking up the given mailbox ID, and using that result to choose the correct algorithm for validating the authenticator.
 
 
 ## Onboarding Sequence
@@ -41,7 +39,7 @@ Actors:
 - Onboarding Client - a standalone client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
 - New Device - the device that is being onboarded to the team.
 
-All cryptographic operations listed here will use a CipherSuite. The CipherSuite may have different algorithms in use depending on the deployment. The onboarding client and onboarding server MUST use the same cipher suite during the onboarding process.
+All cryptographic operations listed here use a CipherSuite that is configurable at compile time. The onboarding client and onboarding server MUST use the same CipherSuite.
 
 ### Definitions
 
@@ -70,7 +68,7 @@ sequenceDiagram
     Note over Admin: Encrypt onboarding bundle<br/>using the bundle key
 
     Admin->>Graph: Publish join key public portion<br/>(AllowSelfJoinTeam)
-    Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext, CipherSuite ID)
+    Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
     Note over Server: Store bundle keyed by mailbox ID
 
     Admin-->>Client: Send 11-word phrase (out of band)
@@ -102,7 +100,7 @@ sequenceDiagram
 		3. Admin encrypts pairing/syncing info using the bundle key
 		4. Admin encrypts team ID using the bundle key
     4. Admin publishes the public portion of the join key to the graph (AllowSelfJoinTeam) along with the values that will be associated with the new device like rank, role, etc.
-    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, CipherSuite ID, and HMAC of authenticator against mailbox ID
+    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
 2. Admin sends 11 words to new device:
     1. New device derives mailbox ID using HKDF
     2. New device derives the bundle key using HKDF
@@ -167,7 +165,7 @@ sequenceDiagram
 
 ## Algorithms used
 
-The async onboarding process will use an instance of the CipherSuite provided by aranya-core. This suite will provide the set of cryptographic tools reqquired to carry out the process. The DefaultCipherSuite uses the following algorithms:
+The CipherSuite is configurable at compile time and is provided by aranya-core. The DefaultCipherSuite uses the following algorithms:
 
 - AEAD: AES-256-GCM
 - Hash: SHA-512
