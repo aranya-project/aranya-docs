@@ -2,7 +2,7 @@
 
 Aranya currently requires synchronous exchange of information to onboard a new device. This specification provides a mechanism for devices to onboard themselves with a single exchange of information with a privileged device.
 
-The system uses an 11 word phrase to exchange entropy used to derive cryptographic material. The privileged device uses the derived key to encrypt an onboarding bundle. The encrypted onboarding bundle is then stored in the onboarding server, and a one time key is added to the graph by the privileged device. The new device uses the 11 words (exchanged out of band) to derive the keys and information reiquired to fetch the onboarding bundle and decrypt it. The new device then uses the single-use onboarding key posted to graph to self join the team.
+The system uses an 11 word phrase to exchange entropy used to derive cryptographic material. The privileged device uses the derived key to encrypt an onboarding bundle. The encrypted onboarding bundle is then stored in the onboarding server, and a one time key is added to the graph by the privileged device. The new device uses the 11 words (exchanged out of band) to derive the keys and information required to fetch the onboarding bundle and decrypt it. The new device then uses the single-use onboarding key posted to graph to self join the team.
 
 
 ## Architecture
@@ -87,28 +87,28 @@ sequenceDiagram
 ```
 
 1. Admin prepares onboarding process
-    1. Admin creates the one time join key (asymmetric key) aka the "join key"
-    2. Admin creates the certificate for the new device and signs it with the root CA
-    3. Admin creates the "onboarding bundle"
+    1. Admin creates the one time use "join key" (asymmetric key)
+    2. Admin creates the certificate for the new device and signs it with the root CA if external PKI was not selected
+    3. Admin creates the "onboarding bundle" ciphertext
         1. Admin creates 11 word phrase by encoding 128bits from CSPRNG using diceware
         2. Admin derives mailbox ID (128bits) using HKDF over the entropy and static info field
         3. Admin derives symmetric encryption key for onboarding bundle using HKDF over the entropy and a different static info field. This is the "bundle key"
         4. Admin derives authenticator that the new user will use to authenticate to the onboarding server using HKDF over the entropy and a static info field
-	5. Admin encrypts the onboarding bundle
-		1. Admin encrypts certificate + private key using the bundle key
-		2. Admin encrypts one time join keypair using the bundle key
-		3. Admin encrypts pairing/syncing info using the bundle key
-		4. Admin encrypts team ID using the bundle key
+	5. Admin encrypts the onboarding bundle containing
+		1. Certificate + private key
+		2. One time join keypair 
+		3. Pairing/syncing info 
+		4. Team ID 
     4. Admin publishes the public portion of the join key to the graph (AllowSelfJoinTeam) along with the values that will be associated with the new device like rank, role, etc.
-    5. Admin sends onboarding bundle to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
+    5. Admin sends onboarding bundle ciphertext to onboarding server, with mailbox ID, encrypted payload, and HMAC of authenticator against mailbox ID
 2. Admin sends 11 words to new device:
     1. New device derives mailbox ID using HKDF
     2. New device derives the bundle key using HKDF
-3. New device fetches encrypted onboarding bundle using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server
-    1. New device decrypts certificate + private key
-    2. New device decrypts one time join keypair
-    3. New device decrypts pairing/syncing info
-    4. New device decrypts team ID
+3. New device fetches onboarding bundle ciphertext using mailbox ID and authenticator (sends authenticator and mailbox ID, server computes HMAC(auth, mailbox ID)) from onboarding server and decrypts using the bundle key:
+    1. Certificate + private key
+    2. One time join keypair
+    3. Pairing/syncing info
+    4. Team ID
 4. New device adds team using decrypted team ID
 5. New device syncs with the peering point to get the graph
 6. New device publishes SelfJoinTeam command
@@ -128,6 +128,9 @@ sequenceDiagram
 - Onboarding Client MUST create a one time symmetric join key
 - Onboarding Client MUST create a device certificate signed by the root CA
 - Onboarding Client MUST use a CSPRNG to create the 11 word phrase
+- Onboarding Client MUST use at least 128 bits of entropy to generate the phrase
+- Onboarding Client MUST validate 11 words exist in the phrase
+- Onboarding Client MUST use the EFF large wordlist
 - Onboarding Client MUST use diceware to generate the entropy for the 11 word phrase.
 - Onboarding Client MUST derive a mailbox ID using HKDF from the 11 words
 - Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF from the 11 words
