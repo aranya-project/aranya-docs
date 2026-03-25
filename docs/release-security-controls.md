@@ -86,6 +86,8 @@ Release workflows ([`release.yml`](https://github.com/aranya-project/aranya/blob
 
 Required reviewers is a [built-in GitHub feature](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/review-deployments) for environment protections. When a workflow job references an environment with required reviewers, GitHub pauses the workflow and notifies the designated reviewers. The workflow cannot proceed until a reviewer approves the deployment in the GitHub Actions UI. No third-party actions are needed.
 
+**Limitation:** Environment approvals only require a single approval from anyone on the reviewer list — there is no way to require multiple approvals or to require a specific person plus additional approvers. For multi-reviewer requirements (e.g., 1 lead + 2 other reviewers), use [branch protection rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule/managing-a-branch-protection-rule) on the release PR instead. The environment gate serves as a final confirmation from a team lead after the PR has already been reviewed and merged.
+
 The `release` environment is configured in both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments). The release workflow jobs in both repos reference it:
 
 ```yaml
