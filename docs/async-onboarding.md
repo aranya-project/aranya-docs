@@ -61,13 +61,13 @@ sequenceDiagram
     participant Server as Onboarding Server
     participant Client as Onboarding Client
 
-    Note over Admin: Create join key
-    Note over Admin: Create signed device certificate
-    Note over Admin: Generate 11-word phrase from CSPRNG
+    Note over Admin: Create one-time-use join key<br/>(asymmetric key)
+    Note over Admin: Create device certificate<br/>(signed by root CA, or use provided<br/>cert if external PKI)
+    Note over Admin: Generate 11-word phrase by encoding<br/>128 bits from CSPRNG using diceware
     Note over Admin: Derive mailbox ID, bundle key,<br/>and authenticator using HKDF
-    Note over Admin: Encrypt onboarding bundle<br/>using the bundle key
+    Note over Admin: Encrypt onboarding bundle containing:<br/>certificate + private key, join keypair,<br/>pairing/syncing info, team ID
 
-    Admin->>Graph: Publish join key public portion<br/>(AllowSelfJoinTeam)
+    Admin->>Graph: Publish join key public portion<br/>(AllowSelfJoinTeam) with rank, role, etc.
     Admin->>Server: store(mailbox ID, HMAC(authenticator, mailbox ID), ciphertext)
     Note over Server: Store bundle keyed by mailbox ID
 
@@ -76,11 +76,10 @@ sequenceDiagram
     Note over Client: Derive mailbox ID, bundle key,<br/>and authenticator using HKDF
 
     Client->>Server: fetch(mailbox ID, authenticator)
-    Note over Server: Validate HMAC(authenticator, mailbox ID)
+    Note over Server: Compute HMAC(authenticator, mailbox ID)<br/>and validate against stored value
     Server->>Client: Encrypted onboarding bundle
 
     Note over Client: Decrypt onboarding bundle<br/>using the bundle key
-
     Note over Client: Add team using decrypted team ID
     Client->>Graph: Sync with peering point to get graph
     Client->>Graph: SelfJoinTeam (using join key)
