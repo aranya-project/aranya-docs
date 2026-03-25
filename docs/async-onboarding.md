@@ -88,7 +88,9 @@ sequenceDiagram
 
 1. Admin prepares onboarding process
     1. Admin creates the one time use "join key" (asymmetric key)
-    2. Admin creates the certificate for the new device and signs it with the root CA if external PKI was not selected
+    2. Device Certificate
+	    - Admin creates the certificate for the new device and signs it with the root CA if external PKI was not selected
+	    - If external PKI is in use, the application will use the certificate passed to the onboarding client for the device
     3. Admin creates the "onboarding bundle" ciphertext
         1. Admin creates 11 word phrase by encoding 128bits from CSPRNG using diceware
         2. Admin derives mailbox ID (128bits) using HKDF over the entropy and static info field
@@ -126,7 +128,9 @@ sequenceDiagram
 
 - Onboarding Client MUST be able to generate the 11 words for the admin
 - Onboarding Client MUST create a one time symmetric join key
-- Onboarding Client MUST create a device certificate signed by the root CA
+- Onboarding Client MUST create a device certificate signed by the root CA if custom PKI is not in use
+- Onboarding Client MUST use the provided input certificate if custom PKI is enabled
+- Onboarding Client MUST optionally accept a certificate to use if custom PKI is enabled
 - Onboarding Client MUST use a CSPRNG to create the 11 word phrase
 - Onboarding Client MUST use at least 128 bits of entropy to generate the phrase
 - Onboarding Client MUST validate 11 words exist in the phrase
@@ -164,6 +168,7 @@ sequenceDiagram
 - Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, and ciphertext
 - Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
 
+- Onboarding Server MUST reject store requests with a duplicate mailbox ID
 
 
 ## Algorithms used
