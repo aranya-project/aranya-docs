@@ -265,7 +265,7 @@ The connection MUST be reused in reverse if ANY of the following are true: **[SA
 - A SAN contains an IP address matching the peer's connecting IP
 - A SAN contains a DNS hostname that resolves to the peer's connecting IP
 
-If no SAN matches, the connection MUST NOT be reused in reverse. **[SAN-007]** Instead, a new outbound connection MUST be established to the peer. This is a graceful fallback, not an error.
+If no SAN matches, the connection MUST NOT be reused in reverse. **[SAN-007]** Instead, a new outbound connection MUST be established to the peer. **[SAN-009]** The inbound connection MUST remain open for the peer to continue syncing to us — only the reverse direction is affected. **[SAN-010]** This is a graceful fallback, not an error.
 
 ### NAT Considerations
 
