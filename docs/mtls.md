@@ -250,41 +250,32 @@ struct PeerCacheKey {
 
 ## SAN Verification
 
-By default, TLS verifies server certificate SANs on outbound connections. Client certificate SANs are not verified on inbound connections because there is no "expected hostname" to check against.
+### Server SAN Verification
+
+Server SANs are always verified (standard TLS behavior). The server's certificate must contain a SAN matching the hostname or IP the client is connecting to. This prevents man-in-the-middle attacks and cannot be disabled.
+
+For deployments with dynamic server IPs, use DNS SANs that resolve to the server's current IP address rather than IP SANs. Generate certs with a DNS hostname as the CN (e.g., `aranya-certgen signed ca --cn mydevice.example.com --days 365`). Update DNS records when the IP changes.
 
 ### Client SAN Verification
 
-Client SAN verification is performed only when reusing an inbound connection in reverse — i.e., when a peer connected to us and we want to reuse that connection to sync back to them. In this case, we verify that the peer's certificate SANs match the IP address they connected from, since we are now treating the inbound connection as if it were an outbound connection to that address.
+Client SANs are verified only when reusing an inbound connection in reverse — i.e., when a peer connected to us and we want to reuse that connection to sync back to them for the same team. In this case, we verify that the peer's certificate SANs match the IP address they connected from, since we are now treating the inbound connection as if it were an outbound connection to that address.
 
-The connection is accepted if ANY of the following are true:
+The connection is reused in reverse if ANY of the following are true:
 - A SAN contains an IP address matching the peer's connecting IP
 - A SAN contains a DNS hostname that resolves to the peer's connecting IP
 
-If no SAN matches, the connection is not reused in reverse and a new outbound connection is established instead.
+If no SAN matches, the connection is not reused in reverse. Instead, a new outbound connection is established to the peer. This is a graceful fallback, not an error.
 
-Client SAN verification can be disabled via config for deployments with dynamic IPs:
+There is no config flag to disable client SAN verification. Deployments where client SANs cannot match the connecting IP (e.g., NAT, dynamic IPs) will simply not reuse inbound connections in reverse and will fall back to establishing new outbound connections.
 
-```toml
-[sync.quic]
-# Optional: disable client SAN verification for reverse connection reuse.
-# When disabled, inbound connections can be reused in reverse regardless of SANs.
-# Default: false (verification enabled)
-# disable_client_san_verification = true
-```
+### NAT Considerations
 
-### Server SAN Verification
+When a peer is behind NAT, the connecting IP seen by the server is the NAT's external IP, not the peer's actual IP. The peer's cert SANs typically won't match the NAT IP, so reverse connection reuse will fail the SAN check and fall back to a new outbound connection.
 
-Standard TLS server SAN verification ensures the server's certificate contains a SAN matching the hostname or IP the client is connecting to. This prevents man-in-the-middle attacks.
-
-Server SAN verification can be disabled via config:
-
-```toml
-[sync.quic]
-# DANGEROUS: Disable server SAN verification. Enables man-in-the-middle attacks.
-# Only use if servers have dynamic IPs AND no DNS infrastructure is available.
-# Default: false (verification enabled)
-# disable_server_san_verification = true
-```
+Strategies for NAT deployments:
+- **Use the NAT's external IP or hostname in cert SANs** — if the NAT IP is stable, include it in the cert. Reverse reuse will work.
+- **Establish redundant outbound connections** — both peers initiate outbound connections to each other. No reverse reuse needed. The QUIC transport handles this gracefully.
+- **Relay via a peer not behind NAT** — both NAT'd peers sync through a third party with a routable address.
 
 ### Implementation
 
@@ -318,13 +309,10 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 }
 ```
 
-Server SAN verification is disabled by implementing a custom `ServerCertVerifier` that skips the server name matching while still verifying the certificate chain.
-
-### Security Considerations
+### Additional Security Considerations
 
 - **DNS resolution**: DNS resolution for SAN verification introduces a dependency on DNS infrastructure and adds latency. Consider caching results.
-- **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
-- **Dynamic IPs**: For deployments with dynamic IP addresses where DNS is not available, disable SAN verification via config flags.
+- **Dynamic IPs without DNS**: If a deployment has dynamic IPs and no DNS infrastructure, use IP SANs and rotate certs when IPs change via `set_cert`. Alternatively, rely on redundant outbound connections rather than reverse reuse.
 
 ## Breaking Changes
 
