@@ -17,39 +17,33 @@ Aranya's sync traffic is secured via mTLS over QUIC using the `quinn` library wi
 Abbreviations in this document:
 - certificate -> cert
 - certificates -> certs
-- fingerprint -> SHA-256 fingerprint of the X.509 certificate's public key
 
 ## Requirements
 
 - Users must be able to leverage their existing external PKI for generating/signing certs
-- mTLS certs must be X.509 TLS certs in PEM format.
-- All certs must contain Subject Alternative Names (SANs). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified against connecting IP by default. Both client and server SAN verification can be disabled via config flags for deployments with dynamic IPs.
-- A single device cert is configured when the daemon loads. The device cert must be signed by one of the root certs or an intermediate CA cert.
-- A set of root certs is configured when the Aranya daemon loads
-- The configured root certs and device cert are used for all QUIC connections and Aranya teams
+- mTLS certs must be X.509 TLS certs in a format supported by rustls (PEM or DER). The `aranya-certgen` tool outputs PEM only.
+- All certs must contain Subject Alternative Names (SANs). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
+- Each team has its own device cert and root CA certs, allowing different teams to use different PKI trust chains
+- The device cert for each team must be signed by one of that team's root certs or an intermediate CA cert
 - QUIC connection attempts by the syncer should fail the TLS handshake if certs have not been configured/signed properly
 - QUIC connection attempts with expired certs should fail the TLS handshake
 - Security-relevant events should be logged:
   - Failed authentication attempts
   - Certificate validation failures
-  - Connection accept/reject with fingerprint and IP
-  - Connections closed due to duplicate fingerprint
+  - Connection accept/reject with IP
 
 Note:
 QUIC requires TLS 1.3 so that is an implied requirement. It's worth mentioning here since it is relevant to the security properties of our mTLS implementation.
 
 Future enhancements:
-- Different root and device certs for different teams
 - Use system root certs
-- Verify that device cert is signed by one of the root certs when daemon loads, rather than failing later during TLS authentication
+- Verify that device cert is signed by one of the root certs when certs are configured, rather than failing later during TLS authentication
 - Cert revocation. Currently, Aranya does not check certificate revocation status (CRL/OCSP). If a cert is revoked by external PKI infrastructure but not yet rotated, an attacker with the compromised cert can still establish connections and sync. This leaks graph metadata (e.g., number of devices, team structure) but not application data protected by Aranya's encryption. Devices should be removed from the Aranya team immediately upon cert compromise; cert revocation provides defense-in-depth once implemented.
-- Cert rotation/renewal
-- Supporting cert formats other than PEM
 
 ## Suggested Integration Requirements
 
 - We recommend using P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2).
-- Certs and their corresponding secret keys are stored on disk without further protection. Therefore, we recommend protecting the secret keys with an encrypted filesystem, restricted file permissions, and a HSM/TPM.
+- We recommend protecting the source cert/key files with an encrypted filesystem and restricted file permissions prior to importing them into Aranya.
 
 ## Certgen CLI Tool Requirements
 
@@ -89,146 +83,160 @@ Future enhancements:
 
 ## Certificate Generation
 
-mTLS root and device certs can be generated externally via a user's existing PKI infrastructure, or using the `aranya-certgen` CLI tool provided with Aranya.
-Device certs are signed by one of the root certs or an intermediate CA cert.
+mTLS root and device certs can be generated using either:
+
+1. **External PKI** — Users can provide certs from their existing PKI infrastructure. The daemon accepts any cert format supported by rustls, which includes PEM and DER (see [rustls-pki-types documentation](https://docs.rs/rustls-pki-types/latest/rustls_pki_types/)). Certs must be X.509 and the device cert must be signed by one of the provided root CA certs or an intermediate CA cert.
+
+2. **`aranya-certgen` CLI tool** — Aranya's built-in cert generation tool. Outputs certs in PEM format only (see [Certgen CLI Tool Requirements](#certgen-cli-tool-requirements)).
+
+The generated cert and key files are provided to the daemon via the `set_cert` API (see [Certificate Configuration](#certificate-configuration)). For example, using `aranya-certgen`:
+
+```bash
+# Generate a root CA
+aranya-certgen ca --cn "My Company CA" --days 365
+
+# Generate a device cert signed by the CA
+aranya-certgen signed ca --cn 192.168.1.10 --days 365 -o device
+
+# Configure the team with the generated certs
+# (via client API)
+# set_cert(team_id, ["ca.crt.pem"], "device.crt.pem", "device.key.pem")
+```
 
 We recommend using P-256 ECDSA certs generated from a secret key of at least 256 bits (NIST SP 800-52 Rev. 2).
 
 Certs should not be checked into repositories and should always be generated for each deployment.
 
-## Daemon Configuration
+## Certificate Configuration
 
-Paths to the root certs directory, device cert file, and device key file are provided in the daemon config.
-The root cert directory is assumed to be flat: we do not support any recursion or symlinks.
-Only `.pem` files in the root certs directory are loaded (`.key.pem` files are skipped).
-Certs will be loaded into the QUIC syncer module when the daemon loads.
+Certs are configured per-team via the client API using the `set_cert` method. This is separate from team creation — a team must exist before its certs can be configured, and certs must be configured before sync peers are added.
 
-daemon_config.toml:
-```toml
-[sync.quic]
-enable = true
-addr = "0.0.0.0:4321"
-root_certs_dir = "/etc/aranya/certs/ca"
-device_cert = "/etc/aranya/certs/device.crt.pem"
-device_key = "/etc/aranya/certs/device.key.pem"
+### API
 
-# Optional: disable client SAN verification for deployments where client IPs
-# are dynamic and cannot be represented in certificate SANs.
-# Default: false (verification enabled)
-# disable_client_san_verification = true
-
-# DANGEROUS: Disable server SAN verification. Enables man-in-the-middle attacks.
-# Only use if servers have dynamic IPs AND no DNS infrastructure is available.
-# Default: false (verification enabled)
-# disable_server_san_verification = true
+```
+set_cert(team_id, root_certs, device_cert, device_key)
 ```
 
-The Aranya daemon will refuse to start if the following conditions are not met:
-- The root certs directory (`root_certs_dir`) contains at least one root certificate `.pem` file.
-- The device cert file (`device_cert`) exists and contains a valid certificate.
-- The device key file (`device_key`) exists and contains a valid private key.
+Parameters:
+- `team_id` — the team to configure TLS for
+- `root_certs` — file paths to one or more root CA certificate files
+- `device_cert` — file path to the device certificate file
+- `device_key` — file path to the device private key file
 
-Warnings are logged at startup when SAN verification is disabled:
-- `disable_client_san_verification`: `WARN: Client SAN verification is disabled. Clients will be accepted from any IP address.`
-- `disable_server_san_verification`: `ERROR: Server SAN verification is disabled. This enables man-in-the-middle attacks.`
+The daemon accepts file paths from the client via IPC. The client should zeroize/drop the paths after the IPC call returns since the daemon has its own copy. The daemon is responsible for detecting the certificate format (PEM, DER, etc.) and performing any necessary conversion.
 
-Verification of the cert chain is not performed by the daemon when starting up and loading certs into the QUIC library. For simplicity, we will rely on the QUIC library to detect invalid certs at runtime when performing the TLS handshake for QUIC connections.
+`set_cert` is idempotent — it handles both initial configuration and cert rotation. Calling it again for the same team overwrites the previous cert configuration.
 
-Please ensure that your PKI infrastructure has done the following before loading certs into the daemon's QUIC syncer:
-- Generated the root certs and any intermediate CA certs
-- Signed device certs with root certs or intermediate CA certs
-- Included any relevant SANs information in the certs
-- Ideally, the cert chain should be validated before loading certs into Aranya to avoid troubleshooting failed TLS handshakes at runtime
+### Call Ordering
 
-## Breaking Changes
+```
+create_team / add_team  →  set_cert  →  add_sync_peer
+```
 
-### Breaking Aranya API Changes
+Sync peers require a TLS configuration to establish connections. `add_sync_peer` should fail if certs have not been configured for the team.
 
-All QUIC syncer PSK and IKM related Aranya APIs and configs for the QUIC syncer will be replaced with the new daemon cert configuration defined in this document.
-This will cause breaking changes to the Aranya API.
+### Import Flow
 
-### Breaking Deployment Changes
+When `set_cert` is called:
 
-Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. We recommend upgrading all Aranya software in a deployment to a version that supports mTLS certs at the same time.
+1. Daemon reads the cert and key files from the provided paths
+2. Daemon copies the device cert to `state_dir/certs/<team_id>.crt.pem`
+3. Daemon copies the root CA certs to `state_dir/certs/<team_id>.root.crt.pem`
+4. Daemon stores the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). If a `TlsPrivateKey` already exists for this team, it is replaced.
+5. Daemon deletes the source cert and private key files
+6. Daemon builds rustls `ClientConfig` and `ServerConfig` for the team (with the team's device cert, private key, and root CAs)
+7. Private key bytes are zeroized and dropped from application memory — only rustls holds the key material internally after this point
 
-Existing Aranya deployments using different PSKs for each team will no longer be able to manage different certs for each team. Reusing certs across teams is acceptable since it only leaks team metadata such as devices, roles, permissions, etc. Aranya's RBAC scheme must grant permissions to a device/role before it is allowed to perform any operations on the graph.
-If using different mTLS certs for each team is important, we recommend isolating each team into its own Aranya deployment with different certs rather than managing multiple teams in the same deployment. In the future, we intend to allow different certs to be used for each team in a single deployment.
+### Startup Flow
 
-## Fingerprint Uniqueness
+When the daemon starts:
 
-### Problem
+1. Scan `state_dir/certs/` for team IDs (each `<team_id>.crt.pem` indicates a configured team)
+2. For each team: load the device cert and root CA certs from `state_dir/certs/`
+3. For each team: load the `TlsPrivateKey` from the keystore using the team ID
+4. Build rustls `ClientConfig` and `ServerConfig` per team (team-specific device cert and root CAs)
+5. Store configs for use by the quinn QUIC endpoint when establishing connections
+6. Zeroize and drop private key bytes from application memory
 
-While mTLS validates the peer's certificate, it doesn't prevent the same certificate from being used to establish multiple connections from different IP addresses. This creates a denial-of-service vulnerability:
+### Cert Rotation
 
-An attacker with a compromised cert could connect from many different IP addresses, each creating a separate entry in the connection map. This could exhaust connection slots or resources, preventing legitimate peers from connecting.
+Call `set_cert` again with new file paths. The daemon overwrites the cert files in `state_dir/certs/`, replaces the `TlsPrivateKey` in the keystore, rebuilds the rustls configs, and deletes the source files.
 
-### Solution
+### Team Removal
 
-Connection maps and peer caches are keyed by socket address, but we enforce that only one connection can exist per fingerprint. A new connection with a fingerprint that matches an existing connection will be accepted and cause the old connection to be closed.
+When a team is removed:
 
-It's possible for an attacker with a compromised cert to DOS attack a single device by repeatedly connecting and forcing that device's connection to close. However, this requires the attacker to have that device's compromised cert. A compromised cert should be revoked and a new cert generated and deployed. The goal of this solution is to prevent a single compromised cert from DOS attacking the entire Aranya network — an attacker can only disrupt connections for the specific cert they have compromised.
+1. Delete `state_dir/certs/<team_id>.crt.pem` and `state_dir/certs/<team_id>.root.crt.pem`
+2. Remove the `TlsPrivateKey` from the keystore
+3. Remove the team's `ClientConfig` and `ServerConfig`
+4. Close any open connections for this team
 
-Properties of fingerprint:
-- **Unique per certificate**: Each certificate has a distinct fingerprint
-- **Survives certificate rotation**: If the same key pair is used for a renewed cert, the fingerprint remains the same
-- **Available only after TLS handshake**: Cannot be spoofed since it's computed from the validated certificate
+## Private Key Storage
 
-### Fingerprint Type
+### TlsPrivateKey Type
 
-The `Fingerprint` type is a 32-byte SHA-256 hash of the public key in the peer's certificate:
+A new `TlsPrivateKey<CS>` type is added to aranya-core's crypto engine to store TLS private keys in the daemon's keystore. This follows the existing pattern used by `PskSeed`, signing keys, and encryption keys.
+
+- `TlsPrivateKey<CS>` — unwrapped key type holding the raw private key bytes
+- `TlsKeyId` — typed ID for keystore lookup, derived deterministically from the team ID
+- `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum
+
+The keystore encrypts the private key at rest using AEAD (AES-256-GCM). The key is only decrypted when needed (during `set_cert` import or daemon startup) and is zeroized immediately after being handed to rustls.
+
+### Security Properties
+
+- **At rest**: private key is AEAD-encrypted in the keystore
+- **During import**: private key bytes exist briefly in daemon memory while being read from the source file and stored in the keystore. Source file is deleted after import.
+- **At runtime**: only rustls holds the private key internally. The daemon's copy is zeroized after rustls config is built.
+- **Source file cleanup**: both the source cert and private key files are deleted after import. The private key file is ephemeral — it exists only long enough to be imported into the keystore.
+
+## TLS Configuration Architecture
+
+### Per-Team Certs and Connections
+
+Each team has its own device cert (signed by that team's CA) and root CA certs. The device uses the same private key across all teams, but has a separate certificate per team since each team's CA signs the device's cert independently.
+
+QUIC connections are established per (peer, team) pair. Each connection uses the team-specific certs on both sides:
+- The outbound peer configures the connection with the team's `ClientConfig` (team's device cert + team's root CAs)
+- The inbound peer configures the connection with the team's `ServerConfig` (team's device cert + team's root CAs)
+- The TLS handshake mutually validates both peers' certs against the team's root CAs
+
+This means all cert validation is handled by the TLS layer — no application-layer post-handshake verification is needed. A peer with a cert from Team A's CA cannot establish a connection for Team B because the TLS handshake will fail.
+
+Connections are reused within a team. A new connection is only established when the existing one drops or when syncing with a new peer.
+
+### In-Memory Representation
+
 ```rust
-/// SHA-256 hash of a peer's certificate public key.
-/// Used to uniquely identify peers regardless of their network address.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) struct Fingerprint([u8; 32]);
+/// Per-team TLS configs (team-specific device cert + root CAs).
+/// Used for both outbound (ClientConfig) and inbound (ServerConfig) connections.
+tls_configs: HashMap<TeamId, TeamTlsState>
 
-impl Fingerprint {
-    /// Compute fingerprint from a QUIC connection's verified peer certificate.
-    ///
-    /// Returns an error if the peer identity cannot be extracted or parsed.
-    pub fn from_connection(conn: &quinn::Connection) -> Result<Self, FingerprintError>;
+struct TeamTlsState {
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
 }
 ```
 
-### Fingerprint Computation
-
-`Fingerprint::from_connection` computes the fingerprint from the QUIC connection after the TLS handshake completes:
-
-1. Call `conn.peer_identity()` to get the certificate chain
-2. Downcast to `Vec<CertificateDer>` (rustls's certificate type)
-3. Take the first certificate (the leaf/end-entity cert) - TLS certificate chains are ordered with the leaf first
-4. Parse the DER-encoded certificate using `x509-parser` to extract the SubjectPublicKeyInfo
-5. Compute SHA-256 hash of the public key bytes using `aranya-crypto`
-
-We hash only the public key (not the entire certificate) so that certificate rotation with the same key pair preserves the fingerprint.
-
-Note: Fingerprints are only computed for certificates that rustls has already validated against our root CA store.
-
-Dependencies: `x509-parser` for parsing DER-encoded certificates, `aranya-crypto` for SHA-256.
+Keeping one config pair per team is acceptable for the expected number of teams per device. Both `ClientConfig` and `ServerConfig` are lightweight — they hold cert/key references and root CA stores.
 
 ## Connection Management
 
-### Data Structures
-```rust
-/// Map keyed by network address for connection reuse.
-connections: HashMap<SocketAddr, Connection>
-
-/// Map from fingerprint to address for enforcing one connection per identity.
-/// New connections with an existing fingerprint cause the old connection to be closed.
-fingerprints: HashMap<Fingerprint, SocketAddr>
-```
-
 ### Connection Flow
 
-1. Want to connect to address X
-2. Check if we have an existing healthy connection to X — if yes, reuse it
-3. Otherwise, initiate connection to X
-4. TLS handshake completes (validates peer certificate, verifies SANs if enabled)
-5. Compute fingerprint from peer certificate
-6. If fingerprint exists in `fingerprints` map, close the old connection and remove it from `connections`
-7. Insert fingerprint into `fingerprints` map, store connection in `connections` map
+1. Want to sync with peer at address X for team T
+2. Check if we have an existing healthy connection to (X, T) — if yes, reuse it
+3. Otherwise, initiate connection to X using team T's `ClientConfig` (via `connect_with()`)
+4. TLS handshake completes (mutual cert validation against team T's root CAs)
+5. Store connection in the connection map keyed by (socket address, team ID)
 
-When a connection closes, remove its entry from both maps.
+When a connection closes, remove its entry from the connection map.
+
+Peers that share multiple teams maintain separate connections per team. Each connection uses the appropriate team-specific certs and root CAs. QUIC connections are lightweight, so this is not a significant resource concern.
+
+### Reverse Connection Reuse
+
+When a peer connects to us (inbound) for a specific team, we may reuse that connection to sync back to them for the same team rather than opening a separate outbound connection. This is the only case where client SAN verification applies (see [Client SAN Verification](#client-san-verification)).
 
 ### Peer Caches and Subscriptions
 
@@ -242,29 +250,45 @@ struct PeerCacheKey {
 
 ## SAN Verification
 
-By default, TLS only verifies server certificate SANs. Client certificate SANs are not verified because there is no "expected hostname" to check against. We enforce client SAN verification by default to ensure the client's connecting IP matches their certificate.
-
-Both client and server SAN verification can be disabled via config flags for deployments with dynamic IPs where SANs cannot be reliably configured.
+By default, TLS verifies server certificate SANs on outbound connections. Client certificate SANs are not verified on inbound connections because there is no "expected hostname" to check against.
 
 ### Client SAN Verification
 
+Client SAN verification is performed only when reusing an inbound connection in reverse — i.e., when a peer connected to us and we want to reuse that connection to sync back to them. In this case, we verify that the peer's certificate SANs match the IP address they connected from, since we are now treating the inbound connection as if it were an outbound connection to that address.
+
 The connection is accepted if ANY of the following are true:
-- A SAN contains an IP address matching the client's connecting IP
-- A SAN contains a DNS hostname that resolves to the client's connecting IP
+- A SAN contains an IP address matching the peer's connecting IP
+- A SAN contains a DNS hostname that resolves to the peer's connecting IP
 
-If no SAN matches, reject the connection.
+If no SAN matches, the connection is not reused in reverse and a new outbound connection is established instead.
 
-Disabled via `disable_client_san_verification` config option.
+Client SAN verification can be disabled via config for deployments with dynamic IPs:
+
+```toml
+[sync.quic]
+# Optional: disable client SAN verification for reverse connection reuse.
+# When disabled, inbound connections can be reused in reverse regardless of SANs.
+# Default: false (verification enabled)
+# disable_client_san_verification = true
+```
 
 ### Server SAN Verification
 
 Standard TLS server SAN verification ensures the server's certificate contains a SAN matching the hostname or IP the client is connecting to. This prevents man-in-the-middle attacks.
 
-Disabled via `disable_server_san_verification` config option. **This is dangerous and should only be used when absolutely necessary.**
+Server SAN verification can be disabled via config:
+
+```toml
+[sync.quic]
+# DANGEROUS: Disable server SAN verification. Enables man-in-the-middle attacks.
+# Only use if servers have dynamic IPs AND no DNS infrastructure is available.
+# Default: false (verification enabled)
+# disable_server_san_verification = true
+```
 
 ### Implementation
 
-The `ClientCertVerifier` trait does not have access to the peer's IP address, so client SAN verification is performed after the TLS handshake:
+The `ClientCertVerifier` trait does not have access to the peer's IP address, so client SAN verification is performed after the TLS handshake when deciding whether to reuse a connection in reverse:
 ```rust
 fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
     let peer_ip = conn.remote_address().ip();
@@ -301,3 +325,13 @@ Server SAN verification is disabled by implementing a custom `ServerCertVerifier
 - **DNS resolution**: DNS resolution for SAN verification introduces a dependency on DNS infrastructure and adds latency. Consider caching results.
 - **NAT**: If the client is behind NAT, the connecting IP may not match cert SANs. Use DNS-based SANs that resolve to the NAT's external IP.
 - **Dynamic IPs**: For deployments with dynamic IP addresses where DNS is not available, disable SAN verification via config flags.
+
+## Breaking Changes
+
+### Breaking Aranya API Changes
+
+All QUIC syncer PSK and IKM related Aranya APIs and configs for the QUIC syncer will be replaced with the new `set_cert` API defined in this document. `CreateTeamQuicSyncConfig`, `AddTeamQuicSyncConfig`, `CreateSeedMode`, `AddSeedMode`, and related types will be removed. This will cause breaking changes to the Aranya API.
+
+### Breaking Deployment Changes
+
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. We recommend upgrading all Aranya software in a deployment to a version that supports mTLS certs at the same time.
