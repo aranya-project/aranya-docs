@@ -53,6 +53,7 @@ Future enhancements:
 - Must output certs in PEM format with `.crt.pem` and `.key.pem` extensions
 - Must allow a CN (Common Name) to be specified for each generated cert
 - CN is automatically added as a SAN (Subject Alternative Name) - auto-detected as DNS or IP based on format
+- Must support additional SANs via `--dns` and `--ip` flags for specifying multiple DNS hostnames and IP addresses beyond the CN
 - Must allow a validity period in days to be specified so certs can expire
 
 Example usage:
@@ -68,17 +69,21 @@ aranya-certgen signed ca --cn server --days 365
 
 # Create a signed certificate with custom output
 aranya-certgen signed ./certs/myca --cn server --days 365 -o ./certs/server
+
+# Create a signed certificate with multiple SANs (for NAT/multi-homed deployments)
+aranya-certgen signed ca --cn mydevice.example.com --ip 192.168.1.10 --ip 10.0.0.5 --dns mydevice.local --days 365
 ```
 
 CLI flags:
 - `--cn`: Common Name for the certificate (required)
+- `--dns`: Additional DNS SAN (can be specified multiple times)
+- `--ip`: Additional IP SAN (can be specified multiple times)
 - `--days`: Validity period in days (default: 365)
 - `-o/--output`: Output path prefix (default: "ca" for CA, "cert" for signed)
 - `-p`: Create parent directories if they don't exist
 - `-f/--force`: Overwrite existing files
 
 Future enhancements:
-- Explicit SAN support via `--dns` and `--ip` flags for additional SANs beyond the CN
 - HSM encryption of secret keys
 
 ## Certificate Generation
