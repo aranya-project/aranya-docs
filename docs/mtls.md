@@ -26,14 +26,11 @@ Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[C
 
 All certs MUST contain at least one Subject Alternative Name (SAN) and MUST support multiple DNS SANs and multiple IP SANs within a single cert. **[CERT-003]** TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
-Each team MUST have its own device cert and root CA certs, allowing different teams to use different PKI trust chains. **[CERT-004]** The device cert for each team MUST be signed by one of that team's root certs or an intermediate CA cert. **[CERT-005]** A device MAY reuse the same private key across multiple teams with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
+Each device has a cert and private key corresponding to that cert. Each team added to a device requires configuring which device cert, private key, and root CA certs to use for that team via `set_cert`. **[CERT-004]** The device cert for each team MUST be signed by one of that team's root CA certs or an intermediate CA cert. **[CERT-005]** A device MAY reuse the same cert and key across multiple teams, MAY use the same key with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
 
 QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[CONN-001]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[CONN-002]**
 
-The daemon MUST log security-relevant events: **[LOG-001]**
-- Failed authentication attempts
-- Certificate validation failures
-- Connection accept/reject with IP
+The daemon MUST log rejected connections including the IP address, port, and hostname (if available). **[LOG-001]**
 
 Future enhancements:
 - Use system root certs
@@ -105,13 +102,11 @@ aranya-certgen signed ca --cn 192.168.1.10 --days 365 -o device
 # set_cert(team_id, ["ca.crt.pem"], "device.crt.pem", "device.key.pem")
 ```
 
-Certs SHOULD use P-256 ECDSA generated from a secret key of at least 256 bits (NIST SP 800-52 Rev. 2). **[INTEG-001]**
-
-Certs MUST NOT be checked into repositories and SHOULD always be generated for each deployment. **[GEN-010]**
+Certs and private keys MUST NOT be checked into repositories. **[GEN-010]** Certs SHOULD always be generated for each deployment.
 
 ## Certificate Configuration
 
-Certs MUST be configured per-team via the client API using the `set_cert` method. **[CFG-001]** This is separate from team creation — a team MUST exist before its certs can be configured. **[CFG-002]** Certs MUST be configured before sync peers are added. **[CFG-003]**
+Certs MUST be configured per-team via the client API using the `set_cert` method. **[CFG-001]** The `set_cert` method MUST be exposed on both the client API and the daemon API. **[CFG-011]** This is separate from team creation — a team MUST exist before its certs can be configured. **[CFG-002]** Applications SHOULD configure certs before adding sync peers. **[CFG-003]** If sync peers are added before certs are configured, connections will fail TLS handshakes until certs are set up properly.
 
 ### API
 
@@ -120,22 +115,22 @@ set_cert(team_id, root_certs, device_cert, device_key)
 ```
 
 Parameters:
-- `team_id` — the team to configure TLS for
+- `team_id` — the team to configure mTLS certificates for
 - `root_certs` — file paths to one or more root CA certificate files
-- `device_cert` — file path to the device certificate file
+- `device_cert` — file path to the device certificate file (signed by the root CA cert chain)
 - `device_key` — file path to the device private key file
 
 The daemon MUST accept file paths from the client via IPC. **[CFG-004]** The client SHOULD zeroize/drop the paths after the IPC call returns since the daemon has its own copy. **[SEC-001]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[CFG-005]**
 
 `set_cert` MUST be idempotent — it handles both initial configuration and cert rotation. **[CFG-006]** Calling it again for the same team MUST overwrite the previous cert configuration.
 
-### Call Ordering
+### Recommended Call Ordering
 
 ```
 create_team / add_team  →  set_cert  →  add_sync_peer
 ```
 
-`add_sync_peer` MUST fail if certs have not been configured for the team. **[CFG-003]**
+Applications SHOULD follow this ordering. **[CFG-003]** If `add_sync_peer` is called before `set_cert`, sync connections will fail TLS handshakes until certs are configured.
 
 ### Import Flow
 
@@ -240,7 +235,11 @@ Peers that share multiple teams MUST maintain separate connections per team. **[
 
 When a peer connects to us (inbound) for a specific team, we MAY reuse that connection to sync back to them for the same team rather than opening a separate outbound connection. **[CONN-010]** Reverse reuse requires passing client SAN verification (see [Client SAN Verification](#client-san-verification)). If client SAN verification fails, the daemon MUST attempt to establish a new outbound connection instead. **[SAN-009]**
 
-Each connection MUST track its direction (inbound or outbound) and whether it has passed the reverse client SAN check. **[CONN-011]** This allows the daemon to determine whether an existing connection can be used for syncing in the reverse direction.
+Each connection MUST track: **[CONN-011]**
+- **Direction**: whether this device initiated the connection (outbound) or the peer initiated it (inbound). Tracked via a flag set at connection establishment time.
+- **Reverse SAN status**: whether the connection has passed the client SAN verification for reverse reuse. A boolean, initially `false` for inbound connections, set to `true` after a successful SAN check. Outbound connections do not need this flag since server SANs were already verified during the TLS handshake.
+
+This allows the daemon to determine whether an existing connection can be used for syncing in the reverse direction without re-running the SAN check on every use.
 
 ### Peer Caches and Subscriptions
 
