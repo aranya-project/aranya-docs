@@ -89,7 +89,29 @@ See [Future Work](#future-work) for planned enhancements including DER output fo
 
 ## Certificate Lifecycle
 
-This section describes the full lifecycle of mTLS certificates: generation, configuration, storage, startup, rotation, and removal.
+```mermaid
+flowchart TD
+    A[1. Generate certs] -->|certgen or external PKI| B[2. Create/add team]
+    B --> C[3. Configure certs via set_cert]
+    C -->|read files, store key in keystore,<br/>copy certs to state_dir,<br/>delete source files| D[4. Add sync peers]
+    D --> E[5. Sync over mTLS]
+    E -->|cert expires or<br/>needs updating| F[6. Rotate certs via set_cert]
+    F --> E
+    E -->|team no longer needed| G[7. Remove team]
+    G -->|delete certs, remove key<br/>from keystore, close connections| H[Done]
+
+    I[Daemon restart] -->|scan state_dir/certs,<br/>load keys from keystore| E
+```
+
+1. **Generate** — Create device cert, private key, and cert chain using `aranya-certgen` or external PKI.
+2. **Create/add team** — Team must exist before certs can be configured.
+3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`, deletes source files.
+4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
+5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Keys loaded from keystore on-demand per connection.
+6. **Rotate** — Call `set_cert` again with new files. Overwrites previous configuration.
+7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
+
+On **daemon restart**, certs are reloaded from `state_dir/certs/` and private keys are decrypted from the keystore.
 
 ### Generation
 
