@@ -291,7 +291,7 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 ### Breaking Aranya API Changes
 
-`CreateTeamQuicSyncConfig` and `AddTeamQuicSyncConfig` will be updated to include optional cert file paths (via `set_cert` on the builder) instead of PSK seed modes. `CreateSeedMode`, `AddSeedMode`, `WrappedSeed`, and related PSK seed types will be removed. A standalone `set_cert` method will be added to the client and daemon APIs for configuring or rotating certs after team creation.
+`CreateSeedMode`, `AddSeedMode`, `WrappedSeed`, and related PSK seed types will be removed.
 
 ### Breaking Deployment Changes
 
