@@ -174,7 +174,10 @@ After the handshake, the connection is bound to the team identified by SNI. Subs
 
 ### Connection Model
 
-QUIC connections MUST be established per (peer, team) pair. **[CONN-003]** Separate connections per team are required because each team may use different certs and root CAs — sharing a single connection across teams would risk using the wrong cert and complicate server-side cert selection.
+QUIC connections MUST be established per (peer, team) pair. **[CONN-003]** Separate connections per team are required because:
+- Each team may use different certs and root CAs. Sharing a connection across teams would complicate server-side cert selection and risk presenting the wrong cert.
+- TLS 1.3 uses ephemeral key exchange for session encryption, so certs affect authentication only, not confidentiality. However, using the wrong cert could allow a device authenticated for Team A to sync Team B's graph if the CAs are cross-trusted.
+- If a shared connection is used for multiple teams and one team's CA is compromised, a MiTM attacker could intercept sync traffic for all teams on that connection. Per-team connections contain the blast radius to the compromised team.
 
 The TLS handshake MUST validate both peers' cert chains against the team's root CAs (mutual certificate chain validation). **[CONN-006]** This refers to cert chain validation only — server SANs are verified by the client per **[SAN-001]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
