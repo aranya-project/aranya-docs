@@ -14,7 +14,7 @@ mTLS is mutual TLS authentication. Traditional TLS only authenticates the server
 
 mTLS authentication in the Aranya syncer allows users to leverage their existing PKI infrastructure to authenticate nodes to each other before syncing.
 
-Aranya's sync traffic is secured via mTLS over QUIC using the `quinn` library with `rustls` for TLS. This replaces the previous PSK-based authentication. QUIC requires TLS 1.3, which is an implied requirement relevant to the security properties of this implementation. **[MTLS-001]**
+Aranya's sync traffic is secured via mTLS over QUIC using the `quinn` library with `rustls` for TLS. This replaces the previous PSK-based authentication. All QUIC connections MUST use TLS 1.3. **[MTLS-001]** This is enforced by QUIC itself, but stated explicitly here because it is relevant to the security properties of this implementation.
 
 Abbreviations in this document:
 - certificate -> cert
