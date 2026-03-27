@@ -151,11 +151,13 @@ The private key MUST be AEAD-encrypted at rest in the keystore. **[SEC-002]** It
 
 ### Outbound Connections
 
-For outbound connections, the daemon selects the team's `ClientConfig` (team's device cert + team's root CAs) using `connect_with()`. **[CONN-004]** The TLS handshake validates the server's cert chain against the team's root CAs and verifies server SANs per **[SAN-001]**.
+For outbound connections, the daemon selects the team's `ClientConfig` (team's device cert + team's root CAs) using `connect_with()` and MUST set the team ID as the SNI hostname. **[CONN-004]** The TLS handshake validates the server's cert chain against the team's root CAs and verifies server SANs per **[SAN-001]**.
 
 ### Inbound Connections
 
-For inbound connections, the daemon uses a shared `ServerConfig` that contains all configured teams' device certs and root CAs. **[CONN-005]** rustls selects the appropriate cert during the handshake based on what the connecting client trusts. After the handshake completes, the daemon MUST determine which team's cert was used and bind the connection to that team. **[CONN-012]** Subsequent sync requests on the connection MUST include a team ID that matches the cert selected during the handshake. **[CONN-013]** If a sync request's team ID does not match the connection's bound team, the request MUST be rejected and the QUIC stream closed. **[CONN-014]**
+For inbound connections, the daemon uses a shared `ServerConfig` that contains all configured teams' device certs and root CAs. **[CONN-005]** The connecting client MUST set the team ID (or a team-specific identifier) as the SNI hostname in the TLS ClientHello. **[CONN-012]** The server's `ResolvesServerCert` implementation MUST use the SNI value to select the correct team's device cert for the handshake. **[CONN-013]** If the SNI value does not match any configured team, the handshake MUST fail. **[CONN-014]**
+
+After the handshake, the connection is bound to the team identified by SNI. Subsequent sync requests on the connection MUST include a team ID that matches the SNI-selected team. **[CONN-015]** If a sync request's team ID does not match, the request MUST be rejected and the QUIC stream closed. **[CONN-016]** This prevents a peer that shares multiple teams from accidentally or maliciously syncing on the wrong team's connection.
 
 ### Connection Model
 
@@ -198,9 +200,11 @@ Outbound:
 4. Store connection in the connection map keyed by (socket address, team ID)
 
 Inbound:
-1. Accept connection using shared `ServerConfig` — rustls selects the matching cert
-2. Determine which team's cert was used and bind the connection to that team per **[CONN-012]**
-3. Validate that sync requests match the bound team per **[CONN-013]**
+1. Accept connection using shared `ServerConfig` — SNI in the ClientHello identifies the team per **[CONN-012]**
+2. `ResolvesServerCert` selects the team's cert based on SNI per **[CONN-013]**
+3. TLS handshake completes with mutual cert chain validation per **[CONN-006]**
+4. Bind the connection to the SNI-identified team
+5. Validate that sync requests match the bound team per **[CONN-015]**
 
 ## SAN Verification
 
