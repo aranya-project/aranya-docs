@@ -22,7 +22,7 @@ Abbreviations in this document:
 
 ## Requirements
 
-Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[CERT-001]** The `aranya-certgen` tool outputs PEM only. Users MUST be able to leverage their existing external PKI for generating and signing certs. **[CERT-002]**
+Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[CERT-001]** The `aranya-certgen` tool currently outputs PEM only (DER support is a future enhancement — see [Certgen CLI Tool](#certgen-cli-tool)). Users MUST be able to leverage their existing external PKI for generating and signing certs. **[CERT-002]**
 
 All certs MUST contain Subject Alternative Names (SANs). **[CERT-003]** TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
@@ -80,6 +80,7 @@ CLI flags:
 - `-f/--force`: Overwrite existing files
 
 Future enhancements:
+- DER output format support
 - HSM encryption of secret keys
 
 ## Certificate Generation
