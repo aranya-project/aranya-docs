@@ -82,27 +82,38 @@ Future enhancements:
 
 ## Certificate Configuration
 
-Certs MUST be configured per-team via the `set_cert` method. **[CFG-001]** `set_cert` MUST be exposed on both the client API and the daemon API. **[CFG-011]** A team MUST exist before its certs can be configured. **[CFG-002]** Applications SHOULD configure certs before adding sync peers **[CFG-003]** — if sync peers are added first, connections will fail TLS handshakes until certs are set up.
+Certs MUST be configured per-team via the `set_cert` method. **[CFG-001]** `set_cert` MUST be exposed on both the client API and the daemon API. **[CFG-011]** Applications SHOULD configure certs before adding sync peers **[CFG-003]** — if sync peers are added first, connections will fail TLS handshakes until certs are set up.
 
 ### API
 
+Certs can be configured in two ways:
+
+1. **At team creation/addition** — via the optional `set_cert` method on `CreateTeamConfig` / `AddTeamConfig` builders:
+```rust
+let cfg = CreateTeamConfig::builder()
+    .set_cert(root_certs, device_cert, device_key)
+    .build()?;
+client.create_team(cfg).await?;
+```
+
+2. **After team creation** — via the standalone `set_cert` method on the client:
 ```
 set_cert(team_id, root_certs, device_cert, device_key)
 ```
 
+Both paths use the same import flow. The standalone `set_cert` is required for cert rotation since `create_team`/`add_team` cannot be called again for an existing team. **[CFG-002]**
+
 Parameters:
-- `team_id` — the team to configure mTLS certificates for
+- `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
 - `root_certs` — file paths to root CA and intermediate CA certificate files (see **[CERT-007]**)
 - `device_cert` — file path to the leaf device certificate file
 - `device_key` — file path to the device private key file
 
 The daemon MUST accept file paths from the client via IPC. **[CFG-004]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[CFG-005]**
 
-`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[CFG-006]** This handles both initial configuration and cert rotation.
+`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[CFG-006]** This handles both initial configuration and cert rotation. The `CreateTeamQuicSyncConfig` and `AddTeamQuicSyncConfig` types used by the previous PSK-based approach are removed entirely.
 
-`set_cert` is intentionally separate from `add_team` because `add_team` is not idempotent — calling it twice for the same team fails. A separate idempotent method is required so that certs can be rotated without re-adding the team. This also allows certs to be configured after team creation (e.g., when certs are generated later or provided by an external PKI). The `CreateTeamQuicSyncConfig` and `AddTeamQuicSyncConfig` types used by the previous PSK-based approach are removed entirely — `CreateTeamConfig` and `AddTeamConfig` no longer contain sync-related fields.
-
-Recommended call ordering: `create_team` / `add_team` → `set_cert` → `add_sync_peer`
+Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
 ### Import Flow
 
