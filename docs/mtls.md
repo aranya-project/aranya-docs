@@ -26,7 +26,7 @@ Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[C
 
 All certs MUST contain at least one Subject Alternative Name (SAN). **[CERT-003]** The daemon MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. The `aranya-certgen` tool MUST be able to generate certs with multiple SANs (see **[GEN-008]**). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
-Each team MUST be configured with a device cert, private key, and one or more root CA certs via `set_cert`. **[CERT-004]** The device cert MUST be signed by one of the team's root CA certs or an intermediate CA cert. **[CERT-005]** If the device cert is signed by an intermediate CA, the `device_cert` file MUST contain the full cert chain (leaf cert followed by intermediate CA certs). The `root_certs` files MUST contain only trust anchor (root CA) certs. **[CERT-007]** A device MAY reuse the same cert and key across multiple teams, MAY use the same key with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
+Each team MUST be configured with a device cert, private key, and one or more root CA certs via `set_cert`. **[CERT-004]** The device cert MUST be signed by one of the team's root CA certs or an intermediate CA cert. **[CERT-005]** The `root_certs` files MUST contain the root CA certs and any intermediate CA certs in the chain. **[CERT-007]** The `device_cert` file MUST contain only the leaf device cert. A device MAY reuse the same cert and key across multiple teams, MAY use the same key with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
 
 QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[CONN-001]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[CONN-002]**
 
@@ -92,8 +92,8 @@ set_cert(team_id, root_certs, device_cert, device_key)
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for
-- `root_certs` — file paths to one or more root CA certificate files (trust anchors only; see **[CERT-007]**)
-- `device_cert` — file path to the device certificate file, including intermediate CA certs if applicable (see **[CERT-007]**)
+- `root_certs` — file paths to root CA and intermediate CA certificate files (see **[CERT-007]**)
+- `device_cert` — file path to the leaf device certificate file
 - `device_key` — file path to the device private key file
 
 The daemon MUST accept file paths from the client via IPC. **[CFG-004]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[CFG-005]**
