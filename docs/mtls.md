@@ -54,7 +54,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 
 The `aranya-certgen` CLI tool generates X.509 certs for use with Aranya's mTLS implementation. Users MAY use their own PKI infrastructure instead. **[GEN-001]**
 
-The tool MUST use P-256 ECDSA secret keys. **[GEN-002]** It MUST be able to generate a root CA cert and key pair **[GEN-003]** and signed certs along with their key. **[GEN-004]** It MUST output certs in PEM format with `.crt.pem` and `.key.pem` extensions. **[GEN-005]**
+The tool MUST use P-256 ECDSA secret keys. **[GEN-002]** It MUST be able to generate a root CA cert and key pair **[GEN-003]** and signed certs along with their key. **[GEN-004]** The tool currently outputs certs in PEM format with `.crt.pem` and `.key.pem` extensions. DER output support is planned (see [Future Work](#future-work)).
 
 A CN (Common Name) MUST be specifiable for each generated cert **[GEN-006]** and MUST be automatically added as a SAN, auto-detected as DNS or IP based on format. **[GEN-007]** Additional SANs MUST be specifiable via `--dns` and `--ip` flags for multiple DNS hostnames and IP addresses beyond the CN. **[GEN-008]** A validity period in days MUST be specifiable so certs can expire. **[GEN-009]**
 
