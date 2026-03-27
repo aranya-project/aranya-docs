@@ -24,7 +24,7 @@ Abbreviations in this document:
 
 Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[CERT-001]** The `aranya-certgen` tool currently outputs PEM only (DER support is a future enhancement — see [Certgen CLI Tool](#certgen-cli-tool)). Users MUST be able to leverage their existing external PKI for generating and signing certs. **[CERT-002]**
 
-All certs MUST contain Subject Alternative Names (SANs). **[CERT-003]** TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
+All certs MUST contain at least one Subject Alternative Name (SAN) and MUST support multiple DNS SANs and multiple IP SANs within a single cert. **[CERT-003]** TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
 Each team MUST have its own device cert and root CA certs, allowing different teams to use different PKI trust chains. **[CERT-004]** The device cert for each team MUST be signed by one of that team's root certs or an intermediate CA cert. **[CERT-005]** A device MAY reuse the same private key across multiple teams with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
 
