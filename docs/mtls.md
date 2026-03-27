@@ -30,26 +30,6 @@ Abbreviations in this document:
 | **Intermediate CA cert** | A CA cert signed by the root CA (or another intermediate) that can sign device certs. Optional — device certs MAY be signed directly by the root CA. |
 | **Private key** | The private key corresponding to the device cert. Used for TLS authentication. Stored AEAD-encrypted in the daemon's keystore. |
 
-## Requirements
-
-Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[MTLS-002]** The `aranya-certgen` tool currently outputs PEM only (DER support is a future enhancement — see [Certgen CLI Tool](#certgen-cli-tool)). Users MUST be able to leverage their existing external PKI for generating and signing certs. **[MTLS-003]**
-
-All certs MUST contain at least one Subject Alternative Name (SAN). **[MTLS-004]** The QUIC transport (via rustls) MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
-
-Each team MUST be configured with a device cert, private key, and cert chain via `set_cert`. **[MTLS-005]** The device cert MUST be signed by a CA in the team's cert chain. **[MTLS-006]** The `root_certs` parameter MUST be a directory path containing the cert chain files (root CA certs and any intermediate CA certs). **[MTLS-007]** The `device_cert` parameter MUST contain only the device cert. A device MAY reuse the same device cert and key pair across multiple teams (each team configured with a cert chain that trusts that device cert), or MAY use entirely different device cert and key pairs per team. **[MTLS-008]**
-
-QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[MTLS-009]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[MTLS-010]**
-
-The daemon MUST log rejected connections including the IP address, port, and hostname (if available). **[MTLS-011]**
-
-Certs and private keys MUST NOT be checked into repositories. **[MTLS-012]**
-
-When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[MTLS-013]** The `aranya-certgen` tool uses P-256 ECDSA keys per **[MTLS-014]**. Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[MTLS-015]**
-
-See [Future Work](#future-work) for planned enhancements including cert revocation, system root certs, and cert chain validation at configuration time.
-
-Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Devices SHOULD be removed from the Aranya team immediately upon cert compromise.
-
 ## Certgen CLI Tool
 
 The `aranya-certgen` CLI tool generates X.509 certs for use with Aranya's mTLS implementation. Users MAY use their own PKI infrastructure instead. **[MTLS-016]**
@@ -115,11 +95,13 @@ On **daemon restart**, certs are reloaded from `state_dir/certs/` and private ke
 
 ### Generation
 
+Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[MTLS-002]** All certs MUST contain at least one Subject Alternative Name (SAN). **[MTLS-004]** The QUIC transport (via rustls) MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[MTLS-013]** Certs and private keys MUST NOT be checked into repositories. **[MTLS-012]**
+
 mTLS root and device certs can be generated using either:
 
-1. **External PKI** — Users MAY provide certs from their existing PKI infrastructure. **[MTLS-016]** The daemon MUST accept any cert format supported by rustls (PEM or DER). **[MTLS-002]**
+1. **External PKI** — Users MAY provide certs from their existing PKI infrastructure. **[MTLS-016]**
 
-2. **`aranya-certgen` CLI tool** — Aranya's built-in cert generation tool. See [Certgen CLI Tool](#certgen-cli-tool).
+2. **`aranya-certgen` CLI tool** — Aranya's built-in cert generation tool. Uses P-256 ECDSA keys per **[MTLS-014]**. See [Certgen CLI Tool](#certgen-cli-tool).
 
 Example using `aranya-certgen`:
 ```bash
@@ -135,6 +117,8 @@ aranya-certgen signed ca --cn 192.168.1.10 --days 365 -o device
 ```
 
 ### Configuration API
+
+Each team MUST be configured with a device cert, private key, and cert chain via `set_cert`. **[MTLS-005]** The device cert MUST be signed by a CA in the team's cert chain. **[MTLS-006]** A device MAY reuse the same device cert and key pair across multiple teams (each team configured with a cert chain that trusts that device cert), or MAY use entirely different device cert and key pairs per team. **[MTLS-008]**
 
 Certs MUST be configured per-team via the `set_cert` method. **[MTLS-023]** `set_cert` MUST be exposed on both the client API and the daemon API. **[MTLS-024]** Applications SHOULD configure certs before adding sync peers **[MTLS-025]** — if sync peers are added first, connections will fail TLS handshakes until certs are set up.
 
@@ -179,7 +163,7 @@ When `set_cert` is called:
 6. Zeroize and drop private key bytes from daemon memory. **[MTLS-035]** Only rustls retains the key material after this point.
 7. Delete the source cert and private key files. **[MTLS-036]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
-Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash). **[MTLS-015]** recommends encrypted filesystems for source file protection prior to import.
+Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[MTLS-015]** Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash).
 
 ### Private Key Storage
 
@@ -235,7 +219,7 @@ QUIC connections MUST be established per (peer, team) pair. **[MTLS-060]** Separ
 
 The TLS handshake MUST validate both peers' device certs against the team's cert chain (mutual certificate validation). **[MTLS-061]** This refers to cert chain validation only — server SANs are verified by the client per **[MTLS-053]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
-A peer whose device cert is not trusted by a team's cert chain MUST NOT be able to establish a connection for that team. **[MTLS-062]**
+A peer whose device cert is not trusted by a team's cert chain MUST NOT be able to establish a connection for that team. **[MTLS-062]** QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[MTLS-009]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[MTLS-010]** The daemon MUST log rejected connections including the IP address, port, and hostname (if available). **[MTLS-011]**
 
 Connections MUST be reused within a team. **[MTLS-063]** A new connection is only established when the existing one drops, when reverse reuse fails the client SAN check, or when syncing with a new peer. When a connection closes, its entry MUST be removed from the connection map. **[MTLS-064]**
 
@@ -343,6 +327,8 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 ## Threat Model
 
 This threat model covers threats at the mTLS transport layer. For sync protocol-level threats (message flooding, stale data replay, oversized messages, DeviceId discovery) see the [sync threat model](sync-threat-model.md).
+
+Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Devices SHOULD be removed from the Aranya team immediately upon cert compromise. See [Future Work](#future-work).
 
 | Threat | Description | Mitigation | Residual Risk |
 |---|---|---|---|
