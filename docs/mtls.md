@@ -306,6 +306,8 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 
 ## Threat Model
 
+This threat model covers threats at the mTLS transport layer. For sync protocol-level threats (message flooding, stale data replay, oversized messages, DeviceId discovery) see the [sync threat model](sync-threat-model.md).
+
 | Threat | Description | Mitigation | Residual Risk |
 |---|---|---|---|
 | **Passive eavesdropping** | Attacker observes sync traffic on the network. | TLS 1.3 with ephemeral key exchange encrypts all traffic. **[MTLS-001]** | None — session keys are ephemeral and not derived from certs. |
@@ -321,6 +323,10 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[SAN-007, SAN-009]** DNS results SHOULD be cached. **[SAN-008]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
 | **NAT prevents connectivity** | Peers behind NAT cannot establish direct connections. | Multiple strategies: NAT IP in SANs, redundant outbound connections, relay peer. **[NAT-001]** | QUIC does not provide NAT traversal. At least one peer needs a routable address. |
 | **Replay attack** | Attacker replays captured TLS handshake. | TLS 1.3 handshake uses ephemeral keys — replayed handshakes fail. **[MTLS-001]** | None. |
+| **Connection exhaustion** | Malicious authorized device opens many connections to exhaust resources. | Per-team connections limit one connection per (peer, team) pair. **[CONN-003]** | Under CA compromise, attacker can mint many unique certs, each establishing a separate connection. Per-cert connection limiting does not bound total connections from a compromised CA. |
+| **Sync flooding** | Malicious authorized device sends excessive sync requests over an established connection. | Out of scope for mTLS spec. See sync threat model (DOS-1). | Rate limiting should be applied per certificate identity at the sync protocol layer. |
+| **Unauthorized sync participation** | External observer initiates sync without valid credentials. | mTLS handshake rejects peers without a device cert trusted by the team's cert chain. **[CONN-006, CONN-007]** | None. |
+| **CA compromise connection exhaustion** | Attacker with compromised CA mints many unique certs, each opening a separate connection to bypass per-cert connection limits. | Per-team connections. **[CONN-003]** No full mitigation at the mTLS layer. | Inherent limitation of per-cert connection limiting under CA compromise. Mitigated by cert revocation (see [Future Work](#future-work)) and short cert lifetimes. |
 | **Index timing on mailbox server** | (Onboarding) Attacker probes server to learn mailbox IDs via timing. | Separate mailbox ID (indexed) from authenticator (non-indexed, constant-time comparison). | See async onboarding spec. |
 
 ## Future Work
