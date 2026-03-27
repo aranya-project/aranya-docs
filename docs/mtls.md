@@ -201,7 +201,7 @@ Each connection MUST track: **[CONN-011]**
 server_config: Arc<ServerConfig>
 ```
 
-`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed, then dropped after the connection is established. **[CFG-012]** Once the TLS handshake completes, the connection uses session keys and no longer needs the `ClientConfig`. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
+`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed, then zeroized after the connection is established. **[CFG-012]** Once the TLS handshake completes, the connection uses session keys and no longer needs the `ClientConfig`. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
 
 The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** It MUST be rebuilt when any team's cert configuration changes (via `set_cert` or team removal).
 
