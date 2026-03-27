@@ -36,10 +36,9 @@ Certs and private keys MUST NOT be checked into repositories. **[GEN-010]**
 
 Certs SHOULD use P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[INTEG-001]** Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[INTEG-002]**
 
-Future enhancements:
-- Use system root certs
-- Verify that device cert is signed by one of the root certs when certs are configured, rather than failing later during TLS authentication
-- Cert revocation. Currently, Aranya does not check certificate revocation status (CRL/OCSP). If a cert is revoked by external PKI infrastructure but not yet rotated, an attacker with the compromised cert can still establish connections and sync. This leaks graph metadata (e.g., number of devices, team structure) but not application data protected by Aranya's encryption. Devices SHOULD be removed from the Aranya team immediately upon cert compromise; cert revocation provides defense-in-depth once implemented.
+See [Future Work](#future-work) for planned enhancements including cert revocation, system root certs, and cert chain validation at configuration time.
+
+Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Devices SHOULD be removed from the Aranya team immediately upon cert compromise.
 
 ## Certgen CLI Tool
 
@@ -76,9 +75,7 @@ CLI flags:
 - `-p`: Create parent directories if they don't exist
 - `-f/--force`: Overwrite existing files
 
-Future enhancements:
-- DER output format support
-- HSM encryption of secret keys
+See [Future Work](#future-work) for planned enhancements including DER output format and encrypted private key files.
 
 ## Certificate Configuration
 
@@ -296,3 +293,11 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 ### Breaking Deployment Changes
 
 Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
+
+## Future Work
+
+- **Certgen DER output format** — support generating certs in DER format in addition to PEM.
+- **Encrypted private key files** — support encrypting private key files in certgen (e.g., PKCS#8 encrypted format) and decrypting them in the daemon before importing into the keystore. This provides an additional layer of protection for private keys at rest on disk prior to import.
+- **Cert revocation** — check certificate revocation status (CRL/OCSP) during TLS handshake validation.
+- **System root certs** — allow using the operating system's root certificate store.
+- **Cert chain validation at configuration time** — verify that the device cert is signed by one of the root certs when `set_cert` is called, rather than failing later during TLS authentication.
