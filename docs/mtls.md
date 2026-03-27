@@ -304,6 +304,25 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
 
+## Threat Model
+
+| Threat | Description | Mitigation | Residual Risk |
+|---|---|---|---|
+| **Passive eavesdropping** | Attacker observes sync traffic on the network. | TLS 1.3 with ephemeral key exchange encrypts all traffic. **[MTLS-001]** | None — session keys are ephemeral and not derived from certs. |
+| **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[SAN-001, SAN-002]** Cert chain validation ensures the cert is signed by a trusted CA. **[CONN-006]** | None if cert chain and DNS are not compromised. |
+| **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | Mutual cert validation — the daemon validates the client's device cert against the team's cert chain. **[CONN-006]** SNI binds the connection to a specific team. **[CONN-012, CONN-013]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
+| **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[CONN-003]** SNI-based cert selection. **[CONN-013]** Sync request team ID validated against bound team. **[CONN-015, CONN-016]** | None if teams use separate cert chains. If cert chains are cross-trusted, the TLS handshake succeeds but sync request validation catches mismatches. |
+| **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[CFG-006]** | Cert revocation is not currently implemented. Device SHOULD be removed from the Aranya team immediately. See [Future Work](#future-work). |
+| **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[CONN-003]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
+| **Private key exposure on disk** | Source key file read by unauthorized process before import. | Source files deleted after import. **[SEC-003]** Encrypted filesystem recommended. **[INTEG-002]** | File deletion is not secure erasure on SSD/flash. Encrypted filesystem mitigates this. |
+| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[SEC-004]** aws-lc-rs zeroizes key memory on free. **[SEC-007]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[CFG-012]** | Key material held in rustls/aws-lc-rs for the lifetime of the connection (outbound) or `ServerConfig` (inbound). |
+| **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[SEC-002]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
+| **Expired cert used for connection** | Peer presents an expired cert. | rustls rejects expired certs during TLS handshake. **[CONN-002]** | None. |
+| **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[SAN-007, SAN-009]** DNS results SHOULD be cached. **[SAN-008]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
+| **NAT prevents connectivity** | Peers behind NAT cannot establish direct connections. | Multiple strategies: NAT IP in SANs, redundant outbound connections, relay peer. **[NAT-001]** | QUIC does not provide NAT traversal. At least one peer needs a routable address. |
+| **Replay attack** | Attacker replays captured TLS handshake. | TLS 1.3 handshake uses ephemeral keys — replayed handshakes fail. **[MTLS-001]** | None. |
+| **Index timing on mailbox server** | (Onboarding) Attacker probes server to learn mailbox IDs via timing. | Separate mailbox ID (indexed) from authenticator (non-indexed, constant-time comparison). | See async onboarding spec. |
+
 ## Future Work
 
 - **Certgen DER output format** — support generating certs in DER format in addition to PEM.
