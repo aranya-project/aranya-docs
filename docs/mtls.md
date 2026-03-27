@@ -201,7 +201,7 @@ Each connection MUST track: **[CONN-011]**
 server_config: Arc<ServerConfig>
 ```
 
-`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed, then zeroized after the connection is established. **[CFG-012]** Once the TLS handshake completes, the connection uses session keys and no longer needs the `ClientConfig`. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
+`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[CFG-012]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
 
 The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** It MUST be rebuilt when any team's cert configuration changes (via `set_cert` or team removal).
 
@@ -210,9 +210,9 @@ The shared `ServerConfig` MUST remain in memory to accept inbound connections. *
 Outbound:
 1. Check for an existing healthy connection to (peer, team) — if found, reuse it per **[CONN-008]**
 2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's root CAs per **[CFG-012]**
-3. Initiate connection using the `ClientConfig` per **[CONN-004]**
+3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[CONN-004]**
 4. TLS handshake completes with mutual cert chain validation per **[CONN-006]**
-5. Drop the `ClientConfig` and zeroize private key bytes per **[SEC-004]**
+5. Zeroize the decrypted private key bytes used to build the `ClientConfig` per **[SEC-004]**
 6. Store connection in the connection map keyed by (socket address, team ID)
 
 Inbound:
