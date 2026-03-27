@@ -36,7 +36,7 @@ Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[C
 
 All certs MUST contain at least one Subject Alternative Name (SAN). **[CERT-003]** The daemon MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. The `aranya-certgen` tool MUST be able to generate certs with multiple SANs (see **[GEN-008]**). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
-Each team MUST be configured with a device cert, private key, and cert chain via `set_cert`. **[CERT-004]** The device cert MUST be signed by a CA in the team's cert chain. **[CERT-005]** The `root_certs` parameter MUST contain the cert chain (root CA certs and any intermediate CA certs). **[CERT-007]** The `device_cert` parameter MUST contain only the device cert. A device MAY reuse the same device cert and key pair across multiple teams (each team configured with a cert chain that trusts that device cert), or MAY use entirely different device cert and key pairs per team. **[CERT-006]**
+Each team MUST be configured with a device cert, private key, and cert chain via `set_cert`. **[CERT-004]** The device cert MUST be signed by a CA in the team's cert chain. **[CERT-005]** The `root_certs` parameter MUST be a directory path containing the cert chain files (root CA certs and any intermediate CA certs). **[CERT-007]** The `device_cert` parameter MUST contain only the device cert. A device MAY reuse the same device cert and key pair across multiple teams (each team configured with a cert chain that trusts that device cert), or MAY use entirely different device cert and key pairs per team. **[CERT-006]**
 
 QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[CONN-001]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[CONN-002]**
 
@@ -112,7 +112,7 @@ Both paths use the same import flow. The standalone `set_cert` is required for c
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
-- `root_certs` — file paths to the cert chain (root CA and intermediate CA certs; see **[CERT-007]**)
+- `root_certs` — directory path containing the cert chain files (root CA and intermediate CA certs; see **[CERT-007]**)
 - `device_cert` — file path to the device cert file
 - `device_key` — file path to the device private key file
 
