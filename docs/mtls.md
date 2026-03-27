@@ -87,11 +87,34 @@ CLI flags:
 
 See [Future Work](#future-work) for planned enhancements including DER output format and encrypted private key files.
 
-## Certificate Configuration
+## Certificate Lifecycle
+
+This section describes the full lifecycle of mTLS certificates: generation, configuration, storage, startup, rotation, and removal.
+
+### Generation
+
+mTLS root and device certs can be generated using either:
+
+1. **External PKI** — Users MAY provide certs from their existing PKI infrastructure. **[MTLS-016]** The daemon MUST accept any cert format supported by rustls (PEM or DER). **[MTLS-002]**
+
+2. **`aranya-certgen` CLI tool** — Aranya's built-in cert generation tool. See [Certgen CLI Tool](#certgen-cli-tool).
+
+Example using `aranya-certgen`:
+```bash
+# Generate a root CA
+aranya-certgen ca --cn "My Company CA" --days 365
+
+# Generate a device cert signed by the CA
+aranya-certgen signed ca --cn 192.168.1.10 --days 365 -o device
+
+# Configure the team with the generated certs
+# (via client API)
+# set_cert(team_id, "ca_certs/", "device.crt.pem", "device.key.pem")
+```
+
+### Configuration API
 
 Certs MUST be configured per-team via the `set_cert` method. **[MTLS-023]** `set_cert` MUST be exposed on both the client API and the daemon API. **[MTLS-024]** Applications SHOULD configure certs before adding sync peers **[MTLS-025]** — if sync peers are added first, connections will fail TLS handshakes until certs are set up.
-
-### API
 
 Certs can be configured in two ways:
 
@@ -118,7 +141,7 @@ Parameters:
 
 The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[MTLS-028]**
 
-`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]** This handles both initial configuration and cert rotation.
+`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]**
 
 Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
@@ -135,6 +158,18 @@ When `set_cert` is called:
 7. Delete the source cert and private key files. **[MTLS-036]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
 Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash). **[MTLS-015]** recommends encrypted filesystems for source file protection prior to import.
+
+### Private Key Storage
+
+A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for storing TLS private keys in the daemon's keystore. **[MTLS-047]** This follows the existing pattern used by `PskSeed`, signing keys, and encryption keys.
+
+- `TlsPrivateKey<CS>` — unwrapped key type holding the raw private key bytes
+- `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (cast/reinterpret) as the `TlsKeyId` without derivation. **[MTLS-048]**
+- `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[MTLS-049]**
+
+The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only at daemon startup (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[MTLS-035]**.
+
+At runtime, only rustls retains the private key material. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the key is freed. ring explicitly does not zeroize key material on drop.
 
 ### Startup Flow
 
@@ -156,18 +191,6 @@ Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon overwri
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
 3. Remove the team's rustls configs. **[MTLS-045]**
 4. Close any open connections for this team. **[MTLS-046]**
-
-## Private Key Storage
-
-A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for storing TLS private keys in the daemon's keystore. **[MTLS-047]** This follows the existing pattern used by `PskSeed`, signing keys, and encryption keys.
-
-- `TlsPrivateKey<CS>` — unwrapped key type holding the raw private key bytes
-- `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (cast/reinterpret) as the `TlsKeyId` without derivation. **[MTLS-048]**
-- `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[MTLS-049]**
-
-The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only at daemon startup (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[MTLS-035]**.
-
-At runtime, only rustls retains the private key material. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the key is freed. ring explicitly does not zeroize key material on drop.
 
 ## TLS Configuration Architecture
 
@@ -236,7 +259,7 @@ Inbound:
 
 ### Server SAN Verification
 
-Server SANs MUST always be verified (standard TLS 1.3 behavior) and MUST NOT be disabled. **[MTLS-053, SAN-002]** The server's certificate MUST contain a SAN matching the hostname or IP the client is connecting to.
+Server SANs MUST always be verified (standard TLS 1.3 behavior) and MUST NOT be disabled. **[MTLS-053]** The server's certificate MUST contain a SAN matching the hostname or IP the client is connecting to.
 
 For deployments with dynamic server IPs, DNS SANs SHOULD be used that resolve to the server's current IP address. **[MTLS-071]** Update DNS records when the IP changes.
 
@@ -295,16 +318,6 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 }
 ```
 
-## Breaking Changes
-
-### Breaking Aranya API Changes
-
-`CreateSeedMode`, `AddSeedMode`, `WrappedSeed`, and related PSK seed types will be removed.
-
-### Breaking Deployment Changes
-
-Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
-
 ## Threat Model
 
 This threat model covers threats at the mTLS transport layer. For sync protocol-level threats (message flooding, stale data replay, oversized messages, DeviceId discovery) see the [sync threat model](sync-threat-model.md).
@@ -312,7 +325,7 @@ This threat model covers threats at the mTLS transport layer. For sync protocol-
 | Threat | Description | Mitigation | Residual Risk |
 |---|---|---|---|
 | **Passive eavesdropping** | Attacker observes sync traffic on the network. | TLS 1.3 with ephemeral key exchange encrypts all traffic. **[MTLS-001]** | None — session keys are ephemeral and not derived from certs. |
-| **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[MTLS-053, SAN-002]** Cert chain validation ensures the cert is signed by a trusted CA. **[MTLS-061]** | None if cert chain and DNS are not compromised. |
+| **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[MTLS-053]** Cert chain validation ensures the cert is signed by a trusted CA. **[MTLS-061]** | None if cert chain and DNS are not compromised. |
 | **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | Mutual cert validation — the daemon validates the client's device cert against the team's cert chain. **[MTLS-061]** SNI binds the connection to a specific team. **[MTLS-055, MTLS-056]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
 | **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the TLS handshake succeeds but sync request validation catches mismatches. |
 | **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[MTLS-029]** | Cert revocation is not currently implemented. Device SHOULD be removed from the Aranya team immediately. See [Future Work](#future-work). |
@@ -334,6 +347,16 @@ This threat model covers threats at the mTLS transport layer. For sync protocol-
 | **Core dump / swap exposure** | Daemon crash produces a core dump containing private key material from rustls memory. OS may swap key pages to disk. | Deployments SHOULD disable core dumps for the daemon process, use encrypted swap, or use `mlock` to prevent key pages from being swapped. | If not mitigated, private keys may persist on disk in core dumps or swap files. |
 | **Concurrent `set_cert` race condition** | Two concurrent `set_cert` calls for the same team race, leaving cert files, keystore, and rustls config in an inconsistent state. | `set_cert` MUST serialize updates per team. **[MTLS-038]** Keystore and cert directory updates MUST be atomic — if either fails, rollback to the previous state. **[MTLS-080]** | None if serialization and atomicity requirements are met. |
 | **Index timing on mailbox server** | (Onboarding) Attacker probes server to learn mailbox IDs via timing. | Separate mailbox ID (indexed) from authenticator (non-indexed, constant-time comparison). | See async onboarding spec. |
+
+## Breaking Changes
+
+### Breaking Aranya API Changes
+
+`CreateSeedMode`, `AddSeedMode`, `WrappedSeed`, and related PSK seed types will be removed.
+
+### Breaking Deployment Changes
+
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
 
 ## Future Work
 
