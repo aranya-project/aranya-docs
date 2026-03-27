@@ -158,7 +158,11 @@ A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for 
 - `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (cast/reinterpret) as the `TlsKeyId` without derivation. **[KEY-002]**
 - `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[KEY-003]**
 
-The private key MUST be AEAD-encrypted at rest in the keystore. **[SEC-002]** It is decrypted only at daemon startup (**[SEC-006]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[SEC-004]**; only rustls retains the key material at runtime.
+The private key MUST be AEAD-encrypted at rest in the keystore. **[SEC-002]** It is decrypted only at daemon startup (**[SEC-006]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[SEC-004]**.
+
+At runtime, only rustls retains the private key material — held inside an `Arc<EcdsaKeyPair>` (or equivalent for other key types) which wraps an aws-lc-rs `LcPtr<EVP_PKEY>`. When the last `Arc` reference drops, aws-lc-rs calls `EVP_PKEY_free`, which zeroizes the key memory at the C library level before freeing it. **[SEC-007]** This means:
+- For outbound connections: `connect_with()` takes ownership of the `ClientConfig`. The key is zeroized when the connection drops and the last `Arc` reference is released.
+- For the shared `ServerConfig`: the key remains in memory for the lifetime of the config. It is zeroized when the config is rebuilt (via `set_cert` or team removal) and the old config's `Arc` references are released.
 
 ## TLS Configuration Architecture
 
