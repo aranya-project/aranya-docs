@@ -44,7 +44,7 @@ The daemon MUST log rejected connections including the IP address, port, and hos
 
 Certs and private keys MUST NOT be checked into repositories. **[GEN-010]**
 
-Certs SHOULD use P-256 ECDSA secret keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[INTEG-001]** Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[INTEG-002]**
+When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[INTEG-001]** The `aranya-certgen` tool uses P-256 ECDSA keys per **[GEN-002]**. Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[INTEG-002]**
 
 See [Future Work](#future-work) for planned enhancements including cert revocation, system root certs, and cert chain validation at configuration time.
 
