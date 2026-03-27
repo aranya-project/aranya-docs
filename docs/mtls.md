@@ -20,13 +20,23 @@ Abbreviations in this document:
 - certificate -> cert
 - certificates -> certs
 
+## Terminology
+
+| Term | Definition |
+|---|---|
+| **Device cert** | The leaf X.509 cert identifying a device. Signed by a CA in the team's cert chain. Each device has one device cert per team (though the same cert MAY be reused across teams). |
+| **Cert chain** | The set of CA certs used to validate a device cert. Includes root CA certs and any intermediate CA certs. Configured per-team via the `root_certs` parameter in `set_cert`. |
+| **Root CA cert** | A self-signed trust anchor at the top of the cert chain. |
+| **Intermediate CA cert** | A CA cert signed by the root CA (or another intermediate) that can sign device certs. Optional — device certs MAY be signed directly by the root CA. |
+| **Private key** | The private key corresponding to the device cert. Used for TLS authentication. Stored AEAD-encrypted in the daemon's keystore. |
+
 ## Requirements
 
 Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[CERT-001]** The `aranya-certgen` tool currently outputs PEM only (DER support is a future enhancement — see [Certgen CLI Tool](#certgen-cli-tool)). Users MUST be able to leverage their existing external PKI for generating and signing certs. **[CERT-002]**
 
 All certs MUST contain at least one Subject Alternative Name (SAN). **[CERT-003]** The daemon MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. The `aranya-certgen` tool MUST be able to generate certs with multiple SANs (see **[GEN-008]**). TLS requires server certs to have SANs for hostname verification (CN is deprecated). Client SANs are verified when reusing an inbound connection in reverse (see [Client SAN Verification](#client-san-verification)).
 
-Each team MUST be configured with a device cert, private key, and one or more root CA certs via `set_cert`. **[CERT-004]** The device cert MUST be signed by one of the team's root CA certs or an intermediate CA cert. **[CERT-005]** The `root_certs` files MUST contain the root CA certs and any intermediate CA certs in the chain. **[CERT-007]** The `device_cert` file MUST contain only the leaf device cert. A device MAY reuse the same cert and key across multiple teams, MAY use the same key with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]**
+Each team MUST be configured with a device cert, private key, and cert chain via `set_cert`. **[CERT-004]** The device cert MUST be signed by a CA in the team's cert chain. **[CERT-005]** The `root_certs` parameter MUST contain the cert chain (root CA certs and any intermediate CA certs). **[CERT-007]** The `device_cert` parameter MUST contain only the device cert. A device MAY reuse the same device cert and key across multiple teams, MAY use the same key with different device certs signed by each team's CA, or MAY use entirely different device certs and keys per team. **[CERT-006]**
 
 QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[CONN-001]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[CONN-002]**
 
@@ -102,13 +112,13 @@ Both paths use the same import flow. The standalone `set_cert` is required for c
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
-- `root_certs` — file paths to root CA and intermediate CA certificate files (see **[CERT-007]**)
-- `device_cert` — file path to the leaf device certificate file
+- `root_certs` — file paths to the cert chain (root CA and intermediate CA certs; see **[CERT-007]**)
+- `device_cert` — file path to the device cert file
 - `device_key` — file path to the device private key file
 
 The daemon MUST accept file paths from the client via IPC. **[CFG-004]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[CFG-005]**
 
-`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[CFG-006]** This handles both initial configuration and cert rotation. The `CreateTeamQuicSyncConfig` and `AddTeamQuicSyncConfig` types used by the previous PSK-based approach are removed entirely.
+`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[CFG-006]** This handles both initial configuration and cert rotation.
 
 Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
@@ -163,24 +173,24 @@ At runtime, only rustls retains the private key material. Quinn MUST be configur
 
 ### Outbound Connections
 
-For outbound connections, the daemon selects the team's `ClientConfig` (team's device cert + team's root CAs) using `connect_with()` and MUST set the team ID as the SNI hostname. **[CONN-004]** The TLS handshake validates the server's cert chain against the team's root CAs and verifies server SANs per **[SAN-001]**.
+For outbound connections, the daemon selects the team's `ClientConfig` (team's device cert + cert chain) using `connect_with()` and MUST set the team ID as the SNI hostname. **[CONN-004]** The TLS handshake validates the server's device cert against the team's cert chain and verifies server SANs per **[SAN-001]**.
 
 ### Inbound Connections
 
-For inbound connections, the daemon uses a shared `ServerConfig` that contains all configured teams' device certs and root CAs. **[CONN-005]** The connecting client MUST set the team ID (or a team-specific identifier) as the SNI hostname in the TLS ClientHello. **[CONN-012]** The server's `ResolvesServerCert` implementation MUST use the SNI value to select the correct team's device cert for the handshake. **[CONN-013]** If the SNI value does not match any configured team, the handshake MUST fail. **[CONN-014]**
+For inbound connections, the daemon uses a shared `ServerConfig` that contains all configured teams' device certs and cert chains. **[CONN-005]** The connecting client MUST set the team ID (or a team-specific identifier) as the SNI hostname in the TLS ClientHello. **[CONN-012]** The server's `ResolvesServerCert` implementation MUST use the SNI value to select the correct team's device cert for the handshake. **[CONN-013]** If the SNI value does not match any configured team, the handshake MUST fail. **[CONN-014]**
 
 After the handshake, the connection is bound to the team identified by SNI. Subsequent sync requests on the connection MUST include a team ID that matches the SNI-selected team. **[CONN-015]** If a sync request's team ID does not match, the request MUST be rejected and the QUIC stream closed. **[CONN-016]** This prevents a peer that shares multiple teams from accidentally or maliciously syncing on the wrong team's connection.
 
 ### Connection Model
 
 QUIC connections MUST be established per (peer, team) pair. **[CONN-003]** Separate connections per team are required because:
-- Each team may use different certs and root CAs. Sharing a connection across teams would complicate server-side cert selection and risk presenting the wrong cert.
-- TLS 1.3 uses ephemeral key exchange for session encryption, so certs affect authentication only, not confidentiality. However, using the wrong cert could allow a device authenticated for Team A to sync Team B's graph if the CAs are cross-trusted.
-- If a shared connection is used for multiple teams and one team's CA is compromised, a MiTM attacker could intercept sync traffic for all teams on that connection. Per-team connections contain the blast radius to the compromised team.
+- Each team may use different device certs and cert chains. Sharing a connection across teams would complicate server-side cert selection and risk presenting the wrong device cert.
+- TLS 1.3 uses ephemeral key exchange for session encryption, so certs affect authentication only, not confidentiality. However, using the wrong device cert could allow a device authenticated for Team A to sync Team B's graph if the cert chains are cross-trusted.
+- If a shared connection is used for multiple teams and one team's cert chain is compromised, a MiTM attacker could intercept sync traffic for all teams on that connection. Per-team connections contain the blast radius to the compromised team.
 
-The TLS handshake MUST validate both peers' cert chains against the team's root CAs (mutual certificate chain validation). **[CONN-006]** This refers to cert chain validation only — server SANs are verified by the client per **[SAN-001]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
+The TLS handshake MUST validate both peers' device certs against the team's cert chain (mutual certificate validation). **[CONN-006]** This refers to cert chain validation only — server SANs are verified by the client per **[SAN-001]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
-A peer whose cert is not trusted by a team's root CAs MUST NOT be able to establish a connection for that team. **[CONN-007]**
+A peer whose device cert is not trusted by a team's cert chain MUST NOT be able to establish a connection for that team. **[CONN-007]**
 
 Connections MUST be reused within a team. **[CONN-008]** A new connection is only established when the existing one drops, when reverse reuse fails the client SAN check, or when syncing with a new peer. When a connection closes, its entry MUST be removed from the connection map. **[CONN-009]**
 
@@ -195,8 +205,8 @@ Each connection MUST track: **[CONN-011]**
 ### In-Memory Representation
 
 ```rust
-/// Shared server config containing all teams' certs for inbound connections.
-/// Must stay alive to accept inbound connections at any time.
+/// Shared server config containing all teams' device certs and cert chains
+/// for inbound connections. Must stay alive to accept inbound connections.
 server_config: Arc<ServerConfig>
 ```
 
@@ -208,7 +218,7 @@ The shared `ServerConfig` MUST remain in memory to accept inbound connections. *
 
 Outbound:
 1. Check for an existing healthy connection to (peer, team) — if found, reuse it per **[CONN-008]**
-2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's root CAs per **[CFG-012]**
+2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[CFG-012]**
 3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[CONN-004]**
 4. TLS handshake completes with mutual cert chain validation per **[CONN-006]**
 5. Zeroize the decrypted private key bytes used to build the `ClientConfig` per **[SEC-004]**
@@ -300,4 +310,4 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 - **Encrypted private key files** — support encrypting private key files in certgen (e.g., PKCS#8 encrypted format) and decrypting them in the daemon before importing into the keystore. This provides an additional layer of protection for private keys at rest on disk prior to import.
 - **Cert revocation** — check certificate revocation status (CRL/OCSP) during TLS handshake validation.
 - **System root certs** — allow using the operating system's root certificate store.
-- **Cert chain validation at configuration time** — verify that the device cert is signed by one of the root certs when `set_cert` is called, rather than failing later during TLS authentication.
+- **Cert chain validation at configuration time** — verify that the device cert is signed by a CA in the cert chain when `set_cert` is called, rather than failing later during TLS authentication.
