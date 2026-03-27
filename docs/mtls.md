@@ -132,7 +132,7 @@ When `set_cert` is called:
 4. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[SEC-002]** If a key already exists for this team, replace it per **[CFG-006]**. The keystore is the source of truth for the private key. **[SEC-005]**
 5. Build rustls `ClientConfig` and `ServerConfig` for the team, indexed by team ID. **[CFG-009]**
 6. Zeroize and drop private key bytes from daemon memory. **[SEC-004]** Only rustls retains the key material after this point.
-7. Delete the source cert and private key files. **[SEC-003]** Source files MUST only be deleted after the keystore write and rustls config build both succeed. If either step fails, the source files MUST be retained and `set_cert` MUST return an error. **[CFG-010]**
+7. Delete the source cert and private key files. **[SEC-003]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[CFG-010, CFG-016]** `set_cert` MUST serialize updates per team to prevent race conditions. **[CFG-015]**
 
 Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash). **[INTEG-002]** recommends encrypted filesystems for source file protection prior to import.
 
@@ -212,7 +212,7 @@ server_config: Arc<ServerConfig>
 
 `ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[CFG-012]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
 
-The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** The `ServerConfig` MUST use a custom `ResolvesServerCert` implementation that supports dynamic updates — adding, removing, or replacing individual team certs without rebuilding the entire `ServerConfig`. **[CFG-014]** This avoids unnecessary keystore reads and minimizes disruption to existing connections when a single team's cert changes. The resolver MUST support concurrent reads (TLS handshakes) and exclusive writes (cert updates).
+The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** The `ServerConfig` MUST use a custom `ResolvesServerCert` implementation that loads the team's device cert and private key from the keystore on-demand per inbound connection, based on the SNI value. **[CFG-014]** This avoids holding all teams' private keys in memory simultaneously — only the key for the current handshake is in memory, and it is zeroized when the handshake completes per **[SEC-007]**. The resolver MUST support concurrent handshakes.
 
 ### Connection Flow
 
@@ -226,10 +226,11 @@ Outbound:
 
 Inbound:
 1. Accept connection using shared `ServerConfig` — SNI in the ClientHello identifies the team per **[CONN-012]**
-2. `ResolvesServerCert` selects the team's cert based on SNI per **[CONN-013]**
+2. `ResolvesServerCert` loads the team's device cert and private key from the keystore on-demand based on SNI per **[CFG-014]**
 3. TLS handshake completes with mutual cert chain validation per **[CONN-006]**
-4. Bind the connection to the SNI-identified team
-5. Validate that sync requests match the bound team per **[CONN-015]**
+4. Private key zeroized after handshake per **[SEC-007]**
+5. Bind the connection to the SNI-identified team
+6. Validate that sync requests match the bound team per **[CONN-015]**
 
 ## SAN Verification
 
@@ -317,7 +318,7 @@ This threat model covers threats at the mTLS transport layer. For sync protocol-
 | **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[CFG-006]** | Cert revocation is not currently implemented. Device SHOULD be removed from the Aranya team immediately. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[CONN-003]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
 | **Private key exposure on disk** | Source key file read by unauthorized process before import. | Source files deleted after import. **[SEC-003]** Encrypted filesystem recommended. **[INTEG-002]** | File deletion is not secure erasure on SSD/flash. Encrypted filesystem mitigates this. |
-| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[SEC-004]** aws-lc-rs zeroizes key memory on free. **[SEC-007]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[CFG-012]** | Key material held in rustls/aws-lc-rs for the lifetime of the connection (outbound) or `ServerConfig` (inbound). |
+| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[SEC-004]** aws-lc-rs zeroizes key memory on free. **[SEC-007]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[CFG-012]** `ResolvesServerCert` loads keys from keystore on-demand per inbound connection. **[CFG-014]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
 | **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[SEC-002]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
 | **Expired cert used for connection** | Peer presents an expired cert. | rustls rejects expired certs during TLS handshake. **[CONN-002]** | None. |
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[SAN-007, SAN-009]** DNS results SHOULD be cached. **[SAN-008]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
@@ -327,6 +328,11 @@ This threat model covers threats at the mTLS transport layer. For sync protocol-
 | **Sync flooding** | Malicious authorized device sends excessive sync requests over an established connection. | Out of scope for mTLS spec. See sync threat model (DOS-1). | Rate limiting should be applied per certificate identity at the sync protocol layer. |
 | **Unauthorized sync participation** | External observer initiates sync without valid credentials. | mTLS handshake rejects peers without a device cert trusted by the team's cert chain. **[CONN-006, CONN-007]** | None. |
 | **CA compromise connection exhaustion** | Attacker with compromised CA mints many unique certs, each opening a separate connection to bypass per-cert connection limits. | Per-team connections. **[CONN-003]** No full mitigation at the mTLS layer. | Inherent limitation of per-cert connection limiting under CA compromise. Mitigated by cert revocation (see [Future Work](#future-work)) and short cert lifetimes. |
+| **SNI spoofing / team existence oracle** | Attacker sets a guessed team ID as SNI to probe whether that team exists on the device. The handshake fails differently for "unknown team" vs "cert not trusted by team." | `ResolvesServerCert` SHOULD NOT reveal whether a team exists — unknown SNI and untrusted cert SHOULD produce indistinguishable handshake failures. **[CONN-014]** | Timing differences between "no such team" and "cert validation failed" may still leak information. |
+| **SNI metadata leak** | TLS 1.3 sends SNI in cleartext in the ClientHello. Since team ID is used as SNI, a passive observer learns which teams a device syncs for. | No mitigation in current design. Encrypted Client Hello (ECH) would address this but requires additional infrastructure. | Team membership metadata is visible to passive network observers. Graph contents (roles, permissions, device IDs) remain encrypted. |
+| **Traffic analysis** | Observer analyzes sync patterns (who syncs with whom, frequency, data volume, timing) to infer network topology. | No mitigation at the mTLS layer. | Leaks network topology (which devices communicate) but not graph contents (roles, permissions, device IDs). |
+| **Core dump / swap exposure** | Daemon crash produces a core dump containing private key material from rustls memory. OS may swap key pages to disk. | Deployments SHOULD disable core dumps for the daemon process, use encrypted swap, or use `mlock` to prevent key pages from being swapped. | If not mitigated, private keys may persist on disk in core dumps or swap files. |
+| **Concurrent `set_cert` race condition** | Two concurrent `set_cert` calls for the same team race, leaving cert files, keystore, and rustls config in an inconsistent state. | `set_cert` MUST serialize updates per team. **[CFG-015]** Keystore and cert directory updates MUST be atomic — if either fails, rollback to the previous state. **[CFG-016]** | None if serialization and atomicity requirements are met. |
 | **Index timing on mailbox server** | (Onboarding) Attacker probes server to learn mailbox IDs via timing. | Separate mailbox ID (indexed) from authenticator (non-indexed, constant-time comparison). | See async onboarding spec. |
 
 ## Future Work
