@@ -141,19 +141,19 @@ create_team / add_team  →  set_cert  →  add_sync_peer
 When `set_cert` is called:
 
 1. The daemon MUST read the cert and key files from the provided paths. **[CFG-004]**
-2. The daemon MUST copy the device cert to `state_dir/certs/<team_id>.crt.pem`. **[CFG-007]**
-3. The daemon MUST copy the root CA certs to `state_dir/certs/<team_id>.root.crt.pem`. **[CFG-008]**
-4. The daemon MUST store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[SEC-002]** If a `TlsPrivateKey` already exists for this team, it MUST be replaced. **[CFG-006]**
-5. The daemon MUST delete the source cert and private key files. **[SEC-003]**
-6. The daemon MUST build rustls `ClientConfig` and `ServerConfig` for the team (with the team's device cert, private key, and root CAs). **[CFG-009]**
-7. Private key bytes MUST be zeroized and dropped from application memory after being handed to rustls. **[SEC-004]**
+2. The daemon MUST copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[CFG-007]**
+3. The daemon MUST copy the root CA certs to `state_dir/certs/<team_id>/root.crt.pem`. **[CFG-008]**
+4. The daemon MUST store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[SEC-002]** If a `TlsPrivateKey` already exists for this team, it MUST be replaced. **[CFG-006]** The keystore MUST be the source of truth for the private key — the source file is ephemeral and only exists long enough to be imported. **[SEC-005]**
+5. The daemon MUST build rustls `ClientConfig` and `ServerConfig` for the team (with the team's device cert, private key, and root CAs), indexed by team ID. **[CFG-009]**
+6. Private key bytes MUST be zeroized and dropped from application memory after being handed to rustls. **[SEC-004]**
+7. The daemon MUST delete the source cert and private key files only after the private key has been successfully stored in the keystore and the rustls configs have been successfully built. **[SEC-003]** If either step fails, the source files MUST be retained and `set_cert` MUST return an error. **[CFG-010]**
 
 ### Startup Flow
 
 When the daemon starts:
 
-1. The daemon MUST scan `state_dir/certs/` for team IDs (each `<team_id>.crt.pem` indicates a configured team). **[START-001]**
-2. For each team: the daemon MUST load the device cert and root CA certs from `state_dir/certs/`. **[START-002]**
+1. The daemon MUST scan `state_dir/certs/` for team subdirectories (each `<team_id>/` subdirectory indicates a configured team). **[START-001]**
+2. For each team: the daemon MUST load the device cert and root CA certs from `state_dir/certs/<team_id>/`. **[START-002]**
 3. For each team: the daemon MUST load the `TlsPrivateKey` from the keystore using the team ID. **[START-003]**
 4. The daemon MUST build rustls `ClientConfig` and `ServerConfig` per team (team-specific device cert and root CAs). **[CFG-009]**
 5. The daemon MUST store configs for use by the quinn QUIC endpoint when establishing connections. **[START-004]**
@@ -161,13 +161,13 @@ When the daemon starts:
 
 ### Cert Rotation
 
-`set_cert` MUST be called again with new file paths to rotate certs. **[CFG-006]** The daemon MUST overwrite the cert files in `state_dir/certs/`, replace the `TlsPrivateKey` in the keystore, rebuild the rustls configs, and delete the source files.
+`set_cert` MUST be called again with new file paths to rotate certs. **[CFG-006]** The daemon MUST overwrite the cert files in `state_dir/certs/<team_id>/`, replace the `TlsPrivateKey` in the keystore, rebuild the rustls configs, and delete the source files.
 
 ### Team Removal
 
 When a team is removed:
 
-1. The daemon MUST delete `state_dir/certs/<team_id>.crt.pem` and `state_dir/certs/<team_id>.root.crt.pem`. **[REM-001]**
+1. The daemon MUST delete the `state_dir/certs/<team_id>/` directory and its contents. **[REM-001]**
 2. The daemon MUST remove the `TlsPrivateKey` from the keystore. **[REM-002]**
 3. The daemon MUST remove the team's `ClientConfig` and `ServerConfig`. **[REM-003]**
 4. The daemon MUST close any open connections for this team. **[REM-004]**
@@ -179,32 +179,32 @@ When a team is removed:
 A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine to store TLS private keys in the daemon's keystore. **[KEY-001]** This follows the existing pattern used by `PskSeed`, signing keys, and encryption keys.
 
 - `TlsPrivateKey<CS>` — unwrapped key type holding the raw private key bytes
-- `TlsKeyId` — typed ID for keystore lookup, derived deterministically from the team ID **[KEY-002]**
+- `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (or cast/reinterpreted) as the `TlsKeyId` without derivation. **[KEY-002]**
 - `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[KEY-003]**
 
-The keystore MUST encrypt the private key at rest using AEAD (AES-256-GCM). **[SEC-002]** The key MUST only be decrypted when needed (during `set_cert` import or daemon startup) and MUST be zeroized immediately after being handed to rustls. **[SEC-004]**
+The keystore MUST encrypt the private key at rest using AEAD (AES-256-GCM). **[SEC-002]** The key MUST only be decrypted at daemon startup when building rustls configs. **[SEC-006]** During `set_cert` import, the key is read from the plaintext source file and does not need decryption. In both cases, the key MUST be zeroized from daemon memory immediately after being handed to rustls. **[SEC-004]**
 
 ### Security Properties
 
 - **At rest**: the private key MUST be AEAD-encrypted in the keystore. **[SEC-002]**
-- **During import**: private key bytes exist briefly in daemon memory while being read from the source file and stored in the keystore. The source file MUST be deleted after import. **[SEC-003]**
-- **At runtime**: only rustls holds the private key internally. The daemon's copy MUST be zeroized after the rustls config is built. **[SEC-004]**
-- **Source file cleanup**: both the source cert and private key files MUST be deleted after import. **[SEC-003]** The private key file is ephemeral — it exists only long enough to be imported into the keystore.
+- **During import**: private key bytes exist briefly in daemon memory while being read from the source file, stored in the keystore, and handed to rustls. The daemon's copy MUST be zeroized after the rustls config is built. **[SEC-004]** The source files MUST be deleted only after the keystore write and rustls config build both succeed. **[SEC-003]**
+- **At runtime**: only rustls holds the private key internally. The daemon MUST NOT retain a copy. **[SEC-004]**
+- **Source file cleanup**: the source private key file is ephemeral — it exists only long enough to be imported into the keystore. **[SEC-005]** The keystore is the source of truth for the private key.
 
 ## TLS Configuration Architecture
 
 ### Per-Team Certs and Connections
 
-Each team MUST have its own device cert (signed by that team's CA) and root CA certs. **[CERT-004]** A device MAY use the same private key across all teams with a separate certificate per team, or MAY use entirely different certs and keys per team. **[CERT-006]**
+Each team has its own root CA certs configured via `set_cert`. **[CERT-004]** A device MAY use the same cert and key across multiple teams (if the cert is trusted by each team's root CAs), MAY use the same private key with different certs signed by each team's CA, or MAY use entirely different certs and keys per team. **[CERT-006]** Teams MAY also share the same root CAs if desired — there is no requirement that root CAs be unique per team.
 
-QUIC connections MUST be established per (peer, team) pair. **[CONN-003]** Each connection MUST use the team-specific certs on both sides:
+QUIC connections MUST be established per (peer, team) pair. **[CONN-003]** Separate connections per team are required because each team may use different certs and root CAs. Sharing a single QUIC connection across teams would risk using the wrong cert for a given team and complicate server-side cert selection during the TLS handshake. Each connection MUST use the team-specific certs on both sides:
 - The outbound peer MUST configure the connection with the team's `ClientConfig` (team's device cert + team's root CAs). **[CONN-004]**
 - The inbound peer MUST configure the connection with the team's `ServerConfig` (team's device cert + team's root CAs). **[CONN-005]**
-- The TLS handshake MUST mutually validate both peers' certs against the team's root CAs. **[CONN-006]**
+- The TLS handshake MUST validate both peers' certs against the team's root CAs (mutual certificate validation). **[CONN-006]** This refers to cert chain validation only — server SANs are verified by the client, and client SANs are only verified on reverse connection reuse (see [SAN Verification](#san-verification)).
 
-All cert validation is handled by the TLS layer — no application-layer post-handshake verification is needed. A peer with a cert from Team A's CA MUST NOT be able to establish a connection for Team B. **[CONN-007]**
+A peer with a cert from Team A's CA MUST NOT be able to establish a connection for Team B (unless Team B's root CAs also trust that cert). **[CONN-007]** This is enforced by the TLS handshake — no application-layer post-handshake verification is needed.
 
-Connections MUST be reused within a team. **[CONN-008]** A new connection is only established when the existing one drops or when syncing with a new peer.
+Connections MUST be reused within a team. **[CONN-008]** A new connection is only established when the existing one drops, when reverse connection reuse fails the client SAN check, or when syncing with a new peer.
 
 ### In-Memory Representation
 
@@ -237,7 +237,9 @@ Peers that share multiple teams MUST maintain separate connections per team. **[
 
 ### Reverse Connection Reuse
 
-When a peer connects to us (inbound) for a specific team, we MAY reuse that connection to sync back to them for the same team rather than opening a separate outbound connection. **[CONN-010]** This is the only case where client SAN verification applies (see [Client SAN Verification](#client-san-verification)).
+When a peer connects to us (inbound) for a specific team, we MAY reuse that connection to sync back to them for the same team rather than opening a separate outbound connection. **[CONN-010]** Reverse reuse requires passing client SAN verification (see [Client SAN Verification](#client-san-verification)). If client SAN verification fails, the daemon MUST attempt to establish a new outbound connection instead. **[SAN-009]**
+
+Each connection MUST track its direction (inbound or outbound) and whether it has passed the reverse client SAN check. **[CONN-011]** This allows the daemon to determine whether an existing connection can be used for syncing in the reverse direction.
 
 ### Peer Caches and Subscriptions
 
@@ -262,8 +264,8 @@ For deployments with dynamic server IPs, DNS SANs SHOULD be used that resolve to
 Client SANs MUST be verified only when reusing an inbound connection in reverse — i.e., when a peer connected to us and we want to reuse that connection to sync back to them for the same team. **[SAN-004]** In this case, the peer's certificate SANs MUST be checked against the IP address they connected from, since we are now treating the inbound connection as if it were an outbound connection to that address. **[SAN-005]**
 
 The connection MUST be reused in reverse if ANY of the following are true: **[SAN-006]**
-- A SAN contains an IP address matching the peer's connecting IP
-- A SAN contains a DNS hostname that resolves to the peer's connecting IP
+- A SAN contains an IP address that exactly matches the peer's connecting IP address
+- A SAN contains a DNS hostname that, when resolved via DNS lookup, returns an IP address matching the peer's connecting IP
 
 If no SAN matches, the connection MUST NOT be reused in reverse. **[SAN-007]** Instead, the daemon MUST attempt to establish a new outbound connection to the peer. **[SAN-009]** The inbound connection MUST remain open for the peer to continue syncing to us — only the reverse direction is affected. **[SAN-010]** This is a graceful fallback, not an error.
 
@@ -273,8 +275,10 @@ When a peer is behind NAT, the connecting IP seen by the server is the NAT's ext
 
 Strategies for NAT deployments:
 - **Use the NAT's external IP or hostname in cert SANs** — if the NAT IP is stable, include it in the cert. Reverse reuse will work.
-- **Establish redundant outbound connections** — both peers initiate outbound connections to each other. No reverse reuse needed. The QUIC transport handles this gracefully.
-- **Relay via a peer not behind NAT** — both NAT'd peers sync through a third party with a routable address.
+- **Establish redundant outbound connections** — both peers initiate outbound connections to each other. No reverse reuse needed. Note: this requires each peer to have a routable address or an existing outbound connection that has opened the NAT firewall for inbound traffic. A peer behind NAT that has never made an outbound connection cannot receive inbound connections.
+- **Relay via a peer not behind NAT** — both NAT'd peers sync through a third party with a routable address. This is the recommended approach when both peers are behind NAT since direct connectivity is not possible without NAT traversal.
+
+QUIC does not natively provide NAT traversal. Deployments where peers are behind NAT SHOULD ensure at least one peer in the sync topology has a routable address, or use a relay peer. **[NAT-001]**
 
 ### Implementation
 
@@ -317,8 +321,8 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 ### Breaking Aranya API Changes
 
-All QUIC syncer PSK and IKM related Aranya APIs and configs MUST be replaced with the new `set_cert` API defined in this document. **[BREAK-001]** `CreateTeamQuicSyncConfig`, `AddTeamQuicSyncConfig`, `CreateSeedMode`, `AddSeedMode`, and related types MUST be removed. **[BREAK-002]**
+All QUIC syncer PSK and IKM related Aranya APIs and configs will be replaced with the new `set_cert` API defined in this document. `CreateTeamQuicSyncConfig`, `AddTeamQuicSyncConfig`, `CreateSeedMode`, `AddSeedMode`, and related types will be removed.
 
 ### Breaking Deployment Changes
 
-Existing Aranya deployments using PSKs MUST NOT be expected to be compatible with newer Aranya software which has migrated to mTLS certs. **[BREAK-003]** All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
+Existing Aranya deployments using PSKs will not be compatible with newer Aranya software which has migrated to mTLS certs. All Aranya software in a deployment SHOULD be upgraded to a version that supports mTLS certs at the same time.
