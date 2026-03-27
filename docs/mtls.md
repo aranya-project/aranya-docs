@@ -98,7 +98,9 @@ Parameters:
 
 The daemon MUST accept file paths from the client via IPC. **[CFG-004]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[CFG-005]**
 
-`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration. **[CFG-006]** This handles both initial configuration and cert rotation.
+`set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[CFG-006]** This handles both initial configuration and cert rotation.
+
+`set_cert` is intentionally separate from `add_team` because `add_team` is not idempotent — calling it twice for the same team fails. A separate idempotent method is required so that certs can be rotated without re-adding the team. This also allows certs to be configured after team creation (e.g., when certs are generated later or provided by an external PKI). The `CreateTeamQuicSyncConfig` and `AddTeamQuicSyncConfig` types used by the previous PSK-based approach are removed entirely — `CreateTeamConfig` and `AddTeamConfig` no longer contain sync-related fields.
 
 Recommended call ordering: `create_team` / `add_team` → `set_cert` → `add_sync_peer`
 
