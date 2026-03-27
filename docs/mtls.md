@@ -205,7 +205,7 @@ server_config: Arc<ServerConfig>
 
 `ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[CFG-012]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[CONN-008]**, new connections are infrequent and the keystore read cost per connection is negligible.
 
-The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** It MUST be rebuilt when any team's cert configuration changes (via `set_cert` or team removal).
+The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[CFG-013]** The `ServerConfig` MUST use a custom `ResolvesServerCert` implementation that supports dynamic updates — adding, removing, or replacing individual team certs without rebuilding the entire `ServerConfig`. **[CFG-014]** This avoids unnecessary keystore reads and minimizes disruption to existing connections when a single team's cert changes. The resolver MUST support concurrent reads (TLS handshakes) and exclusive writes (cert updates).
 
 ### Connection Flow
 
