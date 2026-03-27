@@ -63,7 +63,7 @@ Example usage:
 # Create a root CA (creates ca.crt.pem and ca.key.pem)
 aranya-certgen ca --cn "My Company CA" --days 365
 
-# Create a root CA with custom output prefix
+# Create a root CA with custom output prefix (creates ./certs/myca.crt.pem and ./certs/myca.key.pem)
 aranya-certgen ca --cn "My Company CA" --days 365 -o ./certs/myca -p
 
 # Create a signed certificate
