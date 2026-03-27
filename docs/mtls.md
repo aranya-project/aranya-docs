@@ -160,7 +160,7 @@ A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for 
 
 The private key MUST be AEAD-encrypted at rest in the keystore. **[SEC-002]** It is decrypted only at daemon startup (**[SEC-006]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[SEC-004]**.
 
-At runtime, only rustls retains the private key material. rustls relies on aws-lc-rs to zeroize the key at the C library level when the connection is dropped. **[SEC-007]**
+At runtime, only rustls retains the private key material. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[SEC-007]** aws-lc-rs zeroizes private key memory at the C library level when the key is freed. ring explicitly does not zeroize key material on drop.
 
 ## TLS Configuration Architecture
 
