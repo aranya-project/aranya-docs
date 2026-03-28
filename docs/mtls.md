@@ -71,7 +71,7 @@ See [Future Work](#future-work) for planned enhancements including DER output fo
 flowchart TD
     A[1. Generate certs] -->|certgen or external PKI| B[2. Create/add team]
     B --> C[3. Configure certs via set_cert]
-    C -->|read files, store key in keystore,<br/>copy certs to state_dir,<br/>delete source files| D[4. Add sync peers]
+    C -->|read files, store key in keystore,<br/>copy certs to state_dir| D[4. Add sync peers]
     D --> E[5. Sync over mTLS]
     E -->|cert expires or<br/>needs updating| F[6. Rotate certs via set_cert]
     F --> E
@@ -86,7 +86,7 @@ flowchart TD
 
 1. **Generate** — Create device cert, private key, and cert chain using `aranya-certgen` or external PKI.
 2. **Create/add team** — Team must exist before certs can be configured.
-3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`, deletes source files.
+3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`. User is responsible for deleting source files.
 4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
 6. **Rotate** — Call `set_cert` again with new files. All connections for the team are closed. New and incoming connections are rejected until rotation completes. Overwrites previous configuration.
@@ -167,9 +167,12 @@ When `set_cert` is called:
 6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain). **[MTLS-086]**
 7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
 8. Zeroize and drop private key bytes from daemon memory. **[MTLS-035]**
-9. Delete the source cert and private key files. **[MTLS-036]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
-Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[MTLS-015]** Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash).
+If the keystore write or cert directory copy fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
+
+The daemon MUST NOT delete the source cert or private key files. **[MTLS-036]** The user is responsible for the lifecycle of their cert/key files. API documentation SHOULD strongly recommend deleting the private key file after it has been successfully imported into the daemon. If the user does not delete the source files and the private key is compromised, that is the user's responsibility.
+
+Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions. **[MTLS-015]**
 
 ### Private Key Storage
 
@@ -195,7 +198,7 @@ When the daemon starts:
 
 ### Cert Rotation
 
-Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon closes all connections for the team, rejects new connections until complete, overwrites cert files, replaces the keystore key, updates the resolver and verifier caches, and deletes source files.
+Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon closes all connections for the team, rejects new connections until complete, overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches.
 
 Note: cert rotation does NOT revoke the old cert. If an attacker has a copy of the old cert, it remains valid and could be used for future sync connections until it expires. Cert rotation only changes which cert this device presents — it does not prevent the old cert from being used by others. To fully invalidate an old cert, cert revocation (CRL/OCSP) is required (see [Future Work](#future-work)).
 
