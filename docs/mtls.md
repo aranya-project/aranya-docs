@@ -147,7 +147,7 @@ Parameters:
 - `device_cert` — file path to the device cert file
 - `device_key` — file path to the device private key file
 
-The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[MTLS-028]**
+The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The daemon MUST detect the certificate format (PEM or DER) and convert to DER if necessary, since rustls operates on DER internally. **[MTLS-028]**
 
 `set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]**
 
