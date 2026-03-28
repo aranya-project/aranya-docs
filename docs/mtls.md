@@ -197,6 +197,8 @@ When the daemon starts:
 
 Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon closes all connections for the team, rejects new connections until complete, overwrites cert files, replaces the keystore key, updates the resolver and verifier caches, and deletes source files.
 
+Note: cert rotation does NOT revoke the old cert. If an attacker has a copy of the old cert, it remains valid and could be used for future sync connections until it expires. Cert rotation only changes which cert this device presents — it does not prevent the old cert from being used by others. To fully invalidate an old cert, cert revocation (CRL/OCSP) is required (see [Future Work](#future-work)).
+
 ### Cert Expiry
 
 When the daemon detects a device cert has expired (via a TLS handshake failure), it MUST: **[MTLS-088]**
