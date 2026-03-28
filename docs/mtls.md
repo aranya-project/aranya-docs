@@ -304,7 +304,7 @@ The connection MAY be reused in reverse only if ANY of the following are true: *
 
 If no SAN matches, the connection MUST NOT be reused in reverse. **[MTLS-076]** The daemon MUST attempt to establish a new outbound connection to the peer. **[MTLS-066]** The inbound connection MUST remain open for the peer to continue syncing to us. **[MTLS-077]**
 
-DNS resolution results SHOULD be cached. **[MTLS-078]**
+DNS resolution results SHOULD be cached for efficient lookups. **[MTLS-078]**
 
 ### NAT Considerations
 
