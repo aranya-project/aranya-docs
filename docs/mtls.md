@@ -91,7 +91,7 @@ flowchart TD
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
 6. **Rotate** — Call `set_cert` again with new files. All connections for the team are closed. New and incoming connections are rejected until rotation completes. Overwrites previous configuration.
 7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
-8. **Expired cert cleanup** — When a device cert expiry is detected during a TLS handshake failure, the daemon purges the team's certs, private key, and closes all connections. `set_cert` is required to resume syncing.
+8. **Expired cert cleanup** — When a device cert expiry is detected during a TLS handshake failure, the daemon purges the team's certs, private key, and closes all connections for that team. `set_cert` is required to resume syncing.
 
 On **daemon restart**, certs are reloaded from `state_dir/certs/` and private keys are decrypted from the keystore. If the daemon cannot decrypt a team's `TlsPrivateKey` from the keystore, the daemon MUST abort startup. **[MTLS-081]**
 
