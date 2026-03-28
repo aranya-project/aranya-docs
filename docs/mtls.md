@@ -25,9 +25,7 @@ Abbreviations in this document:
 | Term | Definition |
 |---|---|
 | **Device cert** | The leaf X.509 cert identifying a device. Signed by a CA in the team's cert chain. Each device has one device cert per team (though the same cert MAY be reused across teams). |
-| **Cert chain** | The set of CA certs used to validate a device cert. Includes root CA certs and any intermediate CA certs. Configured per-team via the `root_certs` parameter in `set_cert`. |
-| **Root CA cert** | A self-signed trust anchor at the top of the cert chain. |
-| **Intermediate CA cert** | A CA cert signed by the root CA (or another intermediate) that can sign device certs. Optional — device certs MAY be signed directly by the root CA. |
+| **Cert chain** | The set of CA certs (root and/or intermediate) used to validate a device cert. These are loaded into rustls's `RootCertStore` as trust anchors. Configured per-team via the `cert_chain` directory parameter in `set_cert`. rustls does not differentiate between root and intermediate CA certs — all are treated as trust anchors. |
 | **Private key** | The private key corresponding to the device cert. Used for TLS authentication. Stored AEAD-encrypted in the daemon's keystore. |
 
 ## Certgen CLI Tool
@@ -81,23 +79,27 @@ flowchart TD
     G -->|delete certs, remove key<br/>from keystore, close connections| H[Done]
 
     I[Daemon restart] -->|scan state_dir/certs,<br/>load keys from keystore| E
+
+    E -->|device cert expires| J[8. Expired cert cleanup]
+    J -->|purge certs, key, close connections.<br/>set_cert required to resume.| C
 ```
 
 1. **Generate** — Create device cert, private key, and cert chain using `aranya-certgen` or external PKI.
 2. **Create/add team** — Team must exist before certs can be configured.
 3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`, deletes source files.
 4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
-5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Keys loaded from keystore on-demand per connection.
-6. **Rotate** — Call `set_cert` again with new files. Overwrites previous configuration.
+5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
+6. **Rotate** — Call `set_cert` again with new files. All connections for the team are closed. New and incoming connections are rejected until rotation completes. Overwrites previous configuration.
 7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
+8. **Expired cert cleanup** — When a device cert expiry is detected during a TLS handshake failure, the daemon purges the team's certs, private key, and closes all connections. `set_cert` is required to resume syncing.
 
-On **daemon restart**, certs are reloaded from `state_dir/certs/` and private keys are decrypted from the keystore.
+On **daemon restart**, certs are reloaded from `state_dir/certs/` and private keys are decrypted from the keystore. If the daemon cannot decrypt a team's `TlsPrivateKey` from the keystore, the daemon MUST abort startup. **[MTLS-081]**
 
 ### Generation
 
 Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[MTLS-002]** All certs MUST contain at least one Subject Alternative Name (SAN). **[MTLS-004]** The QUIC transport (via rustls) MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[MTLS-013]** Certs and private keys MUST NOT be checked into repositories. **[MTLS-012]**
 
-mTLS root and device certs can be generated using either:
+mTLS device certs and cert chain certs can be generated using either:
 
 1. **External PKI** — Users MAY provide certs from their existing PKI infrastructure. **[MTLS-016]**
 
@@ -105,7 +107,7 @@ mTLS root and device certs can be generated using either:
 
 Example using `aranya-certgen`:
 ```bash
-# Generate a root CA
+# Generate a CA
 aranya-certgen ca --cn "My Company CA" --days 365
 
 # Generate a device cert signed by the CA
@@ -127,27 +129,29 @@ Certs can be configured in two ways:
 1. **At team creation/addition** — via the optional `set_cert` method on `CreateTeamConfig` / `AddTeamConfig` builders:
 ```rust
 let cfg = CreateTeamConfig::builder()
-    .set_cert(root_certs, device_cert, device_key)
+    .set_cert(cert_chain, device_cert, device_key)
     .build()?;
 client.create_team(cfg).await?;
 ```
 
 2. **After team creation** — via the standalone `set_cert` method on the client:
 ```
-set_cert(team_id, root_certs, device_cert, device_key)
+set_cert(team_id, cert_chain, device_cert, device_key)
 ```
 
 Both paths use the same import flow. The standalone `set_cert` is required for cert rotation since `create_team`/`add_team` cannot be called again for an existing team. **[MTLS-026]**
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
-- `root_certs` — directory path containing the cert chain files (root CA and intermediate CA certs; see **[MTLS-007]**)
+- `cert_chain` — directory path containing the cert chain files (root CA and/or intermediate CA certs). **[MTLS-007]** All files in the directory MUST be loaded as trust anchors. **[MTLS-082]** If any file fails to parse as a valid cert, `set_cert` MUST fail. **[MTLS-083]**
 - `device_cert` — file path to the device cert file
 - `device_key` — file path to the device private key file
 
 The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The daemon MUST detect the certificate format (PEM, DER, etc.) and perform any necessary conversion. **[MTLS-028]**
 
 `set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]**
+
+The SNI hostname for each team MUST be the team ID's base58 string representation. **[MTLS-084]** This is the standard `Display` format for Aranya IDs (alphanumeric, DNS-safe, within the 63-character DNS label limit).
 
 Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
@@ -156,12 +160,14 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 When `set_cert` is called:
 
 1. Read the cert and key files from the provided paths. **[MTLS-027]**
-2. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
-3. Copy the root CA certs to `state_dir/certs/<team_id>/root.crt.pem`. **[MTLS-031]**
-4. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the source of truth for the private key. **[MTLS-033]**
-5. Build rustls `ClientConfig` and `ServerConfig` for the team, indexed by team ID. **[MTLS-034]**
-6. Zeroize and drop private key bytes from daemon memory. **[MTLS-035]** Only rustls retains the key material after this point.
-7. Delete the source cert and private key files. **[MTLS-036]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
+2. Close all existing connections for this team. Reject new outgoing and incoming connections for this team until import completes. **[MTLS-085]**
+3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
+4. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
+5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the source of truth for the private key. **[MTLS-033]**
+6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain). **[MTLS-086]**
+7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
+8. Zeroize and drop private key bytes from daemon memory. **[MTLS-035]**
+9. Delete the source cert and private key files. **[MTLS-036]** Source files MUST only be deleted after the keystore write and cert directory copy both succeed. If either step fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
 Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions prior to importing them into Aranya. **[MTLS-015]** Note: file deletion via `unlink` does not securely erase data on most filesystems (especially SSD/flash).
 
@@ -173,7 +179,7 @@ A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for 
 - `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (cast/reinterpret) as the `TlsKeyId` without derivation. **[MTLS-048]**
 - `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[MTLS-049]**
 
-The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only at daemon startup (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After building the rustls config, the daemon MUST zeroize its copy per **[MTLS-035]**.
+The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only when needed for TLS handshakes (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After the handshake, the daemon MUST zeroize its copy per **[MTLS-035]**.
 
 At runtime, only rustls retains the private key material. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the key is freed. ring explicitly does not zeroize key material on drop.
 
@@ -182,31 +188,47 @@ At runtime, only rustls retains the private key material. Quinn MUST be configur
 When the daemon starts:
 
 1. Scan `state_dir/certs/` for team subdirectories. **[MTLS-039]**
-2. For each team: load the device cert and root CA certs from `state_dir/certs/<team_id>/`. **[MTLS-040]**
-3. For each team: decrypt the `TlsPrivateKey` from the keystore using the team ID. **[MTLS-041, MTLS-050]**
-4. Build rustls configs per team per **[MTLS-034]** and store for use by the quinn endpoint. **[MTLS-042]**
+2. For each team: load the device cert and cert chain from `state_dir/certs/<team_id>/`. **[MTLS-040]**
+3. For each team: decrypt the `TlsPrivateKey` from the keystore using the team ID. **[MTLS-041, MTLS-050]** If decryption fails, the daemon MUST abort startup. **[MTLS-081]**
+4. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores. **[MTLS-042]**
 5. Zeroize and drop private key bytes per **[MTLS-035]**.
 
 ### Cert Rotation
 
-Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon overwrites cert files, replaces the keystore key, rebuilds rustls configs, and deletes source files.
+Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon closes all connections for the team, rejects new connections until complete, overwrites cert files, replaces the keystore key, updates the resolver and verifier caches, and deletes source files.
+
+### Cert Expiry
+
+When the daemon detects a device cert has expired (via a TLS handshake failure), it MUST: **[MTLS-088]**
+1. Close all existing connections for the team.
+2. Delete the `state_dir/certs/<team_id>/` directory and its contents.
+3. Remove the `TlsPrivateKey` from the keystore.
+4. Remove the team from the resolver and verifier caches.
+
+The team remains configured but cannot sync until `set_cert` is called with a valid cert. This is a full purge — `set_cert` requires the complete set of parameters (cert_chain, device_cert, device_key).
 
 ### Team Removal
 
 1. Delete the `state_dir/certs/<team_id>/` directory and its contents. **[MTLS-043]**
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
-3. Remove the team's rustls configs. **[MTLS-045]**
+3. Remove the team from the resolver and verifier caches. **[MTLS-045]**
 4. Close any open connections for this team. **[MTLS-046]**
 
 ## TLS Configuration Architecture
 
 ### Outbound Connections
 
-For outbound connections, the daemon selects the team's `ClientConfig` (team's device cert + cert chain) using `connect_with()` and MUST set the team ID as the SNI hostname. **[MTLS-052]** The TLS handshake validates the server's device cert against the team's cert chain and verifies server SANs per **[MTLS-053]**.
+For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The TLS handshake validates the server's device cert against the team's cert chain and verifies server SANs per **[MTLS-053]**.
 
 ### Inbound Connections
 
-For inbound connections, the daemon uses a shared `ServerConfig` that contains all configured teams' device certs and cert chains. **[MTLS-054]** The connecting client MUST set the team ID (or a team-specific identifier) as the SNI hostname in the TLS ClientHello. **[MTLS-055]** The server's `ResolvesServerCert` implementation MUST use the SNI value to select the correct team's device cert for the handshake. **[MTLS-056]** If the SNI value does not match any configured team, the handshake MUST fail. **[MTLS-057]**
+For inbound connections, the daemon uses a shared `ServerConfig`. **[MTLS-054]** The connecting client MUST set the team ID (base58) as the SNI hostname in the TLS ClientHello. **[MTLS-055]**
+
+The `ServerConfig` uses two custom implementations:
+
+1. **`ResolvesServerCert`** — uses the SNI value to select the correct team's device cert from a cached cert map and loads the private key from the keystore on-demand. **[MTLS-056]** If the SNI value does not match any configured team, the handshake MUST fail. **[MTLS-057]** The cert cache is updated by `set_cert` and cleared on team removal or cert expiry. Private keys are only in memory for the duration of the handshake and are zeroized after per **[MTLS-051]**.
+
+2. **`ClientCertVerifier`** — uses the SNI value (from the `ClientHello`) to select the team-specific cert chain and validates the client's device cert against it. **[MTLS-087]** This is cert chain validation only — it verifies that the client's cert is signed by a CA trusted by the team. Client cert SAN verification is NOT performed during the handshake; it is a separate application-layer check performed only on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
 After the handshake, the connection is bound to the team identified by SNI. Subsequent sync requests on the connection MUST include a team ID that matches the SNI-selected team. **[MTLS-058]** If a sync request's team ID does not match, the request MUST be rejected and the QUIC connection closed. **[MTLS-059]** This prevents a peer that shares multiple teams from accidentally or maliciously syncing on the wrong team's connection.
 
@@ -234,32 +256,33 @@ Each connection MUST track: **[MTLS-067]**
 ### In-Memory Representation
 
 ```rust
-/// Shared server config containing all teams' device certs and cert chains
-/// for inbound connections. Must stay alive to accept inbound connections.
+/// Shared server config for inbound connections.
+/// Cert cache populated by set_cert, private keys loaded on-demand from keystore.
 server_config: Arc<ServerConfig>
 ```
 
 `ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[MTLS-068]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[MTLS-063]**, new connections are infrequent and the keystore read cost per connection is negligible.
 
-The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[MTLS-069]** The `ServerConfig` MUST use a custom `ResolvesServerCert` implementation that loads the team's device cert and private key from the keystore on-demand per inbound connection, based on the SNI value. **[MTLS-070]** This avoids holding all teams' private keys in memory simultaneously — only the key for the current handshake is in memory, and it is zeroized when the handshake completes per **[MTLS-051]**. The resolver MUST support concurrent handshakes.
+The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[MTLS-069]** The `ResolvesServerCert` caches public certs (device certs + cert chains) but loads private keys from the keystore on-demand per handshake. **[MTLS-070]** This avoids holding private keys in memory between handshakes. The resolver MUST support concurrent handshakes.
 
 ### Connection Flow
 
 Outbound:
 1. Check for an existing healthy connection to (peer, team) — if found, reuse it per **[MTLS-063]**
 2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
-3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**
+3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**. Set SNI to team ID (base58) per **[MTLS-084]**.
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
 5. Zeroize the decrypted private key bytes used to build the `ClientConfig` per **[MTLS-035]**
 6. Store connection in the connection map keyed by (socket address, team ID)
 
 Inbound:
 1. Accept connection using shared `ServerConfig` — SNI in the ClientHello identifies the team per **[MTLS-055]**
-2. `ResolvesServerCert` loads the team's device cert and private key from the keystore on-demand based on SNI per **[MTLS-070]**
-3. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
-4. Private key zeroized after handshake per **[MTLS-051]**
-5. Bind the connection to the SNI-identified team
-6. Validate that sync requests match the bound team per **[MTLS-058]**
+2. `ResolvesServerCert` selects the team's device cert from cache and loads the private key from the keystore on-demand per **[MTLS-070]**
+3. `ClientCertVerifier` validates the client's device cert against the team's cert chain (selected via SNI) per **[MTLS-087]**
+4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
+5. Private key zeroized after handshake per **[MTLS-051]**
+6. Bind the connection to the SNI-identified team
+7. Validate that sync requests match the bound team per **[MTLS-058]**
 
 ## SAN Verification
 
@@ -271,7 +294,7 @@ For deployments with dynamic server IPs, DNS SANs SHOULD be used that resolve to
 
 ### Client SAN Verification
 
-Client SANs MUST be verified only when reusing an inbound connection in reverse. **[MTLS-072]** The peer's certificate SANs MUST be checked against the IP address they connected from. **[MTLS-073]**
+Client cert SAN verification is a separate application-layer check, NOT part of the `ClientCertVerifier` TLS handshake. It is performed only when reusing an inbound connection in reverse. **[MTLS-072]** The peer's certificate SANs MUST be checked against the IP address they connected from. **[MTLS-073]**
 
 The connection MAY be reused in reverse only if ANY of the following are true: **[MTLS-074]**
 - A SAN contains an IP address that exactly matches the peer's connecting IP address (byte-level comparison; IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent) **[MTLS-075]**
@@ -294,7 +317,8 @@ QUIC does not natively provide NAT traversal. Deployments where peers are behind
 
 ### Implementation
 
-The `ClientCertVerifier` trait does not have access to the peer's IP address, so client SAN verification MUST be performed after the TLS handshake per **[MTLS-072]**:
+Client SAN verification is performed at the application layer after the TLS handshake, when deciding whether to reuse a connection in reverse. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
+
 ```rust
 fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
     let peer_ip = conn.remote_address().ip();
@@ -334,26 +358,26 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 |---|---|---|---|
 | **Passive eavesdropping** | Attacker observes sync traffic on the network. | TLS 1.3 with ephemeral key exchange encrypts all traffic. **[MTLS-001]** | None — session keys are ephemeral and not derived from certs. |
 | **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[MTLS-053]** Cert chain validation ensures the cert is signed by a trusted CA. **[MTLS-061]** | None if cert chain and DNS are not compromised. |
-| **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | Mutual cert validation — the daemon validates the client's device cert against the team's cert chain. **[MTLS-061]** SNI binds the connection to a specific team. **[MTLS-055, MTLS-056]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
-| **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the TLS handshake succeeds but sync request validation catches mismatches. |
+| **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | `ClientCertVerifier` validates the client's device cert against the team's cert chain (selected via SNI). **[MTLS-087]** SNI binds the connection to a specific team. **[MTLS-055, MTLS-056]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
+| **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Per-SNI `ClientCertVerifier` validates client cert against team-specific cert chain. **[MTLS-087]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the handshake succeeds but sync request validation catches mismatches. |
 | **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[MTLS-029]** | Cert revocation is not currently implemented. Device SHOULD be removed from the Aranya team immediately. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[MTLS-060]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
 | **Private key exposure on disk** | Source key file read by unauthorized process before import. | Source files deleted after import. **[MTLS-036]** Encrypted filesystem recommended. **[MTLS-015]** | File deletion is not secure erasure on SSD/flash. Encrypted filesystem mitigates this. |
-| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[MTLS-035]** aws-lc-rs zeroizes key memory on free. **[MTLS-051]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[MTLS-068]** `ResolvesServerCert` loads keys from keystore on-demand per inbound connection. **[MTLS-070]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
+| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[MTLS-035]** aws-lc-rs zeroizes key memory on free. **[MTLS-051]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[MTLS-068]** `ResolvesServerCert` loads private keys on-demand per handshake; only public certs cached. **[MTLS-070]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
 | **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[MTLS-032]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
-| **Expired cert used for connection** | Peer presents an expired cert. | rustls rejects expired certs during TLS handshake. **[MTLS-010]** | None. |
+| **Expired cert** | Device cert expires, connections fail. | Daemon detects expiry during TLS handshake, purges certs and key for the team, closes connections. **[MTLS-088]** `set_cert` required to resume. | No proactive expiry monitoring — expiry detected reactively on handshake failure. |
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[MTLS-076, MTLS-066]** DNS results SHOULD be cached. **[MTLS-078]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
 | **NAT prevents connectivity** | Peers behind NAT cannot establish direct connections. | Multiple strategies: NAT IP in SANs, redundant outbound connections, relay peer. **[MTLS-079]** | QUIC does not provide NAT traversal. At least one peer needs a routable address. |
 | **Replay attack** | Attacker replays captured TLS handshake. | TLS 1.3 handshake uses ephemeral keys — replayed handshakes fail. **[MTLS-001]** | None. |
-| **Connection exhaustion** | Malicious authorized device opens many connections to exhaust resources. | Per-team connections limit one connection per (peer, team) pair. **[MTLS-060]** | Under CA compromise, attacker can mint many unique certs, each establishing a separate connection. Per-cert connection limiting does not bound total connections from a compromised CA. |
+| **Connection exhaustion** | Malicious authorized device opens many connections to exhaust resources. | Per-team connections limit one connection per (peer, team) pair. **[MTLS-060]** | Under CA compromise, attacker can mint many unique certs, each establishing a separate connection. |
 | **Sync flooding** | Malicious authorized device sends excessive sync requests over an established connection. | Out of scope for mTLS spec. See sync threat model (DOS-1). | Rate limiting should be applied per certificate identity at the sync protocol layer. |
 | **Unauthorized sync participation** | External observer initiates sync without valid credentials. | mTLS handshake rejects peers without a device cert trusted by the team's cert chain. **[MTLS-061, MTLS-062]** | None. |
-| **CA compromise connection exhaustion** | Attacker with compromised CA mints many unique certs, each opening a separate connection to bypass per-cert connection limits. | Per-team connections. **[MTLS-060]** No full mitigation at the mTLS layer. | Inherent limitation of per-cert connection limiting under CA compromise. Mitigated by cert revocation (see [Future Work](#future-work)) and short cert lifetimes. |
-| **SNI spoofing** | Attacker spoofs the SNI team ID to cause the server to select the wrong team's cert. Also usable as a team existence oracle (handshake may fail differently for "unknown team" vs "cert not trusted"). | If the attacker doesn't have a cert trusted by the spoofed team, the handshake fails because the client validates the server's cert against the wrong team's cert chain. **[MTLS-061]** If the attacker does have a trusted cert, syncing with a mismatched team ID in the sync request causes the connection to close. **[MTLS-058, MTLS-059]** `ResolvesServerCert` SHOULD NOT reveal whether a team exists — unknown SNI and untrusted cert SHOULD produce indistinguishable failures. **[MTLS-057]** | Timing differences between failure modes may leak team existence. |
-| **SNI metadata leak** | TLS 1.3 sends SNI in cleartext in the ClientHello. Since team ID is used as SNI, a passive observer learns which teams a device syncs for. | No mitigation in current design. Encrypted Client Hello (ECH) would address this but requires additional infrastructure. | Team membership metadata is visible to passive network observers. Graph contents (roles, permissions, device IDs) remain encrypted. |
+| **CA compromise connection exhaustion** | Attacker with compromised CA mints many unique certs, each opening a separate connection to bypass per-cert connection limits. | Per-team connections. **[MTLS-060]** No full mitigation at the mTLS layer. | Inherent limitation. Mitigated by cert revocation (see [Future Work](#future-work)) and short cert lifetimes. |
+| **SNI spoofing** | Attacker spoofs the SNI team ID to cause the server to select the wrong team's cert. Also usable as a team existence oracle. | If the attacker doesn't have a cert trusted by the spoofed team, the `ClientCertVerifier` rejects the client cert. **[MTLS-087]** If the attacker does have a trusted cert, syncing with a mismatched team ID causes the connection to close. **[MTLS-058, MTLS-059]** `ResolvesServerCert` SHOULD NOT reveal whether a team exists — unknown SNI and untrusted cert SHOULD produce indistinguishable failures. **[MTLS-057]** | Timing differences between failure modes may leak team existence. |
+| **SNI metadata leak** | TLS 1.3 sends SNI in cleartext in the ClientHello. Since team ID (base58) is used as SNI, a passive observer learns which teams a device syncs for. | No mitigation in current design. Encrypted Client Hello (ECH) would address this but requires additional infrastructure. | Team membership metadata is visible to passive network observers. Graph contents (roles, permissions, device IDs) remain encrypted. |
 | **Traffic analysis** | Observer analyzes sync patterns (who syncs with whom, frequency, data volume, timing) to infer network topology. | No mitigation at the mTLS layer. | Leaks network topology (which devices communicate) but not graph contents (roles, permissions, device IDs). |
 | **Core dump / swap exposure** | Daemon crash produces a core dump containing private key material from rustls memory. OS may swap key pages to disk. | Deployments SHOULD disable core dumps for the daemon process, use encrypted swap, or use `mlock` to prevent key pages from being swapped. | If not mitigated, private keys may persist on disk in core dumps or swap files. |
-| **Concurrent `set_cert` race condition** | Two concurrent `set_cert` calls for the same team race, leaving cert files, keystore, and rustls config in an inconsistent state. | `set_cert` MUST serialize updates per team. **[MTLS-038]** Keystore and cert directory updates MUST be atomic — if either fails, rollback to the previous state. **[MTLS-080]** | None if serialization and atomicity requirements are met. |
+| **Concurrent `set_cert` race condition** | Two concurrent `set_cert` calls for the same team race, leaving cert files, keystore, and config in an inconsistent state. | `set_cert` MUST serialize updates per team. **[MTLS-038]** Keystore and cert directory updates MUST be atomic — if either fails, rollback to the previous state. **[MTLS-080]** | None if serialization and atomicity requirements are met. |
 | **Index timing on mailbox server** | (Onboarding) Attacker probes server to learn mailbox IDs via timing. | Separate mailbox ID (indexed) from authenticator (non-indexed, constant-time comparison). | See async onboarding spec. |
 
 ## Breaking Changes
@@ -373,3 +397,5 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 - **Cert revocation** — check certificate revocation status (CRL/OCSP) during TLS handshake validation.
 - **System root certs** — allow using the operating system's root certificate store.
 - **Cert chain validation at configuration time** — verify that the device cert is signed by a CA in the cert chain when `set_cert` is called, rather than failing later during TLS authentication.
+- **Proactive cert expiry monitoring** — warn about approaching cert expiration before handshakes start failing.
+- **Encrypted Client Hello (ECH)** — encrypt the SNI in the TLS ClientHello to prevent passive observers from learning team IDs.
