@@ -395,3 +395,4 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 - **System root certs** — allow using the operating system's root certificate store.
 - **Cert chain validation at configuration time** — verify that the device cert is signed by a CA in the cert chain when `set_cert` is called, rather than failing later during TLS authentication.
 - **Proactive cert expiry monitoring** — warn about approaching cert expiration before handshakes start failing.
+- **mTLS wrapper library** — implement a wrapper around quinn that encapsulates all mTLS complexity (cert caching, on-demand keystore reads, SNI handling, `ResolvesServerCert`, `ClientCertVerifier`, SAN verification, connection tracking). The daemon's sync manager would use a simple API (`connect`, `accept`, `set_cert`, `remove_team`) without knowledge of rustls configs or keystore internals. This would centralize security invariants in a testable, reusable library.
