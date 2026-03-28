@@ -143,7 +143,7 @@ Both paths use the same import flow. The standalone `set_cert` is required for c
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
-- `cert_chain` — directory path containing the cert chain files (root CA and/or intermediate CA certs). **[MTLS-007]** All files in the directory MUST be loaded as trust anchors. **[MTLS-082]** If any file fails to parse as a valid cert, `set_cert` MUST fail. **[MTLS-083]**
+- `cert_chain` — directory path containing the cert chain files (root CA and/or intermediate CA certs). **[MTLS-007]** All files in the directory MUST be loaded as trust anchors. **[MTLS-082]** If any file fails to parse as a valid cert, `set_cert` MUST fail. **[MTLS-083]** Note: the daemon does not validate the PKI hierarchy of certs in this directory. It is possible to place a self-signed device cert here, which would effectively bypass cert chain validation for that cert. This is NOT recommended — the `cert_chain` directory SHOULD only contain CA certs from a trusted PKI.
 - `device_cert` — file path to the device cert file
 - `device_key` — file path to the device private key file
 
