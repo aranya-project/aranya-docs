@@ -160,7 +160,17 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 When `set_cert` is called:
 
 1. Read the cert and key files from the provided paths. **[MTLS-027]** The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
-2. Remove all existing connections for this team from the connection map. **[MTLS-085]** New streams on old connections MUST be rejected. **[MTLS-091]** In-progress sync traffic on old connections is allowed to drain via quinn's stream reference counting. Old connections that have not drained within a configurable timeout MUST be force-closed. **[MTLS-092]** Implementation: spawn an async task per removed connection that sleeps for the drain timeout, then calls `quinn::Connection::close()`. The task holds the connection handle, keeping it alive for the timeout duration. If the connection drains naturally before the timeout (all streams close), `close()` on an already-closed connection is a no-op.
+2. Remove all existing connections for this team from the connection map. **[MTLS-085]** New streams on old connections MUST be rejected. **[MTLS-091]** In-progress sync traffic on old connections is allowed to drain via quinn's stream reference counting. Old connections that have not drained within a configurable timeout MUST be force-closed: **[MTLS-092]**
+```rust
+let conn = connection_map.remove(&(peer, team));
+if let Some(conn) = conn {
+    tokio::spawn(async move {
+        tokio::time::sleep(drain_timeout).await;
+        // No-op if connection already closed naturally.
+        conn.close(0u32.into(), b"cert rotated");
+    });
+}
+```
 3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
 4. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
 5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the sole source of truth for the private key — the plaintext key bytes are never passed to rustls during import. **[MTLS-033]**
