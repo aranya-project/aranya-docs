@@ -227,7 +227,7 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 1. Delete the `state_dir/certs/<team_id>/` directory and its contents. **[MTLS-043]**
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
 3. Remove the team from the resolver and verifier caches. **[MTLS-045]**
-4. Close any open connections for this team. **[MTLS-046]**
+4. Remove connections for this team from the connection map and allow them to drain, same as cert reconfiguration per **[MTLS-085, MTLS-091, MTLS-092]**. **[MTLS-046]**
 
 ## TLS Configuration Architecture
 
