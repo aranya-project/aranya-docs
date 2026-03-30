@@ -192,9 +192,7 @@ When the daemon starts:
 
 1. Scan `state_dir/certs/` for team subdirectories. **[MTLS-039]**
 2. For each team: load the device cert and cert chain from `state_dir/certs/<team_id>/`. **[MTLS-040]**
-3. For each team: decrypt the `TlsPrivateKey` from the keystore using the team ID. **[MTLS-041, MTLS-050]** If decryption fails, the daemon MUST abort startup. **[MTLS-081]**
-4. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores. **[MTLS-042]**
-5. Zeroize and drop private key bytes per **[MTLS-035]**.
+3. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores with the loaded public certs. **[MTLS-042]** Private keys remain encrypted in the keystore and are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**.
 
 ### Cert Rotation
 
