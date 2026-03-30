@@ -112,10 +112,6 @@ aranya-certgen ca --cn "My Company CA" --days 365
 
 # Generate a device cert signed by the CA
 aranya-certgen signed ca --cn 192.168.1.10 --days 365 -o device
-
-# Configure the team with the generated certs
-# (via client API)
-# set_cert(team_id, "ca_certs/", "device.crt.pem", "device.key.pem")
 ```
 
 ### Configuration API
