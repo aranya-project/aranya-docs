@@ -73,7 +73,7 @@ flowchart TD
     B --> C[3. Configure certs via set_cert]
     C -->|read files, store key in keystore,<br/>copy certs to state_dir| D[4. Add sync peers]
     D --> E[5. Sync over mTLS]
-    E -->|cert expires or<br/>needs updating| F[6. Rotate certs via set_cert]
+    E -->|cert expires or<br/>needs updating| F[6. Reconfigure certs via set_cert]
     F --> E
     E -->|team no longer needed| G[7. Remove team]
     G -->|delete certs, remove key<br/>from keystore, close connections| H[Done]
@@ -89,7 +89,7 @@ flowchart TD
 3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`. User is responsible for deleting source files.
 4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
-6. **Rotate** — Call `set_cert` again with new files. Old connections removed from map and drained. New connections use the new cert. Overwrites previous configuration.
+6. **Reconfigure** — Call `set_cert` again with new files. Reconfigures which cert the device presents (does NOT revoke the old cert). Old connections removed from map and drained. New connections use the new cert.
 7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
 8. **Expired cert cleanup** — Detected reactively during TLS handshake failures. New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally.
 
@@ -208,11 +208,11 @@ When the daemon starts:
 2. For each team: load the device cert and cert chain from `state_dir/certs/<team_id>/`. **[MTLS-040]**
 3. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores with the loaded public certs. **[MTLS-042]** Private keys remain encrypted in the keystore and are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**.
 
-### Cert Rotation
+### Cert Reconfiguration
 
-Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. Existing connections for the team MUST be removed from the connection map so that no new sync requests use the old cert. **[MTLS-085]** In-progress sync requests/responses on old connections are allowed to drain — quinn streams hold internal references to the connection, keeping it alive until all active streams close. The daemon MUST stop accepting new streams on old connections. **[MTLS-091]** If the old connection has not drained within a configurable timeout, it MUST be force-closed. **[MTLS-092]** This guards against peers maliciously keeping connections open by stalling sync responses. New connections are created lazily on the next sync request using the new cert. Any commands received on draining connections are validated by the graph as normal — cert rotation does not bypass graph-level command validation. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections also use the new cert.
+Call `set_cert` again with new file paths per **[MTLS-029]**. This reconfigures which cert the device presents — it does NOT revoke the old cert. Other devices that still have a copy of the old cert can continue using it until it expires. Cert revocation (CRL/OCSP) is required to fully invalidate an old cert (see [Future Work](#future-work)).
 
-Note: cert rotation does NOT revoke the old cert. If an attacker has a copy of the old cert, it remains valid and could be used for future sync connections until it expires. Cert rotation only changes which cert this device presents — it does not prevent the old cert from being used by others. To fully invalidate an old cert, cert revocation (CRL/OCSP) is required (see [Future Work](#future-work)).
+The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. The same import flow (steps 1-7) is used. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections use the new cert. New outbound connections are created lazily on the next sync request using the new cert.
 
 ### Cert Expiry
 
@@ -312,7 +312,7 @@ The following table documents areas where this design intentionally deviates fro
 | **Cert chain as trust anchors** | Only root CA certs are trust anchors. Intermediate CA certs are sent in the cert chain during the handshake. | Both root and intermediate CA certs are loaded as trust anchors in rustls's `RootCertStore`. Device cert is leaf-only. | Simplifies cert management — one directory of CA certs per team. rustls does not differentiate between root and intermediate CAs in its trust store. Avoids needing to bundle intermediates with the device cert. | Neutral. Same certs are trusted, different storage location. Operational model for intermediate CA changes differs from standard but cert revocation is not yet implemented. |
 | **On-demand private key loading** | Private keys are loaded into `ClientConfig`/`ServerConfig` at startup and held in memory. | Private keys loaded from an AEAD-encrypted keystore on-demand per TLS handshake, then zeroized. Public certs cached. **[MTLS-070, MTLS-068]** | Minimizes private key exposure window. Keys are only in daemon memory during handshake setup, not for the daemon's lifetime. | Positive. Reduces private key exposure from process lifetime to handshake duration. |
 | **Connection-per-team** | One connection between two peers, multiplexing via QUIC streams. | One connection per (peer, team) pair. **[MTLS-060]** | Each team requires different certs and trust chains. Prevents cross-team cert mismatch, limits blast radius of CA compromise. | Positive. Compromised CA for one team cannot affect other teams' connections. |
-| **Cert rotation connection handling** | Existing connections unaffected by cert rotation, expiry, or revocation. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map and drained on cert rotation. New streams rejected on old connections. **[MTLS-085, MTLS-091]** Force-close after configurable timeout. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely after rotation. Our approach ensures old certs are phased out quickly while allowing in-progress syncs to complete. | Positive. Stricter than standard TLS — old connections are actively phased out rather than left open. Drain timeout bounds exposure. Impact is insignificant (sync requests are milliseconds). |
+| **Cert reconfiguration connection handling** | Existing connections unaffected by cert changes. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map and drained on cert reconfiguration. New streams rejected on old connections. **[MTLS-085, MTLS-091]** Force-close after configurable timeout. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely. Our approach ensures old certs are phased out quickly while allowing in-progress syncs to complete. | Positive. Stricter than standard TLS — old connections are actively phased out rather than left open. Drain timeout bounds exposure. Impact is insignificant (sync requests are milliseconds). |
 
 ## SAN Verification
 
