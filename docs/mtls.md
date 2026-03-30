@@ -184,7 +184,7 @@ A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for 
 
 The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only when needed for TLS handshakes (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After the handshake, the daemon MUST zeroize its copy per **[MTLS-035]**.
 
-At runtime, only rustls retains the private key material. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the key is freed. ring explicitly does not zeroize key material on drop.
+Private keys are loaded from the keystore on-demand per handshake. rustls borrows the key only for the duration of the handshake (to sign the TLS CertificateVerify message) and does not retain it after the handshake completes — TLS 1.3 session encryption uses ephemeral keys from the DH exchange, not the signing key. The `Arc<CertifiedKey>` returned by `ResolvesServerCert` is dropped when the handshake function returns. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the `Arc` is dropped and the ref count reaches zero. ring explicitly does not zeroize key material on drop.
 
 ### Startup Flow
 
