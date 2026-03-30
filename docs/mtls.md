@@ -235,6 +235,27 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
 For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The `ClientConfig` MUST use a custom `ServerCertVerifier` that validates the server's device cert against the team's cert chain and verifies server SANs against the peer's actual address (not the SNI value) per **[MTLS-090]**.
 
+```rust
+impl ServerCertVerifier for TeamServerVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,  // This is the team ID, NOT used for SAN verification
+        // ...
+    ) -> Result<ServerCertVerified, Error> {
+        // Validate server cert chain against the team's trust anchors
+        verify_cert_chain(end_entity, intermediates, &self.team_trust_store)?;
+
+        // Verify server SANs against the peer's actual address, not the SNI value.
+        // self.peer_addr is the address we're connecting to.
+        verify_server_san(end_entity, self.peer_addr)?;
+
+        Ok(ServerCertVerified::assertion())
+    }
+}
+```
+
 ### Inbound Connections
 
 For inbound connections, the daemon uses a shared `ServerConfig`. **[MTLS-054]** The connecting client MUST set the team ID (base58) as the SNI hostname in the TLS ClientHello. **[MTLS-055]**
@@ -243,7 +264,61 @@ The `ServerConfig` uses two custom implementations:
 
 1. **`ResolvesServerCert`** — uses the SNI value to select the correct team's device cert from a cached cert map and loads the private key from the keystore on-demand. **[MTLS-056]** If the SNI value does not match any configured team, the handshake MUST fail. **[MTLS-057]** The cert cache is updated by `set_cert` and cleared on team removal or cert expiry. Private keys exist in memory only for the duration of the handshake — Rust bytes zeroized via `Zeroizing` after key construction per **[MTLS-035]**, C-allocated key zeroized via aws-lc-rs when the `Arc<CertifiedKey>` drops per **[MTLS-051]**.
 
+```rust
+impl ResolvesServerCert for TeamCertResolver {
+    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+        let team_id = client_hello.server_name()?;
+
+        // Look up cached public cert for this team
+        let cached = self.cert_cache.read().get(team_id)?.clone();
+
+        // Load private key from keystore on-demand (decrypted, wrapped in Zeroizing)
+        let key_bytes: Zeroizing<Vec<u8>> = self.keystore.decrypt_tls_key(team_id).ok()?;
+
+        // Construct CertifiedKey — aws-lc-rs copies key into C-allocated memory.
+        // key_bytes (Zeroizing) is dropped and zeroized after this line.
+        let certified_key = CertifiedKey::from_der(cached.cert_chain, &key_bytes).ok()?;
+
+        Some(Arc::new(certified_key))
+        // Arc<CertifiedKey> lives for the handshake, then drops.
+        // aws-lc-rs zeroizes C-allocated key via EVP_PKEY_free.
+    }
+}
+```
+
 2. **`ClientCertVerifier`** — uses the SNI value (from the `ClientHello`) to select the team-specific cert chain and validates the client's device cert against it. **[MTLS-087]** This is cert chain validation only — it verifies that the client's cert is signed by a CA trusted by the team. Client cert SAN verification is NOT performed during the handshake; it is a separate application-layer check performed only on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
+
+```rust
+impl ClientCertVerifier for TeamClientVerifier {
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        // Return empty — don't hint which CAs we trust
+        &[]
+    }
+
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        // SNI from the ClientHello, used to select team-specific trust store
+        server_name: Option<&ServerName<'_>>,
+    ) -> Result<ClientCertVerified, Error> {
+        let team_id = server_name
+            .and_then(|sn| sn.as_str())
+            .ok_or(Error::General("missing SNI".into()))?;
+
+        // Select the team-specific RootCertStore
+        let trust_store = self.team_trust_stores.read()
+            .get(team_id)
+            .ok_or(Error::General("unknown team".into()))?
+            .clone();
+
+        // Validate client cert chain against team-specific trust anchors
+        verify_cert_chain(end_entity, intermediates, &trust_store)?;
+
+        Ok(ClientCertVerified::assertion())
+    }
+}
+```
 
 After the handshake, the connection is bound to the team identified by SNI. Subsequent sync requests on the connection MUST include a team ID that matches the SNI-selected team. **[MTLS-058]** If a sync request's team ID does not match, the request MUST be rejected and the entire QUIC connection closed. **[MTLS-059]** Since each connection is bound to exactly one team via SNI (MTLS-060), a mismatched team ID indicates either a bug or a malicious peer — there is no legitimate reason for a peer to send a different team ID on a team-bound connection.
 
