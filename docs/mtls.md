@@ -166,7 +166,7 @@ When `set_cert` is called:
 5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the source of truth for the private key. **[MTLS-033]**
 6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain). **[MTLS-086]**
 7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
-8. Zeroize and drop private key bytes from daemon memory. **[MTLS-035]**
+8. The decrypted private key bytes from the source file MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped after constructing the `CertifiedKey`. **[MTLS-035]**
 
 If the keystore write or cert directory copy fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
@@ -182,9 +182,14 @@ A new `TlsPrivateKey<CS>` type MUST be added to aranya-core's crypto engine for 
 - `TlsKeyId` — typed ID for keystore lookup. The team ID MUST be usable directly (cast/reinterpret) as the `TlsKeyId` without derivation. **[MTLS-048]**
 - `Ciphertext::Tls` — new variant in the keystore's AEAD wrapping enum **[MTLS-049]**
 
-The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only when needed for TLS handshakes (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. After the handshake, the daemon MUST zeroize its copy per **[MTLS-035]**.
+The private key MUST be AEAD-encrypted at rest in the keystore. **[MTLS-032]** It is decrypted only when needed for TLS handshakes (**[MTLS-050]**) — during `set_cert` import, the key is read from the plaintext source file and does not need decryption. Decrypted key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped after constructing the key object. **[MTLS-035]**
 
-Private keys are loaded from the keystore on-demand per handshake. rustls borrows the key only for the duration of the handshake (to sign the TLS CertificateVerify message) and does not retain it after the handshake completes — TLS 1.3 session encryption uses ephemeral keys from the DH exchange, not the signing key. The `Arc<CertifiedKey>` returned by `ResolvesServerCert` is dropped when the handshake function returns. Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** aws-lc-rs zeroizes private key memory at the C library level when the `Arc` is dropped and the ref count reaches zero. ring explicitly does not zeroize key material on drop.
+Private keys are loaded from the keystore on-demand per handshake. Two copies of the key exist briefly:
+
+1. **Rust-allocated bytes** — the decrypted key bytes from the keystore. These MUST be wrapped in `Zeroizing` per **[MTLS-035]** and are automatically zeroized when dropped after constructing the `CertifiedKey`.
+2. **C-allocated key object** — aws-lc-rs parses the bytes and stores the key in its own C-allocated memory (`EVP_PKEY`). rustls borrows this key only for the duration of the handshake (to sign the TLS CertificateVerify message) and does not retain it after the handshake completes — TLS 1.3 session encryption uses ephemeral keys from the DH exchange, not the signing key. The `Arc<CertifiedKey>` returned by `ResolvesServerCert` is dropped when the handshake function returns. aws-lc-rs zeroizes the C-allocated key via `EVP_PKEY_free` when the ref count reaches zero.
+
+Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `rustls-ring`). **[MTLS-051]** ring explicitly does not zeroize key material on drop.
 
 ### Startup Flow
 
@@ -227,7 +232,7 @@ For inbound connections, the daemon uses a shared `ServerConfig`. **[MTLS-054]**
 
 The `ServerConfig` uses two custom implementations:
 
-1. **`ResolvesServerCert`** — uses the SNI value to select the correct team's device cert from a cached cert map and loads the private key from the keystore on-demand. **[MTLS-056]** If the SNI value does not match any configured team, the handshake MUST fail. **[MTLS-057]** The cert cache is updated by `set_cert` and cleared on team removal or cert expiry. Private keys are only in memory for the duration of the handshake and are zeroized after per **[MTLS-051]**.
+1. **`ResolvesServerCert`** — uses the SNI value to select the correct team's device cert from a cached cert map and loads the private key from the keystore on-demand. **[MTLS-056]** If the SNI value does not match any configured team, the handshake MUST fail. **[MTLS-057]** The cert cache is updated by `set_cert` and cleared on team removal or cert expiry. Private keys exist in memory only for the duration of the handshake — Rust bytes zeroized via `Zeroizing` after key construction per **[MTLS-035]**, C-allocated key zeroized via aws-lc-rs when the `Arc<CertifiedKey>` drops per **[MTLS-051]**.
 
 2. **`ClientCertVerifier`** — uses the SNI value (from the `ClientHello`) to select the team-specific cert chain and validates the client's device cert against it. **[MTLS-087]** This is cert chain validation only — it verifies that the client's cert is signed by a CA trusted by the team. Client cert SAN verification is NOT performed during the handshake; it is a separate application-layer check performed only on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
@@ -273,7 +278,7 @@ Outbound:
 2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
 3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**. Set SNI to team ID (base58) per **[MTLS-084]**.
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
-5. Zeroize the decrypted private key bytes used to build the `ClientConfig` per **[MTLS-035]**
+5. Decrypted key bytes (wrapped in `Zeroizing`) automatically zeroized after `CertifiedKey` construction per **[MTLS-035]**. aws-lc-rs zeroizes its C-allocated copy when the `Arc<CertifiedKey>` drops per **[MTLS-051]**.
 6. Store connection in the connection map keyed by (socket address, team ID)
 
 Inbound:
@@ -281,7 +286,7 @@ Inbound:
 2. `ResolvesServerCert` selects the team's device cert from cache and loads the private key from the keystore on-demand per **[MTLS-070]**
 3. `ClientCertVerifier` validates the client's device cert against the team's cert chain (selected via SNI) per **[MTLS-087]**
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
-5. Private key zeroized after handshake per **[MTLS-051]**
+5. `Arc<CertifiedKey>` dropped after handshake — aws-lc-rs zeroizes C-allocated key per **[MTLS-051]**. Rust-allocated bytes already zeroized via `Zeroizing` per **[MTLS-035]**.
 6. Bind the connection to the SNI-identified team
 7. Validate that sync requests match the bound team per **[MTLS-058]**
 
@@ -379,7 +384,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 | **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[MTLS-029]** On rotation, old connections are drained gracefully but force-closed after a configurable timeout. **[MTLS-092]** New streams on old connections are rejected. **[MTLS-091]** Commands on draining connections are still validated by the graph. | Cert revocation is not currently implemented. During the drain timeout, an attacker with the old cert could complete in-progress syncs but cannot open new streams. Impact is insignificant — individual sync requests are short-lived (milliseconds), and all commands are validated by the graph regardless. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[MTLS-060]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
 | **Private key exposure on disk** | Source key file read by unauthorized process before or after import. | Daemon does not delete source files — user is responsible per **[MTLS-036]**. Encrypted filesystem recommended. **[MTLS-015]** API docs recommend deleting private key after import. | If user does not delete source files, private key remains on disk. User's responsibility. |
-| **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[MTLS-035]** aws-lc-rs zeroizes key memory on free. **[MTLS-051]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[MTLS-068]** `ResolvesServerCert` loads private keys on-demand per handshake; only public certs cached. **[MTLS-070]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
+| **Private key exposure in memory** | Key material lingers in daemon memory. | Two copies exist briefly per handshake: (1) Rust bytes wrapped in `Zeroizing`, auto-zeroized after key construction **[MTLS-035]**; (2) aws-lc-rs C-allocated key, zeroized via `EVP_PKEY_free` when `Arc<CertifiedKey>` drops after handshake **[MTLS-051]**. Keys loaded on-demand from keystore per handshake; only public certs cached. **[MTLS-070]** | Key material exists only for the duration of the handshake, not the connection or daemon lifetime. |
 | **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[MTLS-032]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
 | **Expired cert** | Device cert expires, new connections fail. | Detected reactively during TLS handshake failures (idiomatic TLS behavior). New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally. | Existing connections established before expiry remain active. Proactive expiry scanning is planned (see [Future Work](#future-work)). |
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[MTLS-076, MTLS-066]** DNS results SHOULD be cached. **[MTLS-078]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
