@@ -78,10 +78,10 @@ flowchart TD
     E -->|team no longer needed| G[7. Remove team]
     G -->|delete certs, remove key<br/>from keystore, close connections| H[Done]
 
-    I[Daemon restart] -->|scan state_dir/certs,<br/>load keys from keystore| E
+    I[Daemon restart] -->|scan state_dir/certs,<br/>load public certs into caches| E
 
-    E -->|device cert expires| J[8. Expired cert cleanup]
-    J -->|purge certs, key, close connections.<br/>set_cert required to resume.| C
+    E -->|device cert expires| J[8. Expired cert]
+    J -->|new connections fail.<br/>set_cert required to resume.| C
 ```
 
 1. **Generate** — Create device cert, private key, and cert chain using `aranya-certgen` or external PKI.
@@ -89,11 +89,11 @@ flowchart TD
 3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`. User is responsible for deleting source files.
 4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
-6. **Rotate** — Call `set_cert` again with new files. All connections for the team are closed. New and incoming connections are rejected until rotation completes. Overwrites previous configuration.
+6. **Rotate** — Call `set_cert` again with new files. Old connections removed from map and drained. New connections use the new cert. Overwrites previous configuration.
 7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
-8. **Expired cert cleanup** — When a device cert expiry is detected during a TLS handshake failure, the daemon purges the team's certs, private key, and closes all connections for that team. `set_cert` is required to resume syncing.
+8. **Expired cert cleanup** — Detected reactively during TLS handshake failures. New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally.
 
-On **daemon restart**, certs are reloaded from `state_dir/certs/` and private keys are decrypted from the keystore. If the daemon cannot decrypt a team's `TlsPrivateKey` from the keystore, the daemon MUST abort startup. **[MTLS-081]**
+On **daemon restart**, public certs are reloaded from `state_dir/certs/` into the resolver and verifier caches. Private keys remain encrypted in the keystore and are loaded on-demand per handshake.
 
 ### Generation
 
@@ -160,7 +160,7 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 When `set_cert` is called:
 
 1. Read the cert and key files from the provided paths. **[MTLS-027]**
-2. Close all existing connections for this team. Reject new outgoing and incoming connections for this team until import completes. **[MTLS-085]**
+2. Remove all existing connections for this team from the connection map. **[MTLS-085]** New streams on old connections MUST be rejected. **[MTLS-091]** In-progress sync traffic on old connections is allowed to drain via quinn's stream reference counting. Old connections that have not drained within a configurable timeout MUST be force-closed. **[MTLS-092]**
 3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
 4. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
 5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the source of truth for the private key. **[MTLS-033]**
@@ -240,7 +240,7 @@ QUIC connections MUST be established per (peer, team) pair. **[MTLS-060]** Separ
 - TLS 1.3 uses ephemeral key exchange for session encryption, so certs affect authentication only, not confidentiality. However, using the wrong device cert could allow a device authenticated for Team A to sync Team B's graph if the cert chains are cross-trusted.
 - If a shared connection is used for multiple teams and one team's cert chain is compromised, a MiTM attacker could intercept sync traffic for all teams on that connection. Per-team connections contain the blast radius to the compromised team.
 
-The TLS handshake MUST validate both peers' device certs against the team's cert chain (mutual certificate validation). **[MTLS-061]** This refers to cert chain validation only — server SANs are verified by the client per **[MTLS-053]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
+The TLS handshake MUST validate both peers' device certs against the team's cert chain (mutual certificate validation). **[MTLS-061]** This refers to cert chain validation only — server SANs are verified by the client against the peer's actual address per **[MTLS-090]**, and client SANs are only verified on reverse connection reuse (see [Client SAN Verification](#client-san-verification)).
 
 A peer whose device cert is not trusted by a team's cert chain MUST NOT be able to establish a connection for that team. **[MTLS-062]** QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[MTLS-009]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[MTLS-010]** The daemon MUST log rejected connections including the IP address, port, and hostname (if available). **[MTLS-011]**
 
@@ -381,7 +381,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 | **Private key exposure on disk** | Source key file read by unauthorized process before or after import. | Daemon does not delete source files — user is responsible per **[MTLS-036]**. Encrypted filesystem recommended. **[MTLS-015]** API docs recommend deleting private key after import. | If user does not delete source files, private key remains on disk. User's responsibility. |
 | **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[MTLS-035]** aws-lc-rs zeroizes key memory on free. **[MTLS-051]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[MTLS-068]** `ResolvesServerCert` loads private keys on-demand per handshake; only public certs cached. **[MTLS-070]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
 | **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[MTLS-032]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
-| **Expired cert** | Device cert expires, connections fail. | Daemon detects expiry during TLS handshake, purges certs and key for the team, closes connections. **[MTLS-088]** `set_cert` required to resume. | No proactive expiry monitoring — expiry detected reactively on handshake failure. |
+| **Expired cert** | Device cert expires, new connections fail. | Detected reactively during TLS handshake failures (idiomatic TLS behavior). New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally. | Existing connections established before expiry remain active. Proactive expiry scanning is planned (see [Future Work](#future-work)). |
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[MTLS-076, MTLS-066]** DNS results SHOULD be cached. **[MTLS-078]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
 | **NAT prevents connectivity** | Peers behind NAT cannot establish direct connections. | Multiple strategies: NAT IP in SANs, redundant outbound connections, relay peer. **[MTLS-079]** | QUIC does not provide NAT traversal. At least one peer needs a routable address. |
 | **Replay attack** | Attacker replays captured TLS handshake. | TLS 1.3 handshake uses ephemeral keys — replayed handshakes fail. **[MTLS-001]** | None. |
