@@ -4,6 +4,9 @@ Aranya currently requires synchronous exchange of information to onboard a new d
 
 The system uses an 11 word phrase to exchange entropy used to derive cryptographic material. The privileged device uses the derived key to encrypt an onboarding bundle. The encrypted onboarding bundle is then stored in the onboarding server, and a one time key is added to the graph by the privileged device. The new device uses the 11 words (exchanged out of band) to derive the keys and information required to fetch the onboarding bundle and decrypt it. The new device then uses the single-use onboarding key posted to graph to self join the team.
 
+## Conventions
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
 ## Architecture
 
@@ -22,7 +25,7 @@ The `store` endpoint is authenticated by validating that the certificate present
 3. The ciphertext of the onboarding bundle
 4. An expiration time after which the onboarding bundle will no longer be available for fetching
 
-The onboarding server then stores this data for use with the `fetch` endpoint. After the expiration time has elapsed, the server MUST delete the stored bundle and reject any fetch requests for that mailbox ID.
+The onboarding server then stores this data for use with the `fetch` endpoint. SRV-001 After the expiration time has elapsed, the server MUST delete the stored bundle and reject any fetch requests for that mailbox ID.
 
 
 #### `fetch`
@@ -32,16 +35,21 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 1. The mailbox ID
 2. The authenticator
 
-#### **Onboarding Server requirements**
+#### Onboarding Server Requirements
 
-- Onboarding Server MUST authenticate users using a certificate when handling requests on the `store` endpoint
-- Onboarding Server MUST validate the authenticator by calculating HMAC-SHA-512(authenticator, mailboxID) and comparing it to the value received from Admin when handing requests on the `fetch` endpoint
-- Onboarding Server MUST store the mailbox ID, HMAC of authenticator, ciphertext, and expiration time.
-- Onboarding Server MUST reject fetch requests for bundles whose expiration time has elapsed and delete the expired bundle.
-- Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, ciphertext, and expiration time
-- Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
+SRV-002 Onboarding Server MUST authenticate users using a certificate when handling requests on the `store` endpoint.
 
-- Onboarding Server MUST reject store requests with a duplicate mailbox ID
+SRV-003 Onboarding Server MUST validate the authenticator by calculating HMAC(authenticator, mailboxID) and comparing it to the value received from Admin when handling requests on the `fetch` endpoint.
+
+SRV-004 Onboarding Server MUST store the mailbox ID, HMAC of authenticator, ciphertext, and expiration time.
+
+SRV-005 Onboarding Server MUST reject fetch requests for bundles whose expiration time has elapsed and delete the expired bundle.
+
+SRV-006 Onboarding Server MUST expose a `store` endpoint that accepts a mailbox ID, the authenticator hash, ciphertext, and expiration time.
+
+SRV-007 Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
+
+SRV-008 Onboarding Server MUST reject store requests with a duplicate mailbox ID.
 
 
 ### Onboarding Client
@@ -49,45 +57,73 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 The onboarding client provides an easy way to interact with the onboarding server. It provides the admin the ability to easily handle the required cryptography and store the onboarding bundle on the server. It also allows the new device to fetch the onboarding bundle from the server.
 
 
-#### **Onboarding Client requirements**
+#### Onboarding Client Requirements
 
-- Onboarding Client MUST be able to complete both the store and fetch procedure
+CLT-001 Onboarding Client MUST be able to complete both the store and fetch procedure.
 
-**Onboarding Client store requirements**
+#### Onboarding Client Store Requirements
 
-- Onboarding Client MUST be able to generate the 11 words for the admin
-- Onboarding Client MUST create a one time symmetric join key
-- Onboarding Client MUST create a device certificate signed by the root CA if custom PKI is not in use
-- Onboarding Client MUST use the provided input certificate if custom PKI is enabled
-- Onboarding Client MUST optionally accept a certificate to use if custom PKI is enabled
-- Onboarding Client MUST use a CSPRNG to create the 11 word phrase
-- Onboarding Client MUST use at least 128 bits of entropy to generate the phrase
-- Onboarding Client MUST validate 11 words exist in the phrase
-- Onboarding Client MUST use the EFF large wordlist
-- Onboarding Client MUST use diceware to generate the entropy for the 11 word phrase.
-- Onboarding Client MUST derive a mailbox ID using HKDF from the 11 words
-- Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF from the 11 words
-- Onboarding Client MUST derive an authenticator using HKDF from the 11 words
-- Onboarding Client MUST encrypt the new device certificate and private key using the bundle key
-- Onboarding Client MUST encrypt the one-time-use join keypair using the bundle key
-- Onboarding Client MUST encrypt the pairing/syncing information using the bundle key 
-- Onboarding Client MUST encrypt the team ID using the bundle key
-- Onboarding Client MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key
-- Onboarding Client MUST calculate the HMAC-SHA-512(key=authenticator, value=mailbox ID)
-- Onboarding Client MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server
+STR-001 Onboarding Client MUST be able to generate the 11 words for the admin.
 
-**Onboarding Client fetch requirements**
+STR-002 Onboarding Client MUST create a one time symmetric join key.
 
-- Onboarding Client MUST take the 11 words as input 
-- Onboarding Client MUST take the new device keybundle as input
-- Onboarding Client MUST derive the mailbox ID using HKDF from the 11 words
-- Onboarding Client MUST derive the bundle key using HKDF from the 11 words
-- Onboarding Client MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
-- Onboarding Client MUST decrypt the new device certificate and private key using the bundle key
-- Onboarding Client MUST decrypt the one-time-use join keypair using the bundle key
-- Onboarding Client MUST decrypt the pairing/syncing information using the bundle key 
-- Onboarding Client MUST decrypt the team ID using the bundle key
-- Onboarding Client MUST publish the SelfJoinTeam command using the one-time join key.
+STR-003 Onboarding Client MUST create a device certificate signed by the root CA if custom PKI is not in use.
+
+STR-004 Onboarding Client MUST use the provided input certificate if custom PKI is enabled.
+
+STR-005 Onboarding Client MUST optionally accept a certificate to use if custom PKI is enabled.
+
+STR-006 Onboarding Client MUST use a CSPRNG to create the 11 word phrase.
+
+STR-007 Onboarding Client MUST use at least 128 bits of entropy to generate the phrase.
+
+STR-008 Onboarding Client MUST validate 11 words exist in the phrase.
+
+STR-009 Onboarding Client MUST use the EFF large wordlist.
+
+STR-010 Onboarding Client MUST use diceware to generate the entropy for the 11 word phrase.
+
+STR-011 Onboarding Client MUST derive a mailbox ID using HKDF from the 11 words.
+
+STR-012 Onboarding Client MUST derive a symmetric encryption key (the bundle key) for encrypting the onboarding bundle using HKDF from the 11 words.
+
+STR-013 Onboarding Client MUST derive an authenticator using HKDF from the 11 words.
+
+STR-014 Onboarding Client MUST encrypt the new device certificate and private key using the bundle key.
+
+STR-015 Onboarding Client MUST encrypt the one-time-use join keypair using the bundle key.
+
+STR-016 Onboarding Client MUST encrypt the pairing/syncing information using the bundle key.
+
+STR-017 Onboarding Client MUST encrypt the team ID using the bundle key.
+
+STR-018 Onboarding Client MUST publish an AllowSelfJoin command on the graph with the public key portion of the one-time-use self join key.
+
+STR-019 Onboarding Client MUST calculate the HMAC(key=authenticator, value=mailbox ID).
+
+STR-020 Onboarding Client MUST send the onboarding bundle, mailbox ID, and HMAC value to the onboarding server.
+
+#### Onboarding Client Fetch Requirements
+
+FTH-001 Onboarding Client MUST take the 11 words as input.
+
+FTH-002 Onboarding Client MUST take the new device keybundle as input.
+
+FTH-003 Onboarding Client MUST derive the mailbox ID using HKDF from the 11 words.
+
+FTH-004 Onboarding Client MUST derive the bundle key using HKDF from the 11 words.
+
+FTH-005 Onboarding Client MUST fetch the encrypted bundle from the onboarding server using the mailbox ID and the authenticator.
+
+FTH-006 Onboarding Client MUST decrypt the new device certificate and private key using the bundle key.
+
+FTH-007 Onboarding Client MUST decrypt the one-time-use join keypair using the bundle key.
+
+FTH-008 Onboarding Client MUST decrypt the pairing/syncing information using the bundle key.
+
+FTH-009 Onboarding Client MUST decrypt the team ID using the bundle key.
+
+FTH-010 Onboarding Client MUST publish the SelfJoinTeam command using the one-time join key.
 
 
 ## Onboarding Sequence
@@ -98,7 +134,7 @@ Actors:
 - Onboarding Client - a standalone client used to load a temporary keystore containing the self join key for the initial SelfJoinTeam action/command.
 - New Device - the device that is being onboarded to the team.
 
-All cryptographic operations listed here use a CipherSuite that is configurable at compile time. The onboarding client and onboarding server MUST use the same CipherSuite.
+All cryptographic operations listed here use a CipherSuite that is configurable at compile time. SEQ-001 The onboarding client and onboarding server MUST use the same CipherSuite.
 
 ### Definitions
 
@@ -174,9 +210,9 @@ sequenceDiagram
 6. New device publishes SelfJoinTeam command
 
 
-**Admin Requirements**
+#### Admin Requirements
 
-- Admin MUST send 11 word phrase to new device out of band
+ADM-001 Admin MUST send 11 word phrase to new device out of band.
 
 ## Algorithms used
 
@@ -292,7 +328,7 @@ function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
 
 ## Diceware
 
-Diceware is used to generate a secure passphrase using a wordlist. The wordlist SHOULD be the EEF Large wordlist. The diceware encoding will use 11 words to encode 128bits of information.
+Diceware is used to generate a secure passphrase using a wordlist. DCW-001 The wordlist SHOULD be the EEF Large wordlist. The diceware encoding will use 11 words to encode 128bits of information.
 
 https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
 
