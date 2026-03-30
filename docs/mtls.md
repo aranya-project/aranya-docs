@@ -276,7 +276,7 @@ Each connection MUST track: **[MTLS-067]**
 server_config: Arc<ServerConfig>
 ```
 
-`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[MTLS-068]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[MTLS-063]**, new connections are infrequent and the keystore read cost per connection is negligible.
+`ClientConfig` for outbound connections SHOULD be created on-demand when a new connection is needed. **[MTLS-068]** `connect_with()` takes ownership of the `ClientConfig`, so the daemon does not retain a copy after initiating the connection. This minimizes the window during which the private key is held in daemon memory. Since connections are long-lived and reused per **[MTLS-063]**, new connections are infrequent and the keystore read cost per connection is negligible. If a high rate of new connections becomes a performance concern, private key caching with a TTL is planned (see [Future Work](#future-work)).
 
 The shared `ServerConfig` MUST remain in memory to accept inbound connections. **[MTLS-069]** The `ResolvesServerCert` caches public certs (device certs + cert chains) but loads private keys from the keystore on-demand per handshake. **[MTLS-070]** This avoids holding private keys in memory between handshakes. The resolver MUST support concurrent handshakes.
 
