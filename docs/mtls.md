@@ -206,15 +206,9 @@ Note: cert rotation does NOT revoke the old cert. If an attacker has a copy of t
 
 Cert expiry is detected reactively during TLS handshake failures. This is idiomatic TLS behavior — TLS validates certs only during the handshake, not on established connections. QUIC connections established before cert expiry continue working because TLS session keys are independent of cert validity. TLS 1.3 does not support renegotiation or mid-connection cert re-validation.
 
-When the daemon detects a device cert has expired (via a TLS handshake failure), it MUST: **[MTLS-088]**
-1. Close all existing connections for the team.
-2. Delete the `state_dir/certs/<team_id>/` directory and its contents.
-3. Remove the `TlsPrivateKey` from the keystore.
-4. Remove the team from the resolver and verifier caches.
+When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not actively closed on expiry detection — they continue until they drop naturally or the cert is rotated via `set_cert`.
 
-The team remains configured but cannot sync until `set_cert` is called with a valid cert. This is a full purge — `set_cert` requires the complete set of parameters (cert_chain, device_cert, device_key).
-
-Proactive cert expiry scanning (detecting and closing connections before a handshake failure) is planned as a future enhancement. See [Future Work](#future-work).
+See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
 ### Team Removal
 
@@ -417,6 +411,6 @@ Existing Aranya deployments using PSKs will not be compatible with newer Aranya 
 - **Cert revocation** — check certificate revocation status (CRL/OCSP) during TLS handshake validation.
 - **System root certs** — allow using the operating system's root certificate store.
 - **Cert chain validation at configuration time** — verify that the device cert is signed by a CA in the cert chain when `set_cert` is called, rather than failing later during TLS authentication.
-- **Proactive cert expiry scanning** — periodically scan configured certs for approaching or past expiration, close affected connections, and warn operators before handshakes start failing. Currently, cert expiry is detected reactively during TLS handshake failures, which is idiomatic TLS behavior (TLS 1.3 does not re-validate certs on established connections). Proactive scanning would improve operational visibility for long-lived QUIC connections where handshakes are infrequent.
+- **Proactive cert expiry scanning** — periodically scan configured device certs for expiration. Remove expired certs (preventing new connections), close existing connections that used expired certs, purge the team's certs and private key from the keystore, and require `set_cert` to resume. Currently, cert expiry is detected reactively during TLS handshake failures (idiomatic TLS behavior). Proactive scanning would ensure expired certs are not used on long-lived QUIC connections that were established before expiry.
 - **Private key caching with TTL** — cache decrypted private keys in memory for a short TTL to amortize keystore reads across burst connections. Key is zeroized when the TTL expires with no new handshakes. Currently, keys are loaded from the keystore on-demand per handshake.
 - **mTLS wrapper library** — implement a wrapper around quinn that encapsulates all mTLS complexity (cert caching, on-demand keystore reads, SNI handling, `ResolvesServerCert`, `ClientCertVerifier`, SAN verification, connection tracking). The daemon's sync manager would use a simple API (`connect`, `accept`, `set_cert`, `remove_team`) without knowledge of rustls configs or keystore internals. This would centralize security invariants in a testable, reusable library.
