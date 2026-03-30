@@ -287,7 +287,7 @@ Outbound:
 2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
 3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**. Set SNI to team ID (base58) per **[MTLS-084]**.
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
-5. Decrypted key bytes (wrapped in `Zeroizing`) automatically zeroized after `CertifiedKey` construction per **[MTLS-035]**. aws-lc-rs zeroizes its C-allocated copy when the `Arc<CertifiedKey>` drops per **[MTLS-051]**.
+5. After the TLS handshake completes, the private key is zeroized. The Rust-allocated key bytes (wrapped in `Zeroizing`) are zeroized after `CertifiedKey` construction per **[MTLS-035]**. The C-allocated key inside aws-lc-rs is zeroized when the `Arc<CertifiedKey>` drops after the handshake per **[MTLS-051]**.
 6. Store connection in the connection map keyed by (socket address, team ID)
 
 Inbound:
