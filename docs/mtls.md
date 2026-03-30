@@ -179,45 +179,6 @@ if let Some(conn) = conn {
 
 If the keystore write or cert directory copy fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
-```rust
-async fn set_cert(
-    team_id: TeamId,
-    cert_chain: &Path,    // directory of CA certs
-    device_cert: &Path,   // leaf device cert file
-    device_key: &Path,    // private key file
-) -> Result<()> {
-    let _lock = self.team_locks.lock(team_id).await; // serialize per team
-
-    // 1. Read files. Private key wrapped in Zeroizing.
-    let chain_certs = load_all_certs_from_dir(cert_chain)?;
-    let device_cert = load_cert(device_cert)?;
-    let key_bytes: Zeroizing<Vec<u8>> = Zeroizing::new(fs::read(device_key)?);
-
-    // 2. Drain old connections.
-    for conn in self.connection_map.remove_all(team_id) {
-        tokio::spawn(async move {
-            tokio::time::sleep(drain_timeout).await;
-            conn.close(0u32.into(), b"cert reconfigured");
-        });
-    }
-
-    // 3-4. Copy certs to state_dir (rollback on failure).
-    let state_dir = self.state_dir.join("certs").join(team_id.to_base58());
-    copy_dir(&chain_certs, state_dir.join("chain"))?;
-    copy_file(&device_cert, state_dir.join("device.crt.pem"))?;
-
-    // 5. Store private key in keystore (rollback on failure).
-    self.keystore.store_tls_key(team_id, &key_bytes)?;
-    // key_bytes dropped here → Zeroizing zeroizes the Rust-allocated bytes
-
-    // 6-7. Update resolver cert cache and verifier trust store (public certs only).
-    self.cert_resolver.update(team_id, &device_cert, &chain_certs);
-    self.client_verifier.update_trust_store(team_id, &chain_certs);
-
-    Ok(())
-}
-```
-
 The daemon MUST NOT delete the source cert or private key files. **[MTLS-036]** The user is responsible for the lifecycle of their cert/key files. API documentation SHOULD strongly recommend deleting the private key file after it has been successfully imported into the daemon. If the user does not delete the source files and the private key is compromised, that is the user's responsibility.
 
 Source cert/key files SHOULD be protected with an encrypted filesystem and restricted file permissions. **[MTLS-015]**
@@ -247,24 +208,6 @@ When the daemon starts:
 2. For each team: load the device cert and cert chain from `state_dir/certs/<team_id>/`. **[MTLS-040]**
 3. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores with the loaded public certs. **[MTLS-042]** Private keys remain encrypted in the keystore and are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**.
 
-```rust
-fn startup(&mut self) -> Result<()> {
-    for entry in fs::read_dir(self.state_dir.join("certs"))? {
-        let team_dir = entry?.path();
-        let team_id = TeamId::from_base58(team_dir.file_name())?;
-
-        // Load public certs only — no private key decryption at startup.
-        let device_cert = load_cert(team_dir.join("device.crt.pem"))?;
-        let chain_certs = load_all_certs_from_dir(team_dir.join("chain"))?;
-
-        // Populate caches with public certs.
-        self.cert_resolver.update(team_id, &device_cert, &chain_certs);
-        self.client_verifier.update_trust_store(team_id, &chain_certs);
-    }
-    Ok(())
-}
-```
-
 ### Cert Reconfiguration
 
 Call `set_cert` again with new file paths per **[MTLS-029]**. This reconfigures which cert the device presents — it does NOT revoke the old cert. Other devices that still have a copy of the old cert can continue using it until it expires. Cert revocation (CRL/OCSP) is required to fully invalidate an old cert (see [Future Work](#future-work)).
@@ -285,31 +228,6 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
 3. Remove the team from the resolver and verifier caches. **[MTLS-045]**
 4. Remove connections for this team from the connection map and allow them to drain, same as cert reconfiguration per **[MTLS-085, MTLS-091, MTLS-092]**. **[MTLS-046]**
-
-```rust
-async fn remove_team(&mut self, team_id: TeamId) -> Result<()> {
-    // 1. Delete certs from state_dir.
-    let state_dir = self.state_dir.join("certs").join(team_id.to_base58());
-    fs::remove_dir_all(&state_dir)?;
-
-    // 2. Remove private key from keystore.
-    self.keystore.remove_tls_key(team_id)?;
-
-    // 3. Remove from resolver and verifier caches.
-    self.cert_resolver.remove(team_id);
-    self.client_verifier.remove_trust_store(team_id);
-
-    // 4. Drain old connections (same as cert reconfiguration).
-    for conn in self.connection_map.remove_all(team_id) {
-        tokio::spawn(async move {
-            tokio::time::sleep(drain_timeout).await;
-            conn.close(0u32.into(), b"team removed");
-        });
-    }
-
-    Ok(())
-}
-```
 
 ## TLS Configuration Architecture
 
