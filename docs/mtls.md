@@ -297,7 +297,7 @@ Inbound:
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
 5. `Arc<CertifiedKey>` dropped after handshake — aws-lc-rs zeroizes C-allocated key per **[MTLS-051]**. Rust-allocated bytes already zeroized via `Zeroizing` per **[MTLS-035]**.
 6. Store the connection in the connection map keyed by (peer address, team ID from SNI)
-7. Validate that sync requests match the bound team per **[MTLS-058]**
+7. Validate that the team ID in sync requests matches the team ID of the connection in the connection map per **[MTLS-058]**
 
 ## Non-Idiomatic TLS Design Decisions
 
