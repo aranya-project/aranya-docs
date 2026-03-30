@@ -196,7 +196,7 @@ When the daemon starts:
 
 ### Cert Rotation
 
-Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon closes all connections for the team, rejects new connections until complete, overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches.
+Call `set_cert` again with new file paths per **[MTLS-029]**. The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. Existing connections for the team are removed from the connection map so new sync requests will create fresh connections using the new cert. **[MTLS-085]** In-progress sync requests/responses on old connections are allowed to complete — the old connection objects continue draining outside the connection map until their traffic finishes or they time out. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections also use the new cert.
 
 Note: cert rotation does NOT revoke the old cert. If an attacker has a copy of the old cert, it remains valid and could be used for future sync connections until it expires. Cert rotation only changes which cert this device presents — it does not prevent the old cert from being used by others. To fully invalidate an old cert, cert revocation (CRL/OCSP) is required (see [Future Work](#future-work)).
 
