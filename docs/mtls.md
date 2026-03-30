@@ -283,7 +283,7 @@ The shared `ServerConfig` MUST remain in memory to accept inbound connections. *
 ### Connection Flow
 
 Outbound:
-1. Check for an existing healthy connection to (peer, team) — if found, reuse it per **[MTLS-063]**
+1. Check the connection map for an existing healthy connection to (peer, team) — if found, reuse it per **[MTLS-063]**
 2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
 3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**. Set SNI to team ID (base58) per **[MTLS-084]**.
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
