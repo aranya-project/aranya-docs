@@ -159,14 +159,13 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 
 When `set_cert` is called:
 
-1. Read the cert and key files from the provided paths. **[MTLS-027]**
+1. Read the cert and key files from the provided paths. **[MTLS-027]** The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
 2. Remove all existing connections for this team from the connection map. **[MTLS-085]** New streams on old connections MUST be rejected. **[MTLS-091]** In-progress sync traffic on old connections is allowed to drain via quinn's stream reference counting. Old connections that have not drained within a configurable timeout MUST be force-closed. **[MTLS-092]**
 3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
 4. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
-5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the source of truth for the private key. **[MTLS-033]**
-6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain). **[MTLS-086]**
+5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the sole source of truth for the private key — the plaintext key bytes are never passed to rustls during import. **[MTLS-033]**
+6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain only, no private key). **[MTLS-086]**
 7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
-8. The decrypted private key bytes from the source file MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped after constructing the `CertifiedKey`. **[MTLS-035]**
 
 If the keystore write or cert directory copy fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
