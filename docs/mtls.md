@@ -139,7 +139,7 @@ client.create_team(cfg).await?;
 set_cert(team_id, cert_chain, device_cert, device_key)
 ```
 
-Both paths use the same import flow. The standalone `set_cert` is required for cert rotation since `create_team`/`add_team` cannot be called again for an existing team. **[MTLS-026]**
+Both paths use the same import flow. The standalone `set_cert` is required for cert reconfiguration since `create_team`/`add_team` cannot be called again for an existing team. **[MTLS-026]**
 
 Parameters:
 - `team_id` — the team to configure mTLS certificates for (implicit when called via builder)
@@ -167,7 +167,7 @@ if let Some(conn) = conn {
     tokio::spawn(async move {
         tokio::time::sleep(drain_timeout).await;
         // No-op if connection already closed naturally.
-        conn.close(0u32.into(), b"cert rotated");
+        conn.close(0u32.into(), b"cert reconfigured");
     });
 }
 ```
@@ -218,7 +218,7 @@ The daemon overwrites cert files, replaces the keystore key, and updates the res
 
 Cert expiry is detected reactively during TLS handshake failures. This is idiomatic TLS behavior — TLS validates certs only during the handshake, not on established connections. QUIC connections established before cert expiry continue working because TLS session keys are independent of cert validity. TLS 1.3 does not support renegotiation or mid-connection cert re-validation.
 
-When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not actively closed on expiry detection — they continue until they drop naturally or the cert is rotated via `set_cert`.
+When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not actively closed on expiry detection — they continue until they drop naturally or the cert is reconfigured via `set_cert`.
 
 See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
@@ -382,7 +382,7 @@ fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
 
 This threat model covers threats at the mTLS transport layer. For sync protocol-level threats (message flooding, stale data replay, oversized messages, DeviceId discovery) see the [sync threat model](sync-threat-model.md).
 
-Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Compromised certs should be rotated via `set_cert`. See [Future Work](#future-work).
+Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Compromised certs should be reconfigured via `set_cert`. See [Future Work](#future-work).
 
 | Threat | Description | Mitigation | Residual Risk |
 |---|---|---|---|
@@ -390,7 +390,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 | **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[MTLS-053]** Cert chain validation ensures the cert is signed by a trusted CA. **[MTLS-061]** | None if cert chain and DNS are not compromised. |
 | **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | `ClientCertVerifier` validates the client's device cert against the team's cert chain (selected via SNI). **[MTLS-087]** SNI binds the connection to a specific team. **[MTLS-055, MTLS-056]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
 | **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Per-SNI `ClientCertVerifier` validates client cert against team-specific cert chain. **[MTLS-087]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the handshake succeeds but sync request validation catches mismatches. |
-| **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[MTLS-029]** On rotation, old connections are drained gracefully but force-closed after a configurable timeout. **[MTLS-092]** New streams on old connections are rejected. **[MTLS-091]** Commands on draining connections are still validated by the graph. | Cert revocation is not currently implemented. During the drain timeout, an attacker with the old cert could complete in-progress syncs but cannot open new streams. Impact is insignificant — individual sync requests are short-lived (milliseconds), and all commands are validated by the graph regardless. See [Future Work](#future-work). |
+| **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is reconfigured via `set_cert`. **[MTLS-029]** On reconfiguration, old connections are drained gracefully but force-closed after a configurable timeout. **[MTLS-092]** New streams on old connections are rejected. **[MTLS-091]** Commands on draining connections are still validated by the graph. | Cert revocation is not currently implemented. During the drain timeout, an attacker with the old cert could complete in-progress syncs but cannot open new streams. Impact is insignificant — individual sync requests are short-lived (milliseconds), and all commands are validated by the graph regardless. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[MTLS-060]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
 | **Private key exposure on disk** | Source key file read by unauthorized process before or after import. | Daemon does not delete source files — user is responsible per **[MTLS-036]**. Encrypted filesystem recommended. **[MTLS-015]** API docs recommend deleting private key after import. | If user does not delete source files, private key remains on disk. User's responsibility. |
 | **Private key exposure in memory** | Key material lingers in daemon memory. | Two copies exist briefly per handshake: (1) Rust bytes wrapped in `Zeroizing`, auto-zeroized after key construction **[MTLS-035]**; (2) aws-lc-rs C-allocated key, zeroized via `EVP_PKEY_free` when `Arc<CertifiedKey>` drops after handshake **[MTLS-051]**. Keys loaded on-demand from keystore per handshake; only public certs cached. **[MTLS-070]** | Key material exists only for the duration of the handshake, not the connection or daemon lifetime. |
