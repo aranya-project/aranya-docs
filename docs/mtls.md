@@ -223,7 +223,7 @@ The team remains configured but cannot sync until `set_cert` is called with a va
 
 ### Outbound Connections
 
-For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The TLS handshake validates the server's device cert against the team's cert chain and verifies server SANs per **[MTLS-053]**.
+For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The `ClientConfig` MUST use a custom `ServerCertVerifier` that validates the server's device cert against the team's cert chain and verifies server SANs against the peer's actual address (not the SNI value) per **[MTLS-090]**.
 
 ### Inbound Connections
 
@@ -289,11 +289,25 @@ Inbound:
 6. Bind the connection to the SNI-identified team
 7. Validate that sync requests match the bound team per **[MTLS-058]**
 
+## Non-Idiomatic TLS Design Decisions
+
+The following table documents areas where this design intentionally deviates from standard TLS/mTLS conventions. These are called out explicitly to aid security auditing.
+
+| Area | Standard TLS | This Spec | Rationale |
+|---|---|---|---|
+| **SNI usage** | SNI contains the server's hostname for virtual hosting and SAN verification. | SNI contains the team ID (base58) for team-based cert selection. Not a valid hostname. | Each team has its own certs and trust chain. SNI is the only signal available during the TLS handshake to identify which team's certs to use. |
+| **Server SAN verification** | Client verifies server cert SANs match the SNI hostname. | Client uses a custom `ServerCertVerifier` that verifies server cert SANs against the **peer's actual address** (IP or resolved DNS), not the SNI value. **[MTLS-090]** | SNI contains the team ID, not the server's address. Standard SAN verification would fail because no SAN matches a base58 team ID. The peer's actual address is verified instead. |
+| **Client cert chain validation** | `ClientCertVerifier` validates against a single global trust store. | Custom `ClientCertVerifier` uses SNI from the `ClientHello` to select a **per-team trust store** for validation. **[MTLS-087]** | Different teams may use different CAs. The server must validate the client's cert against the correct team's cert chain, not a combined trust store. |
+| **Client cert SAN verification** | Not performed (TLS does not require it). | Performed at the application layer, but only on reverse connection reuse. **[MTLS-072]** Checks SANs against the peer's connecting IP. | Ensures the inbound peer's address matches their cert before reusing the connection in the reverse direction. Graceful fallback if SANs don't match. |
+| **Cert chain as trust anchors** | Only root CA certs are trust anchors. Intermediate CA certs are sent in the cert chain during the handshake. | Both root and intermediate CA certs are loaded as trust anchors in rustls's `RootCertStore`. Device cert is leaf-only. | Simplifies cert management — one directory of CA certs per team. rustls does not differentiate between root and intermediate CAs in its trust store. Avoids needing to bundle intermediates with the device cert. |
+| **On-demand private key loading** | Private keys are loaded into `ClientConfig`/`ServerConfig` at startup and held in memory. | Private keys loaded from an AEAD-encrypted keystore on-demand per TLS handshake, then zeroized. Public certs cached. **[MTLS-070, MTLS-068]** | Minimizes private key exposure window. Keys are only in daemon memory during handshake setup, not for the daemon's lifetime. |
+| **Connection-per-team** | One connection between two peers, multiplexing via QUIC streams. | One connection per (peer, team) pair. **[MTLS-060]** | Each team requires different certs and trust chains. Prevents cross-team cert mismatch, limits blast radius of CA compromise. |
+
 ## SAN Verification
 
 ### Server SAN Verification
 
-Server SANs MUST always be verified (standard TLS 1.3 behavior) and MUST NOT be disabled. **[MTLS-053]** The server's certificate MUST contain a SAN matching the hostname or IP the client is connecting to.
+Server SANs MUST always be verified and MUST NOT be disabled. **[MTLS-053]** Because SNI contains the team ID (not the server's address), a custom `ServerCertVerifier` MUST verify server cert SANs against the **peer's actual IP address or resolved DNS hostname**, not the SNI value. **[MTLS-090]** The server's certificate MUST contain a SAN matching the address the client is connecting to.
 
 For deployments with dynamic server IPs, DNS SANs SHOULD be used that resolve to the server's current IP address. **[MTLS-071]** Update DNS records when the IP changes.
 
@@ -367,14 +381,14 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 | **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Per-SNI `ClientCertVerifier` validates client cert against team-specific cert chain. **[MTLS-087]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the handshake succeeds but sync request validation catches mismatches. |
 | **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is rotated via `set_cert`. **[MTLS-029]** | Cert revocation is not currently implemented. Device SHOULD be removed from the Aranya team immediately. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[MTLS-060]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
-| **Private key exposure on disk** | Source key file read by unauthorized process before import. | Source files deleted after import. **[MTLS-036]** Encrypted filesystem recommended. **[MTLS-015]** | File deletion is not secure erasure on SSD/flash. Encrypted filesystem mitigates this. |
+| **Private key exposure on disk** | Source key file read by unauthorized process before or after import. | Daemon does not delete source files — user is responsible per **[MTLS-036]**. Encrypted filesystem recommended. **[MTLS-015]** API docs recommend deleting private key after import. | If user does not delete source files, private key remains on disk. User's responsibility. |
 | **Private key exposure in memory** | Key material lingers in daemon memory. | Daemon zeroizes key bytes after handing to rustls. **[MTLS-035]** aws-lc-rs zeroizes key memory on free. **[MTLS-051]** `ClientConfig` ownership transferred to quinn via `connect_with()`. **[MTLS-068]** `ResolvesServerCert` loads private keys on-demand per handshake; only public certs cached. **[MTLS-070]** | Key material held in rustls/aws-lc-rs for the lifetime of each connection only. |
 | **Private key exposure at rest** | Keystore compromised on disk. | Private key AEAD-encrypted in the keystore. **[MTLS-032]** | Attacker who compromises the keystore encryption key can decrypt all stored private keys. |
 | **Expired cert** | Device cert expires, connections fail. | Daemon detects expiry during TLS handshake, purges certs and key for the team, closes connections. **[MTLS-088]** `set_cert` required to resume. | No proactive expiry monitoring — expiry detected reactively on handshake failure. |
 | **DNS spoofing for SAN verification** | Attacker manipulates DNS to pass SAN checks. | Client SAN verification is only used for reverse connection reuse — failure falls back to new outbound connection, not an error. **[MTLS-076, MTLS-066]** DNS results SHOULD be cached. **[MTLS-078]** | Attacker controlling DNS could pass client SAN check on inbound connection. Impact limited to reverse reuse of a single connection. Server SAN verification is more critical and depends on DNS integrity. |
 | **NAT prevents connectivity** | Peers behind NAT cannot establish direct connections. | Multiple strategies: NAT IP in SANs, redundant outbound connections, relay peer. **[MTLS-079]** | QUIC does not provide NAT traversal. At least one peer needs a routable address. |
 | **Replay attack** | Attacker replays captured TLS handshake. | TLS 1.3 handshake uses ephemeral keys — replayed handshakes fail. **[MTLS-001]** | None. |
-| **Connection exhaustion** | Malicious authorized device opens many connections to exhaust resources. | Per-team connections limit one connection per (peer, team) pair. **[MTLS-060]** | Under CA compromise, attacker can mint many unique certs, each establishing a separate connection. |
+| **Connection exhaustion** | Malicious authorized device opens many connections to exhaust resources. | Per-team connections limit one connection per (peer, team) pair. **[MTLS-060]** SNI must match a valid team. **[MTLS-057]** | Attacker is limited to one connection per configured team. |
 | **Sync flooding** | Malicious authorized device sends excessive sync requests over an established connection. | Out of scope for mTLS spec. See sync threat model (DOS-1). | Rate limiting should be applied per certificate identity at the sync protocol layer. |
 | **Unauthorized sync participation** | External observer initiates sync without valid credentials. | mTLS handshake rejects peers without a device cert trusted by the team's cert chain. **[MTLS-061, MTLS-062]** | None. |
 | **SNI spoofing** | Attacker spoofs the SNI team ID to cause the server to select the wrong team's cert. Also usable as a team existence oracle. | If the attacker doesn't have a cert trusted by the spoofed team, the `ClientCertVerifier` rejects the client cert. **[MTLS-087]** If the attacker does have a trusted cert, syncing with a mismatched team ID causes the connection to close. **[MTLS-058, MTLS-059]** `ResolvesServerCert` SHOULD NOT reveal whether a team exists — unknown SNI and untrusted cert SHOULD produce indistinguishable failures. **[MTLS-057]** | Timing differences between failure modes may leak team existence. |
