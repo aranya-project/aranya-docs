@@ -18,7 +18,7 @@ The server provides two endpoints: `store` and `fetch`. These endpoints correspo
 
 #### `store`
 
-The `store` endpoint is authenticated by validating that the certificate presented matches a list of expected certificates provided at startup, and that it is signed by a specific root authority. Requests against this endpoint require authentication via PKI. Store takes the following arguments:
+The `store` endpoint is authenticated by validating that the certificate presented matches a list of expected certificates provided at startup, and that it is signed by a specific root authority. This request includes an authenticator that the user interacting with the fetch endpoint will use to prove their identity. Requests against this endpoint require authentication via PKI. Store takes the following arguments:
 
 1. The mailbox ID
 2. The HMAC of the authenticator and mailbox
@@ -37,7 +37,7 @@ The `fetch` endpoint is used by new devices to fetch the encrypted onboarding bu
 
 #### Onboarding Server Requirements
 
-SRV-002 Onboarding Server MUST authenticate users using a certificate when handling requests on the `store` endpoint.
+SRV-002 Onboarding Server MUST authenticate users using a mTLS client certificates when handling requests on the store endpoint
 
 SRV-003 Onboarding Server MUST validate the authenticator by calculating HMAC(authenticator, mailboxID) and comparing it to the value received from Admin when handling requests on the `fetch` endpoint.
 
@@ -50,6 +50,8 @@ SRV-006 Onboarding Server MUST expose a `store` endpoint that accepts a mailbox 
 SRV-007 Onboarding Server MUST expose a `fetch` endpoint that accepts a mailbox ID and the authenticator.
 
 SRV-008 Onboarding Server MUST reject store requests with a duplicate mailbox ID.
+
+SRV-009 Onboarding Server MUST have an acceptable range of expire durations and validate store requests against that range
 
 
 ### Onboarding Client
@@ -69,15 +71,13 @@ STR-002 Onboarding Client MUST create a one time symmetric join key.
 
 STR-003 Onboarding Client MUST create a device certificate signed by the root CA if custom PKI is not in use.
 
-STR-004 Onboarding Client MUST use the provided input certificate if custom PKI is enabled.
-
-STR-005 Onboarding Client MUST optionally accept a certificate to use if custom PKI is enabled.
+STR-004 Onboarding Client MUST use the provided input certificate for the new device certificate.
 
 STR-006 Onboarding Client MUST use a CSPRNG to create the 11 word phrase.
 
 STR-007 Onboarding Client MUST use at least 128 bits of entropy to generate the phrase.
 
-STR-008 Onboarding Client MUST validate 11 words exist in the phrase.
+STR-008 Onboarding Client MUST validate the list of generated words represents at least 128bits of entropy (each word has log\_2(number of words)
 
 STR-009 Onboarding Client MUST use the EFF large wordlist.
 
@@ -145,9 +145,9 @@ All cryptographic operations listed here use a CipherSuite that is configurable 
 - Team ID
 
 **Derived Keys** — all derived from the 11-word phrase using HKDF with distinct static info fields:
-- **Mailbox ID** (128 bits) — identifies the bundle on the onboarding server
-- **Bundle Key** — symmetric encryption key used to encrypt/decrypt the onboarding bundle
-- **Authenticator** — used by the new device to authenticate to the onboarding server via HMAC
+- **Mailbox ID** (128 bits) — identifies the bundle on the onboarding server, uses tag "mailbox-id"
+- **Bundle Key** — symmetric encryption key used to encrypt/decrypt the onboarding bundle, uses tag "bundle-key"
+- **Authenticator** — used by the new device to authenticate to the onboarding server via HMAC, uses tag "authenticator"
 
 ```mermaid
 sequenceDiagram
@@ -330,7 +330,11 @@ function open_envelope_selfjoin(sealed_envelope struct Envelope) bytes {
 
 Diceware is used to generate a secure passphrase using a wordlist. DCW-001 The wordlist SHOULD be the EEF Large wordlist. The diceware encoding will use 11 words to encode 128bits of information.
 
-https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+Diceware provides the ability to encode bytes as a list of words. Each word provides `floor(log\_2(len(wordlist)))` bits of entropy. The EFF wordlist contains 7776 words, for 12 bits of entropy per word. To meet the required 128bits, 11 words are required.
+
+https://www.eff.org/files/2016/07/18/eff\_large\_wordlist.txt
+
+The SHA256SUM of the wordlist MUST be `addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e  eff_large_wordlist.txt`
 
 
 
