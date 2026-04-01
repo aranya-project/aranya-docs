@@ -174,7 +174,7 @@ Occasionally, release-related CI or workflow issues need to be fixed separately 
 ## Post-Release Checklist
 
 - **(manual)** Rotate the crates.io API key so it doesn't interfere with the next release. This reduces the risk of someone maliciously publishing crates with a compromised key. Rotation is performed by DevOps: generate a new token at [crates.io account settings](https://crates.io/settings/tokens), then update `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` in the GitHub environment secrets for both [aranya](https://github.com/aranya-project/aranya/settings/environments) and [aranya-core](https://github.com/aranya-project/aranya-core/settings/environments).
-- **(manual)** Verify the rotated crates.io token works in CI. Run `cargo owner --list aranya-buggy` in a CI workflow using the `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` secret. This authenticates with crates.io without publishing. Note: the `/api/v1/me` endpoint does not support API token authentication and cannot be used for this purpose.
+- **(manual)** Verify the rotated crates.io token works in CI. Run `cargo owner --list aranya-buggy` in a CI workflow using the `ARANYA_BOT_CRATESIO_CARGO_LOGIN_KEY` secret. This authenticates with crates.io without publishing. Note: the `/api/v1/me` endpoint does not support API token authentication and cannot be used for this purpose. See [this example PR](https://github.com/aranya-project/aranya/pull/782) for a reusable workflow.
 
 ## Patch Releases
 
