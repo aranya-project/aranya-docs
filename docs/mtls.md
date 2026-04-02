@@ -375,8 +375,8 @@ The following table summarizes all certificate validation checks across connecti
 
 | Scenario | Cert chain validation | IP SAN check | DNS SAN check | On failure |
 |---|---|---|---|---|
-| **Outbound — server cert** | Server cert validated against team's trust anchors via custom `ServerCertVerifier`. **[MTLS-061]** | If cert has IP SANs: peer's resolved IP MUST match one. **[MTLS-090]** | If cert has DNS SANs and peer was configured by hostname: hostname MUST match one. **[MTLS-090]** | Connection fails. |
-| **Inbound — client cert (handshake)** | Client cert validated against team's trust anchors (selected via SNI) via custom `ClientCertVerifier`. **[MTLS-087]** | Not checked during handshake. | Not checked during handshake. | Handshake fails. |
+| **Outbound — server cert** | Server cert validated against team's trust anchors (team selected by SNI) via custom `ServerCertVerifier`. **[MTLS-061]** | If cert has IP SANs: peer's resolved IP MUST match one. **[MTLS-090]** | If cert has DNS SANs and peer was configured by hostname: hostname MUST match one. **[MTLS-090]** | Handshake fails. |
+| **Inbound — client cert (handshake)** | Client cert validated against team's trust anchors (team selected by SNI from ClientHello) via custom `ClientCertVerifier`. **[MTLS-087]** | Not checked during handshake. | Not checked during handshake. | Handshake fails. |
 | **Inbound — client cert (reverse reuse)** | Already validated during handshake. | If cert has IP SANs: peer's connecting IP MUST match one. **[MTLS-073]** IPv4-mapped IPv6 addresses compared against IPv4 equivalent. **[MTLS-075]** | If cert has DNS SANs: resolved IP MUST match peer's connecting IP. **[MTLS-074]** | Connection NOT reused in reverse. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
 
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
