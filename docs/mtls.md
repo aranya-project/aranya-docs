@@ -373,11 +373,11 @@ The following table summarizes all certificate validation checks across connecti
 
 **SAN verification rules:** If a cert has SANs, they must be consistent with what we know about the peer. If a cert has IP SANs, they are checked against the peer's resolved IP. If a cert has DNS SANs and the peer was configured by hostname, they are checked against that hostname. If a cert has both, both are checked. If a cert has SANs but none match, validation fails. If a cert has no SANs, validation passes (cert chain validation is sufficient).
 
-| Scenario | Cert chain validation | IP SAN check | DNS SAN check | On failure |
-|---|---|---|---|---|
-| **Outbound — server cert** | Server cert validated against team's trust anchors (team selected by SNI) via custom `ServerCertVerifier`. **[MTLS-061]** | If cert has IP SANs: peer's resolved IP MUST match one. **[MTLS-090]** | If cert has DNS SANs and peer was configured by hostname: hostname MUST match one. **[MTLS-090]** | Handshake fails. |
-| **Inbound — client cert (handshake)** | Client cert validated against team's trust anchors (team selected by SNI from ClientHello) via custom `ClientCertVerifier`. **[MTLS-087]** | Not checked during handshake. | Not checked during handshake. | Handshake fails. |
-| **Inbound — client cert (reverse reuse)** | Already validated during handshake. | If cert has IP SANs: peer's connecting IP MUST match one. **[MTLS-073]** IPv4-mapped IPv6 addresses compared against IPv4 equivalent. **[MTLS-075]** | If cert has DNS SANs: resolved IP MUST match peer's connecting IP. **[MTLS-074]** | Connection NOT reused in reverse. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
+| Scenario | Cert chain validation | IP SAN check | DNS SAN check | On success | On failure |
+|---|---|---|---|---|---|
+| **Outbound — server cert** | Server cert validated against team's trust anchors (team selected by SNI) via custom `ServerCertVerifier`. **[MTLS-061]** | If cert has IP SANs: peer's resolved IP MUST match one. **[MTLS-090]** | If cert has DNS SANs and peer was configured by hostname: hostname MUST match one. **[MTLS-090]** | Connection established. | Handshake fails. |
+| **Inbound — client cert (handshake)** | Client cert validated against team's trust anchors (team selected by SNI from ClientHello) via custom `ClientCertVerifier`. **[MTLS-087]** | Not checked during handshake. | Not checked during handshake. | Connection established. | Handshake fails. |
+| **Inbound — client cert (reverse reuse)** | Already validated during handshake. | If cert has IP SANs: peer's connecting IP MUST match one. **[MTLS-073]** IPv4-mapped IPv6 addresses compared against IPv4 equivalent. **[MTLS-075]** | If cert has DNS SANs: resolved IP MUST match peer's connecting IP. **[MTLS-074]** | Connection reused in reverse. | Connection NOT reused. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
 
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
 
