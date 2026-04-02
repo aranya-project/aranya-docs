@@ -439,7 +439,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 
 ### Deviations from Standard TLS
 
-This design intentionally deviates from standard TLS/mTLS conventions in several areas. The following table documents each deviation with its rationale and security impact. Reviewers familiar with the standard mTLS threat model can use this as a delta — rather than auditing the entire TLS security model from scratch, verify that each deviation is security-neutral or security-positive.
+This design intentionally deviates from standard TLS/mTLS conventions in several areas. The following table documents each deviation with its rationale and security impact. Rather than auditing from scratch, reviewers can use this as a delta-audit to determine where the security differences are. Our goal is to make only neutral or security-positive changes so the overall solution is a net security improvement without any regressions.
 
 | Area | Standard TLS | This Spec | Rationale | Security Impact |
 |---|---|---|---|---|
