@@ -225,7 +225,7 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
 ### Outbound Connections
 
-For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The `ClientConfig` MUST use a custom `ServerCertVerifier` that validates the server's device cert against the team's cert chain and verifies server SANs against the peer's actual address (not the SNI value) per **[MTLS-090]**.
+For outbound connections, the daemon builds a `ClientConfig` on-demand (team's device cert + cert chain) using `connect_with()` and MUST set the team ID (base58) as the SNI hostname. **[MTLS-052]** The `ClientConfig` MUST use a custom `ServerCertVerifier` that validates the server's device cert against the team's cert chain and verifies server SANs against the peer's actual IP address and/or hostname (not the SNI value). **[MTLS-090]**
 
 ```rust
 impl ServerCertVerifier for TeamServerVerifier {
@@ -371,7 +371,15 @@ Inbound:
 
 The following table summarizes all certificate validation checks across connection types. Cert chain validation proves the peer is trusted by the team's CA. SAN verification ensures the peer's address or hostname is consistent with what's on the cert.
 
-**SAN verification rules:** If a cert has no SANs, validation passes (cert chain validation is sufficient). If a cert has SANs, at least one MUST match what we know about the peer — consistent with standard TLS behavior (RFC 6125). A cert may have multiple IP and DNS SANs; only one needs to match. If a cert has both IP and DNS SANs but only one type matches, validation passes. If no SAN matches at all, validation fails.
+**SAN verification rules:**
+
+- If a cert has no SANs, SAN verification MUST be skipped — cert chain validation is sufficient. **[MTLS-093]**
+- If a cert has SANs, at least one (IP or DNS) MUST match what we know about the peer, consistent with standard TLS behavior (RFC 6125). **[MTLS-094]**
+- IP SANs MUST be checked against the peer's resolved IP address. IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent. **[MTLS-075]**
+- DNS SANs MUST be checked against the peer's hostname if known (direct string match), or resolved via DNS lookup and compared against the peer's IP. **[MTLS-095]**
+- If a cert has both IP and DNS SANs, only one needs to match. **[MTLS-094]**
+- If a cert has SANs but none match, verification MUST fail. **[MTLS-094]**
+- Client SANs MUST NOT be checked during the TLS handshake. Client SAN verification MUST only be performed at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
 
 | Scenario | SNI | Cert chain validation | SAN requirement | IP SAN check | DNS SAN check | On success | On failure |
 |---|---|---|---|---|---|---|---|
