@@ -166,8 +166,7 @@ if let Some(conn) = conn {
 3. Copy the `cert_chain` directory to `work_dir/certs/<team_id>/chain/`. **[MTLS-031]**
 4. Copy the device cert to `work_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
 5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the sole source of truth for the private key — the plaintext key bytes are never passed to rustls during import. **[MTLS-033]**
-6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain only, no private key). **[MTLS-086]**
-7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
+6. Certs are loaded from the `work_dir/certs/<team_id>/` directory on-demand when needed for TLS handshakes. **[MTLS-086]** Caching certs in memory is a potential optimization but is not required — connections are long-lived so cert lookups are infrequent. The `ClientCertVerifier`'s per-team trust store is populated from the cert chain on-demand. **[MTLS-087]**
 
 If the keystore write or cert directory copy fails, both MUST be rolled back to their previous state and `set_cert` MUST return an error. **[MTLS-037, MTLS-080]** `set_cert` MUST serialize updates per team to prevent race conditions. **[MTLS-038]**
 
