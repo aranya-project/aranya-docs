@@ -24,7 +24,7 @@ Abbreviations in this document:
 
 | Term | Definition |
 |---|---|
-| **Device cert** | The leaf X.509 cert identifying a device. Signed by a CA in the team's cert chain. Each device has one device cert per team (though the same cert MAY be reused across teams). |
+| **Device cert** | The leaf X.509 cert identifying a device. Signed by a CA in the team's cert chain. Each device SHOULD have a different device cert per team, though the same cert MAY be reused across teams (not recommended — see [Configuration API](#configuration-api)). |
 | **Cert chain** | The set of CA certs (root and/or intermediate) used to validate a device cert. These are loaded into rustls's `RootCertStore` as trust anchors. Configured per-team via the `cert_chain` directory parameter in `set_cert`. rustls does not differentiate between root and intermediate CA certs — all are treated as trust anchors. |
 | **Private key** | The private key corresponding to the device cert. Used for TLS authentication. Stored AEAD-encrypted in the daemon's keystore. |
 
@@ -147,7 +147,7 @@ The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The da
 
 `set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]**
 
-The SNI hostname for each team MUST be the team ID's base58 string representation. **[MTLS-084]** This is the standard `Display` format for Aranya IDs (alphanumeric, DNS-safe, within the 63-character DNS label limit). The SNI value is never resolved as a DNS hostname — it is used only as a key for the `ResolvesServerCert` cert cache lookup. An attacker can put any value in the SNI field, but the TLS handshake will fail if the SNI does not match a configured team or if the attacker's cert is not trusted by that team's cert chain.
+The SNI hostname for each team MUST be the team ID's base58 string representation. **[MTLS-084]** This is the standard `Display` format for Aranya IDs (alphanumeric, DNS-safe, within the 63-character DNS label limit). The SNI value is never resolved as a DNS hostname — it is used only as a key for `ResolvesServerCert` to identify which team's certs to load. An attacker can put any value in the SNI field, but the TLS handshake will fail if the SNI does not match a configured team or if the attacker's cert is not trusted by that team's cert chain.
 
 Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
@@ -196,8 +196,8 @@ Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `r
 When the daemon starts:
 
 1. Scan `work_dir/certs/` for team subdirectories. **[MTLS-039]**
-2. For each team: load the device cert and cert chain from `work_dir/certs/<team_id>/`. **[MTLS-040]**
-3. Verify that each team subdirectory contains the expected cert files. Certs and private keys are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**. **[MTLS-042]**
+2. For each team subdirectory: verify that the expected cert files are present. **[MTLS-040, MTLS-042]**
+3. Certs and private keys are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**.
 
 ### Cert Reconfiguration
 
@@ -209,7 +209,7 @@ The daemon overwrites cert files and replaces the keystore key. The same import 
 
 Cert expiry is detected reactively during TLS handshake failures. TLS validates certs only during the handshake, not on established connections. QUIC connections established before cert expiry continue working because TLS session keys are independent of cert validity. TLS 1.3 does not support renegotiation or mid-connection cert re-validation. Note: while reactive expiry detection is idiomatic TLS behavior, our connections are long-lived — an expired cert may not be noticed for a long time until a new connection is established. Periodic connection re-establishment and proactive cert expiry scanning are planned to address this (see [Future Work](#future-work)).
 
-When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not actively closed on expiry detection — they continue until they drop naturally or the cert is reconfigured via `set_cert`.
+When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not affected — there is no mechanism to close connections using expired certs in the current design.
 
 See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
@@ -238,8 +238,7 @@ impl ServerCertVerifier for TeamServerVerifier {
         verify_cert_chain(end_entity, intermediates, &self.team_trust_store)?;
 
         // Verify server SANs against the peer's actual address, not the SNI value.
-        // self.peer_addr is the address we're connecting to.
-        verify_server_san(end_entity, self.peer_addr)?;
+        verify_san(end_entity, self.peer_ip, self.peer_hostname.as_deref())?;
 
         Ok(ServerCertVerified::assertion())
     }
@@ -296,11 +295,9 @@ impl ClientCertVerifier for TeamClientVerifier {
             .and_then(|sn| sn.as_str())
             .ok_or(Error::General("missing SNI".into()))?;
 
-        // Select the team-specific RootCertStore
-        let trust_store = self.team_trust_stores.read()
-            .get(team_id)
-            .ok_or(Error::General("unknown team".into()))?
-            .clone();
+        // Load the team-specific RootCertStore on-demand from work_dir/certs/<team_id>/chain/
+        let trust_store = load_trust_store(team_id)
+            .ok_or(Error::General("unknown team".into()))?;
 
         // Validate client cert chain against team-specific trust anchors
         verify_cert_chain(end_entity, intermediates, &trust_store)?;
