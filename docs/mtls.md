@@ -207,7 +207,7 @@ The daemon overwrites cert files and replaces the keystore key. The same import 
 
 ### Cert Expiry
 
-Cert expiry is detected reactively during TLS handshake failures. This is idiomatic TLS behavior — TLS validates certs only during the handshake, not on established connections. QUIC connections established before cert expiry continue working because TLS session keys are independent of cert validity. TLS 1.3 does not support renegotiation or mid-connection cert re-validation.
+Cert expiry is detected reactively during TLS handshake failures. TLS validates certs only during the handshake, not on established connections. QUIC connections established before cert expiry continue working because TLS session keys are independent of cert validity. TLS 1.3 does not support renegotiation or mid-connection cert re-validation. Note: while reactive expiry detection is idiomatic TLS behavior, our connections are long-lived — an expired cert may not be noticed for a long time until a new connection is established. Periodic connection re-establishment and proactive cert expiry scanning are planned to address this (see [Future Work](#future-work)).
 
 When an expired cert is detected during a handshake failure, new connections for that team will fail until `set_cert` is called with a valid cert. Existing connections are not actively closed on expiry detection — they continue until they drop naturally or the cert is reconfigured via `set_cert`.
 
