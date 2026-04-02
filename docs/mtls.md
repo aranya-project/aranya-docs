@@ -314,7 +314,7 @@ After the handshake, the connection is bound to the team identified by SNI. Subs
 
 ### Connection Model
 
-QUIC connections MUST be established per (peer, team) pair. **[MTLS-060]** Separate connections per team are required because:
+QUIC connections MUST be established per (peer, team) pair, with at most one inbound and one outbound connection per pair. **[MTLS-060]** Separate connections per team are required because:
 - Each team may use different device certs and cert chains. Sharing a connection across teams would complicate server-side cert selection and risk presenting the wrong device cert.
 - TLS 1.3 uses ephemeral key exchange for session encryption, so certs affect authentication only, not confidentiality. However, using the wrong device cert could allow a device authenticated for Team A to sync Team B's graph if the cert chains are cross-trusted.
 - If a shared connection is used for multiple teams and one team's cert chain is compromised, a MiTM attacker could intercept sync traffic for all teams on that connection. Per-team connections contain the blast radius to the compromised team.
@@ -323,7 +323,7 @@ The TLS handshake MUST validate both peers' device certs against the team's cert
 
 A peer whose device cert is not trusted by a team's cert chain MUST NOT be able to establish a connection for that team. **[MTLS-062]** QUIC connection attempts MUST fail the TLS handshake if certs have not been configured or signed properly. **[MTLS-009]** QUIC connection attempts with expired certs MUST fail the TLS handshake. **[MTLS-010]** The daemon MUST log rejected connections including the IP address, port, and hostname (if available). **[MTLS-011]**
 
-Connections MUST be reused within a team. **[MTLS-063]** A new connection is only established when the existing one drops, when reverse reuse fails the client SAN check, or when syncing with a new peer. When a connection closes, its entry MUST be removed from the connection map. **[MTLS-064]**
+Connections MUST be reused within a team. **[MTLS-063]** A new outbound connection is only established when the existing one drops, when reverse reuse of an inbound connection fails the client SAN check, or when syncing with a new peer. When a connection closes, its entry MUST be removed from the connection map. **[MTLS-064]**
 
 ### Reverse Connection Reuse
 
