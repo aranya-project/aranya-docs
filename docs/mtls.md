@@ -383,7 +383,10 @@ Client SAN verification is performed at the application layer after the TLS hand
 
 ### SAN Verification Pseudocode
 
-The following pseudocode implements the SAN verification rules for both server and client certs. It is used by the custom `ServerCertVerifier` (with the peer's resolved IP and optional hostname) and by the application-layer client SAN check (with the peer's connecting IP).
+The core SAN verification logic is shared, but the inputs and failure handling differ:
+
+- **Server SAN verification** (outbound): called during the TLS handshake via custom `ServerCertVerifier`. We know the peer's resolved IP and possibly their hostname. Failure rejects the connection.
+- **Client SAN verification** (reverse reuse): called at the application layer after the handshake, when deciding whether to reuse an inbound connection in reverse. We only know the peer's connecting IP (not their hostname). Failure falls back to a new outbound connection — the inbound connection remains open per **[MTLS-077]**.
 
 ```rust
 /// Verify that a cert's SANs are consistent with what we know about the peer.
@@ -427,6 +430,23 @@ fn verify_san(
 
     // SANs are present but none match — fail.
     Err(SanError::NoMatchingSan)
+}
+```
+
+**Server SAN verification** (inside custom `ServerCertVerifier`):
+```rust
+// peer_ip: resolved IP of the peer we're connecting to
+// peer_hostname: the hostname we configured for this peer (if any)
+verify_san(server_cert, peer_ip, peer_hostname)?; // Failure rejects the connection.
+```
+
+**Client SAN verification** (application layer, reverse reuse):
+```rust
+// peer_ip: the IP the peer connected from (conn.remote_address())
+// No hostname — we don't know the inbound peer's hostname.
+match verify_san(client_cert, peer_ip, None) {
+    Ok(()) => { /* reuse connection in reverse */ }
+    Err(_) => { /* fall back to new outbound connection; keep inbound open */ }
 }
 ```
 
