@@ -91,7 +91,7 @@ flowchart TD
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
 6. **Reconfigure** — Call `set_cert` again with new files. Reconfigures which cert the device presents (does NOT revoke the old cert). Old connections removed from map and closed immediately. New connections use the new cert.
 7. **Remove** — Delete certs from `work_dir`, remove key from keystore, close connections.
-8. **Expired cert cleanup** — Detected reactively during TLS handshake failures. New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally.
+8. **Expired cert** — Detected reactively during TLS handshake failures. New connections fail until `set_cert` is called with a valid cert. Existing connections are not affected — there is no mechanism to close connections using expired certs. Closing connections with expired certs is planned (see [Future Work](#future-work)).
 
 On **daemon restart**, public certs are reloaded from `work_dir/certs/` into the resolver and verifier caches. Private keys remain encrypted in the keystore and are loaded on-demand per handshake.
 
