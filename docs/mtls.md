@@ -34,7 +34,7 @@ The `aranya-certgen` CLI tool generates X.509 certs for use with Aranya's mTLS i
 
 The tool MUST use P-256 ECDSA secret keys. **[MTLS-014]** It MUST be able to generate a root CA cert and key pair **[MTLS-017]** and signed certs along with their key. **[MTLS-018]** The tool currently outputs certs in PEM format with `.crt.pem` and `.key.pem` extensions. DER output support is planned (see [Future Work](#future-work)).
 
-A CN (Common Name) MUST be specifiable for each generated cert **[MTLS-019]** and MUST be automatically added as a SAN, auto-detected as DNS or IP based on format. **[MTLS-020]** Additional SANs MUST be specifiable via `--dns` and `--ip` flags for multiple DNS hostnames and IP addresses beyond the CN. **[MTLS-021]** A validity period in days MUST be specifiable so certs can expire. **[MTLS-022]**
+A CN (Common Name) MUST be specifiable for each generated cert **[MTLS-019]** and MUST be automatically added as a SAN, auto-detected as DNS or IP based on format. **[MTLS-020]** Additional SANs MUST be specifiable via `--dns` and `--ip` flags for multiple DNS hostnames and IP addresses beyond the CN. **[MTLS-021]** A validity period in days MUST be specifiable so certs can expire. **[MTLS-022]** If no SANs would be included on a signed cert, the tool SHOULD print a warning but MUST NOT prevent cert generation. Including at least one SAN is recommended for IP and hostname verification (see [Certificate Validation Summary](#certificate-validation-summary)).
 
 Example usage:
 ```bash
@@ -380,6 +380,55 @@ The following table summarizes all certificate validation checks across connecti
 | **Inbound — client cert (reverse reuse)** | Already validated during handshake. | If cert has IP SANs: peer's connecting IP MUST match one. **[MTLS-073]** IPv4-mapped IPv6 addresses compared against IPv4 equivalent. **[MTLS-075]** | If cert has DNS SANs: resolved IP MUST match peer's connecting IP. **[MTLS-074]** | Connection NOT reused in reverse. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
 
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
+
+### SAN Verification Pseudocode
+
+The following pseudocode implements the SAN verification rules for both server and client certs. It is used by the custom `ServerCertVerifier` (with the peer's resolved IP and optional hostname) and by the application-layer client SAN check (with the peer's connecting IP).
+
+```rust
+/// Verify that a cert's SANs are consistent with what we know about the peer.
+/// If the cert has no SANs, verification passes (cert chain validation is sufficient).
+/// If the cert has SANs but none match what we know, verification fails.
+fn verify_san(
+    cert: &CertificateDer<'_>,
+    peer_ip: IpAddr,
+    peer_hostname: Option<&str>,
+) -> Result<(), SanError> {
+    let (_, parsed) = x509_parser::parse_x509_certificate(cert)?;
+
+    let sans = match parsed.subject_alternative_name() {
+        Ok(Some(ext)) => &ext.value.general_names,
+        // No SAN extension — cert chain validation is sufficient.
+        _ => return Ok(()),
+    };
+
+    for san in sans.iter() {
+        match san {
+            GeneralName::IPAddress(ip_bytes) => {
+                if ip_from_bytes(ip_bytes) == peer_ip {
+                    return Ok(());
+                }
+            }
+            GeneralName::DNSName(hostname) => {
+                // Direct hostname match (if we know the peer by hostname).
+                if let Some(peer_host) = peer_hostname {
+                    if hostname == peer_host {
+                        return Ok(());
+                    }
+                }
+                // DNS resolution match (hostname resolves to peer's IP).
+                if dns_resolves_to(hostname, peer_ip) {
+                    return Ok(());
+                }
+            }
+            _ => continue,
+        }
+    }
+
+    // SANs are present but none match — fail.
+    Err(SanError::NoMatchingSan)
+}
+```
 
 DNS resolution results SHOULD be cached for efficient lookups. **[MTLS-078]**
 
