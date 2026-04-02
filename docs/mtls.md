@@ -156,13 +156,19 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 When `set_cert` is called:
 
 1. Read the cert and key files from the provided paths. **[MTLS-027]** The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
-2. Remove all existing connections for this team from the connection map and close them. **[MTLS-085]** The connection MUST be closed with a `CONNECTION_CLOSE` frame indicating cert reconfiguration. **[MTLS-091]** This signals the peer to remove the connection from its own map, so its next request automatically establishes a new connection using the updated cert. A configurable timeout MUST be used as a safety net to force-close connections that do not terminate gracefully: **[MTLS-092]**
+2. Remove all existing connections for this team from the connection map. **[MTLS-085]** For each removed connection:
+   - Cancel the connection's stream acceptor via a cancellation token. **[MTLS-091]** The acceptor uses `tokio::select!` with the token, so cancellation immediately stops accepting new inbound streams. In-progress streams that have already been accepted continue to completion unaffected.
+   - After a configurable timeout, force-close the connection with `CONNECTION_CLOSE`. **[MTLS-092]** This ensures the connection is cleaned up even if an in-progress stream hangs. The peer receives the close and removes the connection from its own map, so its next request automatically establishes a new connection using the updated cert.
 ```rust
-let conn = connection_map.remove(&(peer, team));
-if let Some(conn) = conn {
-    // Signal the peer to reconnect. In-progress streams may
-    // complete before the close propagates.
-    conn.close(0u32.into(), b"cert reconfigured");
+let (conn, cancel_token) = connection_map.remove(&(peer, team));
+if let Some((conn, cancel_token)) = entry {
+    // Stop accepting new inbound streams immediately.
+    cancel_token.cancel();
+    // Force-close after timeout if in-progress streams haven't finished.
+    tokio::spawn(async move {
+        tokio::time::sleep(drain_timeout).await;
+        conn.close(0u32.into(), b"cert reconfigured");
+    });
 }
 ```
 3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
@@ -206,7 +212,7 @@ When the daemon starts:
 
 Call `set_cert` again with new file paths per **[MTLS-029]**. This reconfigures which cert the device presents — it does NOT revoke the old cert. Other devices that still have a copy of the old cert can continue using it until it expires. Cert revocation (CRL/OCSP) is required to fully invalidate an old cert (see [Future Work](#future-work)).
 
-The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. The same import flow (steps 1-7) is used. Old connections are removed from the map and closed with a `CONNECTION_CLOSE` frame, signaling the peer to reconnect. The peer removes the closed connection from its own map, so its next request automatically establishes a new connection. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections use the new cert. New outbound connections are created lazily on the next sync request using the new cert.
+The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. The same import flow (steps 1-7) is used. Old connections are removed from the map, their stream acceptors are cancelled immediately (no new inbound streams), and a timeout force-closes them after in-progress streams complete. The peer discovers the closed connection and establishes a new one on the next request. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new connections use the new cert.
 
 ### Cert Expiry
 
@@ -381,7 +387,7 @@ The following table documents areas where this design intentionally deviates fro
 | **Cert chain as trust anchors** | Only root CA certs are trust anchors. Intermediate CA certs are sent in the cert chain during the handshake. | Both root and intermediate CA certs are loaded as trust anchors in rustls's `RootCertStore`. Device cert is leaf-only. | Simplifies cert management — one directory of CA certs per team. rustls does not differentiate between root and intermediate CAs in its trust store. Avoids needing to bundle intermediates with the device cert. | Neutral. Same certs are trusted, different storage location. Operational model for intermediate CA changes differs from standard but cert revocation is not yet implemented. |
 | **On-demand private key loading** | Private keys are loaded into `ClientConfig`/`ServerConfig` at startup and held in memory. | Private keys loaded from an AEAD-encrypted keystore on-demand per TLS handshake, then zeroized. Public certs cached. **[MTLS-070, MTLS-068]** | Minimizes private key exposure window. Keys are only in daemon memory during handshake setup, not for the daemon's lifetime. | Positive. Reduces private key exposure from process lifetime to handshake duration. |
 | **Connection-per-team** | One connection between two peers, multiplexing via QUIC streams. | One connection per (peer, team) pair. **[MTLS-060]** | Each team requires different certs and trust chains. Prevents cross-team cert mismatch, limits blast radius of CA compromise. | Positive. Compromised CA for one team cannot affect other teams' connections. |
-| **Cert reconfiguration connection handling** | Existing connections unaffected by cert changes. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map and closed with `CONNECTION_CLOSE` on cert reconfiguration. **[MTLS-085, MTLS-091]** Peer receives close signal and removes the connection from its map, automatically establishing a new connection on the next request. Configurable timeout as safety net for ungraceful cases. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely. Our approach signals peers to reconnect with the new cert. | Positive. Stricter than standard TLS — old connections are actively closed rather than left open. Peers transition to the new cert promptly. |
+| **Cert reconfiguration connection handling** | Existing connections unaffected by cert changes. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map on cert reconfiguration. **[MTLS-085]** Stream acceptor cancelled immediately via cancellation token — no new inbound streams accepted. **[MTLS-091]** In-progress streams complete, then connection is force-closed after a configurable timeout. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely. Our approach stops new work on old connections immediately and phases them out after in-progress operations complete. | Positive. Stricter than standard TLS — old connections are actively phased out rather than left open. In-progress streams are not interrupted. |
 
 ## SAN Verification
 
