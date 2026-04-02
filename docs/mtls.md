@@ -97,7 +97,7 @@ On **daemon restart**, public certs are reloaded from `state_dir/certs/` into th
 
 ### Generation
 
-Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[MTLS-002]** All certs MUST contain at least one Subject Alternative Name (SAN). **[MTLS-004]** The QUIC transport (via rustls) MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[MTLS-013]** Certs and private keys MUST NOT be checked into repositories. **[MTLS-012]**
+Certs MUST be X.509 TLS certs in a format supported by rustls (PEM or DER). **[MTLS-002]** Certs SHOULD contain Subject Alternative Names (SANs) for IP and/or DNS hostname verification. **[MTLS-004]** Certs without SANs are permitted but SAN verification will be skipped — only cert chain validation is performed (see [Certificate Validation Summary](#certificate-validation-summary)). The QUIC transport (via rustls) MUST correctly validate certs containing multiple DNS SANs and multiple IP SANs. When using external PKI, certs SHOULD use keys of at least 256 bits to meet current NIST standards (NIST SP 800-52 Rev. 2). **[MTLS-013]** Certs and private keys MUST NOT be checked into repositories. **[MTLS-012]**
 
 mTLS device certs and cert chain certs can be generated using either:
 
@@ -367,23 +367,19 @@ Inbound:
 7. Validate that the team ID in sync requests matches the team ID of the connection in the connection map per **[MTLS-058]**
 
 
-## SAN Verification
+## Certificate Validation Summary
 
-### Server SAN Verification
+The following table summarizes all certificate validation checks across connection types. Cert chain validation proves the peer is trusted by the team's CA. SAN verification ensures the peer's address or hostname is consistent with what's on the cert.
 
-Server SANs MUST always be verified and MUST NOT be disabled. **[MTLS-053]** Because SNI contains the team ID (not the server's address), a custom `ServerCertVerifier` MUST verify server cert SANs against the **peer's actual IP address or resolved DNS hostname**, not the SNI value. **[MTLS-090]** The server's certificate MUST contain a SAN matching the address the client is connecting to.
+**SAN verification rules:** If a cert has SANs, they must be consistent with what we know about the peer. If a cert has IP SANs, they are checked against the peer's resolved IP. If a cert has DNS SANs and the peer was configured by hostname, they are checked against that hostname. If a cert has both, both are checked. If a cert has SANs but none match, validation fails. If a cert has no SANs, validation passes (cert chain validation is sufficient).
 
-For deployments with dynamic server IPs, DNS SANs SHOULD be used that resolve to the server's current IP address. **[MTLS-071]** Update DNS records when the IP changes.
+| Scenario | Cert chain validation | IP SAN check | DNS SAN check | On failure |
+|---|---|---|---|---|
+| **Outbound — server cert** | Server cert validated against team's trust anchors via custom `ServerCertVerifier`. **[MTLS-061]** | If cert has IP SANs: peer's resolved IP MUST match one. **[MTLS-090]** | If cert has DNS SANs and peer was configured by hostname: hostname MUST match one. **[MTLS-090]** | Connection fails. |
+| **Inbound — client cert (handshake)** | Client cert validated against team's trust anchors (selected via SNI) via custom `ClientCertVerifier`. **[MTLS-087]** | Not checked during handshake. | Not checked during handshake. | Handshake fails. |
+| **Inbound — client cert (reverse reuse)** | Already validated during handshake. | If cert has IP SANs: peer's connecting IP MUST match one. **[MTLS-073]** IPv4-mapped IPv6 addresses compared against IPv4 equivalent. **[MTLS-075]** | If cert has DNS SANs: resolved IP MUST match peer's connecting IP. **[MTLS-074]** | Connection NOT reused in reverse. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
 
-### Client SAN Verification
-
-Client cert SAN verification is a separate application-layer check, NOT part of the `ClientCertVerifier` TLS handshake. It is performed only when reusing an inbound connection in reverse. **[MTLS-072]** The peer's certificate SANs MUST be checked against the IP address they connected from. **[MTLS-073]**
-
-The connection MAY be reused in reverse only if ANY of the following are true: **[MTLS-074]**
-- A SAN contains an IP address that exactly matches the peer's connecting IP address (byte-level comparison; IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent) **[MTLS-075]**
-- A SAN contains a DNS hostname that, when resolved via DNS lookup, returns an IP address matching the peer's connecting IP
-
-If no SAN matches, the connection MUST NOT be reused in reverse. **[MTLS-076]** The daemon MUST attempt to establish a new outbound connection to the peer. **[MTLS-066]** The inbound connection MUST remain open for the peer to continue syncing to us. **[MTLS-077]**
+Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
 
 DNS resolution results SHOULD be cached for efficient lookups. **[MTLS-078]**
 
@@ -397,39 +393,6 @@ Strategies for NAT deployments:
 - **Relay via a peer not behind NAT** — recommended when both peers are behind NAT since direct connectivity is not possible without NAT traversal.
 
 QUIC does not natively provide NAT traversal. Deployments where peers are behind NAT SHOULD ensure at least one peer in the sync topology has a routable address, or use a relay peer. **[MTLS-079]**
-
-### Implementation
-
-Client SAN verification is performed at the application layer after the TLS handshake, when deciding whether to reuse a connection in reverse. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
-
-```rust
-fn verify_client_san(conn: &quinn::Connection) -> Result<(), SanError> {
-    let peer_ip = conn.remote_address().ip();
-    let certs = conn.peer_identity()
-        .and_then(|id| id.downcast::<Vec<CertificateDer>>().ok())?;
-    let cert = certs.first()?;
-
-    let (_, parsed) = x509_parser::parse_x509_certificate(cert)?;
-
-    for san in parsed.subject_alternative_name()?.value.general_names.iter() {
-        match san {
-            GeneralName::IPAddress(ip_bytes) => {
-                if ip_from_bytes(ip_bytes) == peer_ip {
-                    return Ok(());
-                }
-            }
-            GeneralName::DNSName(hostname) => {
-                if dns_resolves_to(hostname, peer_ip) {
-                    return Ok(());
-                }
-            }
-            _ => continue,
-        }
-    }
-
-    Err(SanError::NoMatchingSan)
-}
-```
 
 ## Threat Model
 
