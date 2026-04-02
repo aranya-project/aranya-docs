@@ -147,7 +147,7 @@ The daemon MUST accept file paths from the client via IPC. **[MTLS-027]** The da
 
 `set_cert` MUST be idempotent — calling it again for the same team MUST overwrite the previous cert configuration with no other side effects. **[MTLS-029]**
 
-The SNI hostname for each team MUST be the team ID's base58 string representation. **[MTLS-084]** This is the standard `Display` format for Aranya IDs (alphanumeric, DNS-safe, within the 63-character DNS label limit). The SNI value is never resolved as a DNS hostname — it is used only as a key for the `ResolvesServerCert` cert cache lookup. Team IDs are cryptographically derived (not user-controlled), so an attacker cannot craft a team ID that causes DNS resolution or other unintended behavior during SNI processing.
+The SNI hostname for each team MUST be the team ID's base58 string representation. **[MTLS-084]** This is the standard `Display` format for Aranya IDs (alphanumeric, DNS-safe, within the 63-character DNS label limit). The SNI value is never resolved as a DNS hostname — it is used only as a key for the `ResolvesServerCert` cert cache lookup. An attacker can put any value in the SNI field, but the TLS handshake will fail if the SNI does not match a configured team or if the attacker's cert is not trusted by that team's cert chain.
 
 Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`) → `set_cert` (if not provided earlier) → `add_sync_peer`
 
