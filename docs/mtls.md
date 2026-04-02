@@ -373,7 +373,7 @@ The following table summarizes all certificate validation checks across connecti
 
 **SAN verification rules:**
 
-- If a cert has no SANs, SAN verification MUST be skipped — cert chain validation is sufficient. **[MTLS-093]**
+- If a cert has no SANs, SAN verification MUST be skipped — cert chain validation is sufficient. **[MTLS-093]** A cert without SANs implies that the CA intentionally signed it without address or hostname bindings, which may be necessary for networks where IP or hostname verification is difficult (e.g., dynamic IPs without stable DNS).
 - If a cert has SANs, at least one (IP or DNS) MUST match what we know about the peer, consistent with standard TLS behavior (RFC 6125). **[MTLS-094]**
 - IP SANs MUST be checked against the peer's resolved IP address. IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent. **[MTLS-075]**
 - DNS SANs MUST be checked against the peer's hostname if known (direct string match), or resolved via DNS lookup and compared against the peer's IP. **[MTLS-095]**
