@@ -473,7 +473,7 @@ QUIC does not natively provide NAT traversal. Deployments where peers are behind
 
 This threat model covers threats at the mTLS transport layer. For sync protocol-level threats (message flooding, stale data replay, oversized messages, DeviceId discovery) see the [sync threat model](sync-threat-model.md).
 
-Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Compromised certs should be reconfigured via `set_cert`. See [Future Work](#future-work).
+Note: Aranya does not currently check certificate revocation status (CRL/OCSP). Compromised certs should be reconfigured via `set_cert`. However, `set_cert` only changes which cert the local device presents — an adversary who has obtained the old cert can still use it to authenticate to other peers until it expires. Cert revocation is required to fully invalidate a compromised cert. See [Future Work](#future-work).
 
 ### Deviations from Standard TLS
 
