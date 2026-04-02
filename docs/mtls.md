@@ -156,15 +156,13 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 When `set_cert` is called:
 
 1. Read the cert and key files from the provided paths. **[MTLS-027]** The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
-2. Remove all existing connections for this team from the connection map. **[MTLS-085]** New streams on old connections MUST be rejected. **[MTLS-091]** In-progress sync traffic on old connections is allowed to drain via quinn's stream reference counting. Old connections that have not drained within a configurable timeout MUST be force-closed: **[MTLS-092]**
+2. Remove all existing connections for this team from the connection map and close them. **[MTLS-085]** The connection MUST be closed with a `CONNECTION_CLOSE` frame indicating cert reconfiguration. **[MTLS-091]** This signals the peer to remove the connection from its own map, so its next request automatically establishes a new connection using the updated cert. A configurable timeout MUST be used as a safety net to force-close connections that do not terminate gracefully: **[MTLS-092]**
 ```rust
 let conn = connection_map.remove(&(peer, team));
 if let Some(conn) = conn {
-    tokio::spawn(async move {
-        tokio::time::sleep(drain_timeout).await;
-        // No-op if connection already closed naturally.
-        conn.close(0u32.into(), b"cert reconfigured");
-    });
+    // Signal the peer to reconnect. In-progress streams may
+    // complete before the close propagates.
+    conn.close(0u32.into(), b"cert reconfigured");
 }
 ```
 3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
@@ -208,7 +206,7 @@ When the daemon starts:
 
 Call `set_cert` again with new file paths per **[MTLS-029]**. This reconfigures which cert the device presents — it does NOT revoke the old cert. Other devices that still have a copy of the old cert can continue using it until it expires. Cert revocation (CRL/OCSP) is required to fully invalidate an old cert (see [Future Work](#future-work)).
 
-The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. The same import flow (steps 1-7) is used. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections use the new cert. New outbound connections are created lazily on the next sync request using the new cert.
+The daemon overwrites cert files, replaces the keystore key, and updates the resolver and verifier caches. The same import flow (steps 1-7) is used. Old connections are removed from the map and closed with a `CONNECTION_CLOSE` frame, signaling the peer to reconnect. The peer removes the closed connection from its own map, so its next request automatically establishes a new connection. The server's `ResolvesServerCert` and `ClientCertVerifier` caches are updated immediately, so new inbound connections use the new cert. New outbound connections are created lazily on the next sync request using the new cert.
 
 ### Cert Expiry
 
@@ -223,7 +221,7 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 1. Delete the `state_dir/certs/<team_id>/` directory and its contents. **[MTLS-043]**
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
 3. Remove the team from the resolver and verifier caches. **[MTLS-045]**
-4. Remove connections for this team from the connection map and allow them to drain, same as cert reconfiguration per **[MTLS-085, MTLS-091, MTLS-092]**. **[MTLS-046]**
+4. Remove connections for this team from the connection map and close them with `CONNECTION_CLOSE`, same as cert reconfiguration per **[MTLS-085, MTLS-091, MTLS-092]**. **[MTLS-046]**
 
 ## TLS Configuration Architecture
 
@@ -383,7 +381,7 @@ The following table documents areas where this design intentionally deviates fro
 | **Cert chain as trust anchors** | Only root CA certs are trust anchors. Intermediate CA certs are sent in the cert chain during the handshake. | Both root and intermediate CA certs are loaded as trust anchors in rustls's `RootCertStore`. Device cert is leaf-only. | Simplifies cert management — one directory of CA certs per team. rustls does not differentiate between root and intermediate CAs in its trust store. Avoids needing to bundle intermediates with the device cert. | Neutral. Same certs are trusted, different storage location. Operational model for intermediate CA changes differs from standard but cert revocation is not yet implemented. |
 | **On-demand private key loading** | Private keys are loaded into `ClientConfig`/`ServerConfig` at startup and held in memory. | Private keys loaded from an AEAD-encrypted keystore on-demand per TLS handshake, then zeroized. Public certs cached. **[MTLS-070, MTLS-068]** | Minimizes private key exposure window. Keys are only in daemon memory during handshake setup, not for the daemon's lifetime. | Positive. Reduces private key exposure from process lifetime to handshake duration. |
 | **Connection-per-team** | One connection between two peers, multiplexing via QUIC streams. | One connection per (peer, team) pair. **[MTLS-060]** | Each team requires different certs and trust chains. Prevents cross-team cert mismatch, limits blast radius of CA compromise. | Positive. Compromised CA for one team cannot affect other teams' connections. |
-| **Cert reconfiguration connection handling** | Existing connections unaffected by cert changes. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map and drained on cert reconfiguration. New streams rejected on old connections. **[MTLS-085, MTLS-091]** Force-close after configurable timeout. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely. Our approach ensures old certs are phased out quickly while allowing in-progress syncs to complete. | Positive. Stricter than standard TLS — old connections are actively phased out rather than left open. Drain timeout bounds exposure. Impact is insignificant (sync requests are milliseconds). |
+| **Cert reconfiguration connection handling** | Existing connections unaffected by cert changes. New certs only used for future handshakes. TLS 1.3 has no mid-connection cert re-validation. | Old connections removed from connection map and closed with `CONNECTION_CLOSE` on cert reconfiguration. **[MTLS-085, MTLS-091]** Peer receives close signal and removes the connection from its map, automatically establishing a new connection on the next request. Configurable timeout as safety net for ungraceful cases. **[MTLS-092]** | Standard TLS leaves old connections open indefinitely. Our approach signals peers to reconnect with the new cert. | Positive. Stricter than standard TLS — old connections are actively closed rather than left open. Peers transition to the new cert promptly. |
 
 ## SAN Verification
 
@@ -461,7 +459,7 @@ Note: Aranya does not currently check certificate revocation status (CRL/OCSP). 
 | **MiTM on outbound connection** | Attacker intercepts connection and presents a fraudulent server cert. | Server SAN verification ensures the server cert matches the expected hostname/IP. **[MTLS-053]** Cert chain validation ensures the cert is signed by a trusted CA. **[MTLS-061]** | None if cert chain and DNS are not compromised. |
 | **MiTM on inbound connection** | Attacker connects to daemon pretending to be a legitimate peer. | `ClientCertVerifier` validates the client's device cert against the team's cert chain (selected via SNI). **[MTLS-087]** SNI binds the connection to a specific team. **[MTLS-055, MTLS-056]** | None if the attacker does not hold a device cert trusted by the team's cert chain. |
 | **Cross-team auth bypass** | Device authenticated for Team A attempts to sync Team B. | Per-team connections with team-specific certs. **[MTLS-060]** SNI-based cert selection. **[MTLS-056]** Per-SNI `ClientCertVerifier` validates client cert against team-specific cert chain. **[MTLS-087]** Sync request team ID validated against bound team. **[MTLS-058, MTLS-059]** | None if teams use separate cert chains. If cert chains are cross-trusted, the handshake succeeds but sync request validation catches mismatches. |
-| **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is reconfigured via `set_cert`. **[MTLS-029]** On reconfiguration, old connections are drained gracefully but force-closed after a configurable timeout. **[MTLS-092]** New streams on old connections are rejected. **[MTLS-091]** Commands on draining connections are still validated by the graph. | Cert revocation is not currently implemented. During the drain timeout, an attacker with the old cert could complete in-progress syncs but cannot open new streams. Impact is insignificant — individual sync requests are short-lived (milliseconds), and all commands are validated by the graph regardless. See [Future Work](#future-work). |
+| **Compromised device cert** | Attacker obtains a device's private key and cert. | Attacker can authenticate as that device until the cert expires or is reconfigured via `set_cert`. **[MTLS-029]** On reconfiguration, old connections are closed with `CONNECTION_CLOSE` per **[MTLS-091]**, signaling the peer to reconnect with the new cert. Configurable timeout as safety net per **[MTLS-092]**. All commands are validated by the graph regardless. | Cert revocation is not currently implemented. The attacker can authenticate as the compromised device on new connections until the cert expires. See [Future Work](#future-work). |
 | **Compromised CA** | Attacker compromises a CA in the cert chain and issues fraudulent device certs. | Per-team connections limit blast radius — only teams using the compromised cert chain are affected. **[MTLS-060]** | Attacker can authenticate as any device for affected teams until the cert chain is replaced. |
 | **Private key exposure on disk** | Source key file read by unauthorized process before or after import. | Daemon does not delete source files — user is responsible per **[MTLS-036]**. Encrypted filesystem recommended. **[MTLS-015]** API docs recommend deleting private key after import. | If user does not delete source files, private key remains on disk. User's responsibility. |
 | **Private key exposure in memory** | Key material lingers in daemon memory. | Two copies exist briefly per handshake: (1) Rust bytes wrapped in `Zeroizing`, auto-zeroized after key construction **[MTLS-035]**; (2) aws-lc-rs C-allocated key, zeroized via `EVP_PKEY_free` when `Arc<CertifiedKey>` drops after handshake **[MTLS-051]**. Keys loaded on-demand from keystore per handshake; only public certs cached. **[MTLS-070]** | Key material exists only for the duration of the handshake, not the connection or daemon lifetime. |
