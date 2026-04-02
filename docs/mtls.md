@@ -377,7 +377,7 @@ The following table summarizes all certificate validation checks across connecti
 - If a cert has SANs, at least one (IP or DNS) MUST match what we know about the peer, consistent with standard TLS behavior (RFC 6125). **[MTLS-094]**
 - IP SANs MUST be checked against the peer's resolved IP address. IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent. **[MTLS-075]**
 - DNS SANs MUST be checked against the peer's hostname if known (direct string match), or resolved via DNS lookup and compared against the peer's IP. **[MTLS-095]**
-- If a cert has both IP and DNS SANs, only one needs to match. **[MTLS-094]**
+- If a cert has both IP and DNS SANs, only one needs to match. Non-matching SANs are not a failure as long as at least one matches — consistent with RFC 6125 §6.4.4. This handles certs with stale IP SANs (e.g., after an IP change) where the DNS SAN is still valid. **[MTLS-094]**
 - If a cert has SANs but none match, verification MUST fail. **[MTLS-094]**
 - Client SANs MUST NOT be checked during the TLS handshake. Client SAN verification MUST only be performed at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
 
