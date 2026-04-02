@@ -155,7 +155,7 @@ Recommended call ordering: `create_team` / `add_team` (with optional `set_cert`)
 
 When `set_cert` is called:
 
-1. Read the cert and key files from the provided paths. **[MTLS-027]** The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
+1. Read the cert files first, then the private key file. **[MTLS-027]** Reading certs first minimizes the time the private key is in memory and avoids loading the key at all if reading the certs fails. The private key bytes MUST be wrapped in `Zeroizing` so they are automatically zeroized when dropped. **[MTLS-035]**
 2. Remove all existing connections for this team from the connection map and close them immediately with `CONNECTION_CLOSE`. **[MTLS-085, MTLS-091]** The peer receives the close and removes the connection from its own map, so its next request automatically establishes a new connection using the updated cert. If a sync request is disrupted during the transition, it SHOULD be retried — the retry will use a new connection with the new cert. Note: connection handoff during cert reconfiguration will be seamless once automatic retry logic for failed sync requests is implemented (see [Future Work](#future-work)).
 ```rust
 let conn = connection_map.remove(&(peer, team));
