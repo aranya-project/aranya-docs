@@ -371,7 +371,7 @@ Inbound:
 
 The following table summarizes all certificate validation checks across connection types. Cert chain validation proves the peer is trusted by the team's CA. SAN verification ensures the peer's address or hostname is consistent with what's on the cert.
 
-**SAN verification rules:** If a cert has SANs, they must be consistent with what we know about the peer. If a cert has IP SANs, they are checked against the peer's resolved IP. If a cert has DNS SANs and the peer was configured by hostname, they are checked against that hostname. If a cert has both, both are checked. If a cert has SANs but none match, validation fails. If a cert has no SANs, validation passes (cert chain validation is sufficient).
+**SAN verification rules:** If a cert has no SANs, validation passes (cert chain validation is sufficient). If a cert has SANs, at least one MUST match what we know about the peer — consistent with standard TLS behavior (RFC 6125). A cert may have multiple IP and DNS SANs; only one needs to match. If a cert has both IP and DNS SANs but only one type matches, validation passes. If no SAN matches at all, validation fails.
 
 | Scenario | SNI | Cert chain validation | IP SAN check | DNS SAN check | On success | On failure |
 |---|---|---|---|---|---|---|
