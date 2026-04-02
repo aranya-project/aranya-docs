@@ -71,14 +71,14 @@ See [Future Work](#future-work) for planned enhancements including DER output fo
 flowchart TD
     A[1. Generate certs] -->|certgen or external PKI| B[2. Create/add team]
     B --> C[3. Configure certs via set_cert]
-    C -->|read files, store key in keystore,<br/>copy certs to state_dir| D[4. Add sync peers]
+    C -->|read files, store key in keystore,<br/>copy certs to work_dir| D[4. Add sync peers]
     D --> E[5. Sync over mTLS]
     E -->|cert expires or<br/>needs updating| F[6. Reconfigure certs via set_cert]
     F --> E
     E -->|team no longer needed| G[7. Remove team]
     G -->|delete certs, remove key<br/>from keystore, close connections| H[Done]
 
-    I[Daemon restart] -->|scan state_dir/certs,<br/>load public certs into caches| E
+    I[Daemon restart] -->|scan work_dir/certs,<br/>load public certs into caches| E
 
     E -->|device cert expires| J[8. Expired cert]
     J -->|new connections fail.<br/>set_cert required to resume.| C
@@ -86,14 +86,14 @@ flowchart TD
 
 1. **Generate** — Create device cert, private key, and cert chain using `aranya-certgen` or external PKI.
 2. **Create/add team** — Team must exist before certs can be configured.
-3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `state_dir/certs/<team_id>/`. User is responsible for deleting source files.
+3. **Configure** — Call `set_cert` (via builder or standalone). Daemon reads files, stores private key in keystore (AEAD-encrypted), copies certs to `work_dir/certs/<team_id>/`. User is responsible for deleting source files.
 4. **Add sync peers** — Configure which peers to sync with. Connections will fail TLS handshakes until certs are configured.
 5. **Sync** — Outbound and inbound connections use per-team certs and cert chains. Private keys loaded from keystore on-demand per connection.
 6. **Reconfigure** — Call `set_cert` again with new files. Reconfigures which cert the device presents (does NOT revoke the old cert). Old connections removed from map and closed immediately. New connections use the new cert.
-7. **Remove** — Delete certs from `state_dir`, remove key from keystore, close connections.
+7. **Remove** — Delete certs from `work_dir`, remove key from keystore, close connections.
 8. **Expired cert cleanup** — Detected reactively during TLS handshake failures. New connections fail until `set_cert` is called with a valid cert. Existing connections continue until they drop naturally.
 
-On **daemon restart**, public certs are reloaded from `state_dir/certs/` into the resolver and verifier caches. Private keys remain encrypted in the keystore and are loaded on-demand per handshake.
+On **daemon restart**, public certs are reloaded from `work_dir/certs/` into the resolver and verifier caches. Private keys remain encrypted in the keystore and are loaded on-demand per handshake.
 
 ### Generation
 
@@ -163,8 +163,8 @@ if let Some(conn) = conn {
     conn.close(0u32.into(), b"cert reconfigured");
 }
 ```
-3. Copy the `cert_chain` directory to `state_dir/certs/<team_id>/chain/`. **[MTLS-031]**
-4. Copy the device cert to `state_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
+3. Copy the `cert_chain` directory to `work_dir/certs/<team_id>/chain/`. **[MTLS-031]**
+4. Copy the device cert to `work_dir/certs/<team_id>/device.crt.pem`. **[MTLS-030]**
 5. Store the private key in the keystore as a `TlsPrivateKey` (AEAD-encrypted at rest, keyed by team ID). **[MTLS-032]** If a key already exists for this team, replace it per **[MTLS-029]**. The keystore is the sole source of truth for the private key — the plaintext key bytes are never passed to rustls during import. **[MTLS-033]**
 6. Update the `ResolvesServerCert` resolver's cached certs for this team (device cert + cert chain only, no private key). **[MTLS-086]**
 7. Update the `ClientCertVerifier`'s trust store for this team (cert chain loaded into per-team `RootCertStore`). **[MTLS-087]**
@@ -196,8 +196,8 @@ Quinn MUST be configured with the `rustls-aws-lc-rs` feature (not the default `r
 
 When the daemon starts:
 
-1. Scan `state_dir/certs/` for team subdirectories. **[MTLS-039]**
-2. For each team: load the device cert and cert chain from `state_dir/certs/<team_id>/`. **[MTLS-040]**
+1. Scan `work_dir/certs/` for team subdirectories. **[MTLS-039]**
+2. For each team: load the device cert and cert chain from `work_dir/certs/<team_id>/`. **[MTLS-040]**
 3. Populate the `ResolvesServerCert` resolver's cert cache and the `ClientCertVerifier`'s per-team trust stores with the loaded public certs. **[MTLS-042]** Private keys remain encrypted in the keystore and are loaded on-demand per handshake per **[MTLS-050, MTLS-070]**.
 
 ### Cert Reconfiguration
@@ -216,7 +216,7 @@ See [Future Work](#future-work) for planned proactive cert expiry scanning.
 
 ### Team Removal
 
-1. Delete the `state_dir/certs/<team_id>/` directory and its contents. **[MTLS-043]**
+1. Delete the `work_dir/certs/<team_id>/` directory and its contents. **[MTLS-043]**
 2. Remove the `TlsPrivateKey` from the keystore. **[MTLS-044]**
 3. Remove the team from the resolver and verifier caches. **[MTLS-045]**
 4. Remove connections for this team from the connection map and close them with `CONNECTION_CLOSE`, same as cert reconfiguration per **[MTLS-085, MTLS-091, MTLS-092]**. **[MTLS-046]**
@@ -351,7 +351,7 @@ The shared `ServerConfig` MUST remain in memory to accept inbound connections. *
 
 Outbound:
 1. Check the connection map for an existing healthy connection to (peer, team) — if found, reuse it per **[MTLS-063]**
-2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `state_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
+2. Otherwise, build a `ClientConfig` on-demand: load the team's device cert from `work_dir/certs/<team_id>/`, decrypt the `TlsPrivateKey` from the keystore, and load the team's cert chain per **[MTLS-068]**
 3. Initiate connection using `connect_with()`, which takes ownership of the `ClientConfig` per **[MTLS-052]**. Set SNI to team ID (base58) per **[MTLS-084]**.
 4. TLS handshake completes with mutual cert chain validation per **[MTLS-061]**
 5. After the TLS handshake completes, the private key is zeroized. The Rust-allocated key bytes (wrapped in `Zeroizing`) are zeroized after `CertifiedKey` construction per **[MTLS-035]**. The C-allocated key inside aws-lc-rs is zeroized when the `Arc<CertifiedKey>` drops after the handshake per **[MTLS-051]**.
