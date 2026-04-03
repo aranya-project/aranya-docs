@@ -396,20 +396,25 @@ Client SAN verification is performed at the application layer after the TLS hand
 ```mermaid
 flowchart TD
     A[Cert received] --> B{Cert has SANs?<br/>MTLS-093}
-    B -->|No| C[Pass — cert chain<br/>validation is sufficient]
-    B -->|Yes| D{Check each SAN<br/>MTLS-094}
-    D --> E{IP SAN?<br/>MTLS-075}
-    E -->|Yes| F{Matches peer's IP?}
-    F -->|Yes| G[Pass — at least one<br/>SAN matches]
-    F -->|No| D
-    E -->|No| H{DNS SAN?<br/>MTLS-095}
-    H -->|Yes| I{Peer hostname known<br/>and matches?}
-    I -->|Yes| G
-    I -->|No| J{DNS resolves to<br/>peer's IP?}
-    J -->|Yes| G
-    J -->|No| D
-    H -->|No| D
-    D -->|No more SANs| K[Fail — SANs present<br/>but none match<br/>MTLS-094]
+    B -->|No| PASS[Pass — cert chain<br/>validation is sufficient]
+    B -->|Yes| LOOP[For each SAN on cert<br/>MTLS-094]
+
+    LOOP --> IP{IP SAN?<br/>MTLS-075}
+    IP -->|Yes| IP_MATCH{Matches peer's IP?}
+    IP_MATCH -->|Yes| PASS
+    IP_MATCH -->|No| NEXT[Next SAN]
+
+    IP -->|No| DNS{DNS SAN?<br/>MTLS-095}
+    DNS -->|Yes| HOST{Peer hostname known<br/>and matches?}
+    HOST -->|Yes| PASS
+    HOST -->|No| RESOLVE{DNS resolves to<br/>peer's IP?}
+    RESOLVE -->|Yes| PASS
+    RESOLVE -->|No| NEXT
+
+    DNS -->|No| NEXT
+    NEXT --> LOOP
+
+    LOOP -->|No more SANs| FAIL[Fail — SANs present<br/>but none match<br/>MTLS-094]
 ```
 
 ### SAN Verification Pseudocode
