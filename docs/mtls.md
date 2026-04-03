@@ -395,21 +395,21 @@ Client SAN verification is performed at the application layer after the TLS hand
 
 ```mermaid
 flowchart TD
-    A[Cert received] --> B{Cert has SANs?}
-    B -->|No| C[Pass — cert chain validation is sufficient. MTLS-093]
-    B -->|Yes| D{Check each SAN}
-    D --> E{IP SAN?}
+    A[Cert received] --> B{Cert has SANs?<br/>MTLS-093}
+    B -->|No| C[Pass — cert chain<br/>validation is sufficient]
+    B -->|Yes| D{Check each SAN<br/>MTLS-094}
+    D --> E{IP SAN?<br/>MTLS-075}
     E -->|Yes| F{Matches peer's IP?}
-    F -->|Yes| G[Pass]
+    F -->|Yes| G[Pass — at least one<br/>SAN matches]
     F -->|No| D
-    E -->|No| H{DNS SAN?}
+    E -->|No| H{DNS SAN?<br/>MTLS-095}
     H -->|Yes| I{Peer hostname known<br/>and matches?}
     I -->|Yes| G
     I -->|No| J{DNS resolves to<br/>peer's IP?}
     J -->|Yes| G
     J -->|No| D
     H -->|No| D
-    D -->|No more SANs| K[Fail — SANs present but none match. MTLS-094]
+    D -->|No more SANs| K[Fail — SANs present<br/>but none match<br/>MTLS-094]
 ```
 
 ### SAN Verification Pseudocode
