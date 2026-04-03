@@ -366,17 +366,7 @@ Inbound:
 
 The following table summarizes all certificate validation checks across connection types. Cert chain validation proves the peer is trusted by the team's CA. SAN verification ensures the peer's address or hostname is consistent with what's on the cert.
 
-**SAN verification rules:**
-
-- If a cert has no SANs, SAN verification MUST be skipped — cert chain validation is sufficient. **[MTLS-093]** A cert without SANs implies that the CA intentionally signed it without address or hostname bindings, which may be necessary for networks where IP or hostname verification is difficult (e.g., dynamic IPs without stable DNS).
-- If a cert has SANs, at least one (IP or DNS) MUST match what we know about the peer, consistent with standard TLS behavior (RFC 6125). **[MTLS-094]**
-- IP SANs MUST be checked against the peer's resolved IP address. IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent. **[MTLS-075]**
-- DNS SANs MUST be checked against the peer's hostname if known (direct string match), or resolved via DNS lookup and compared against the peer's IP. **[MTLS-095]**
-- If a cert has both IP and DNS SANs, only one needs to match. Non-matching SANs are not a failure as long as at least one matches — consistent with RFC 6125 §6.4.4. This handles certs with stale IP SANs (e.g., after an IP change) where the DNS SAN is still valid. **[MTLS-094]**
-- If a cert has SANs but none match, verification MUST fail. **[MTLS-094]**
-- Client SANs MUST NOT be checked during the TLS handshake. Client SAN verification MUST only be performed at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
-
-**Custom** = deviates from standard mTLS.
+**Custom** = deviates from standard mTLS. SAN verification details in [SAN Verification Flow](#san-verification-flow).
 
 | Scenario | SNI | Server cert chain | Server SANs | Client cert chain | Client SANs | On failure |
 |---|---|---|---|---|---|---|
@@ -392,6 +382,16 @@ Notes:
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
 
 ### SAN Verification Flow
+
+**Requirements:**
+
+- If a cert has no SANs, SAN verification MUST be skipped — cert chain validation is sufficient. **[MTLS-093]** A cert without SANs implies that the CA intentionally signed it without address or hostname bindings, which may be necessary for networks where IP or hostname verification is difficult (e.g., dynamic IPs without stable DNS).
+- If a cert has SANs, at least one (IP or DNS) MUST match what we know about the peer, consistent with standard TLS behavior (RFC 6125). **[MTLS-094]**
+- IP SANs MUST be checked against the peer's resolved IP address. IPv4-mapped IPv6 addresses MUST be compared against their IPv4 equivalent. **[MTLS-075]**
+- DNS SANs MUST be checked against the peer's hostname if known (direct string match), or resolved via DNS lookup and compared against the peer's IP. **[MTLS-095]**
+- If a cert has both IP and DNS SANs, only one needs to match. Non-matching SANs are not a failure as long as at least one matches — consistent with RFC 6125 §6.4.4. This handles certs with stale IP SANs (e.g., after an IP change) where the DNS SAN is still valid. **[MTLS-094]**
+- If a cert has SANs but none match, verification MUST fail. **[MTLS-094]**
+- Client SANs MUST NOT be checked during the TLS handshake. Client SAN verification MUST only be performed at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
 
 ```mermaid
 flowchart TD
