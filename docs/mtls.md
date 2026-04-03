@@ -381,7 +381,7 @@ The following table summarizes all certificate validation checks across connecti
 | Scenario | SNI | Server cert chain | Server SANs | Client cert chain | Client SANs | On failure |
 |---|---|---|---|---|---|---|
 | **TLS handshake** | Client sets team ID **[MTLS-084, MTLS-055]** | Yes **[MTLS-061]** | Yes **[MTLS-090]** | **Custom:** per-team trust anchors selected by SNI **[MTLS-087]** | No **[MTLS-072]** | Handshake fails |
-| **Reverse reuse** | N/A | N/A | N/A | N/A | **Custom** **[MTLS-073, MTLS-074, MTLS-075]** | Not reused; new outbound attempted **[MTLS-066]** |
+| **Reverse reuse** | N/A | N/A | N/A | N/A | **Custom:** application-layer check — IP SANs checked against peer's connecting IP, DNS SANs resolved to IP. Standard TLS does not verify client SANs. **[MTLS-073, MTLS-074, MTLS-075]** | Not reused; new outbound attempted **[MTLS-066]** |
 
 Notes:
 - The TLS handshake row applies to both outbound and inbound connections. The only custom deviation is server-side client cert chain validation: standard mTLS uses a single global trust store, while our server selects per-team trust anchors based on the team ID in SNI. **[MTLS-087]**
