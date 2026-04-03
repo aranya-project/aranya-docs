@@ -391,6 +391,27 @@ Notes:
 
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
 
+### SAN Verification Flow
+
+```mermaid
+flowchart TD
+    A[Cert received] --> B{Cert has SANs?}
+    B -->|No| C[Pass — cert chain validation is sufficient. MTLS-093]
+    B -->|Yes| D{Check each SAN}
+    D --> E{IP SAN?}
+    E -->|Yes| F{Matches peer's IP?}
+    F -->|Yes| G[Pass]
+    F -->|No| D
+    E -->|No| H{DNS SAN?}
+    H -->|Yes| I{Peer hostname known<br/>and matches?}
+    I -->|Yes| G
+    I -->|No| J{DNS resolves to<br/>peer's IP?}
+    J -->|Yes| G
+    J -->|No| D
+    H -->|No| D
+    D -->|No more SANs| K[Fail — SANs present but none match. MTLS-094]
+```
+
 ### SAN Verification Pseudocode
 
 The core SAN verification logic is shared, but the inputs and failure handling differ:
