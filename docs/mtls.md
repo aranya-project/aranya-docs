@@ -376,11 +376,19 @@ The following table summarizes all certificate validation checks across connecti
 - If a cert has SANs but none match, verification MUST fail. **[MTLS-094]**
 - Client SANs MUST NOT be checked during the TLS handshake. Client SAN verification MUST only be performed at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
 
-| Scenario | SNI | Server cert chain | Server SAN check | Client cert chain | Client SAN check | On success | On failure |
-|---|---|---|---|---|---|---|---|
-| **Outbound (we are client)** | **Custom.** Client sets team ID (base58) as SNI, not a hostname. **[MTLS-084]** | We validate. Standard mTLS — server cert checked against team's trust anchors. **[MTLS-061]** | We validate. Standard TLS — if cert has SANs, at least one (IP or DNS) must match peer's resolved IP and/or hostname. No SANs: skip. **[MTLS-090]** | Server validates. Standard mTLS — our client cert checked against the server's trust anchors. **[MTLS-061]** | Not checked. Standard mTLS also does not check client SANs during handshake. | Connection established. | Handshake fails. |
-| **Inbound (we are server)** | Client sets team ID (base58) as SNI. **[MTLS-055]** | Client validates. Standard mTLS — our server cert checked against the client's trust anchors. **[MTLS-061]** | Client validates. Handled by the connecting client, not us. | **Custom.** We validate — client cert checked against per-team trust anchors selected by SNI. Standard mTLS uses a single global trust store. **[MTLS-087]** | Not checked during handshake. Standard mTLS also does not check client SANs. | Connection established. | Handshake fails. |
-| **Reverse reuse (application layer)** | N/A — already established. | N/A — already validated. | N/A — already validated. | N/A — already validated during handshake. | **Custom.** We validate — not part of standard TLS. If cert has SANs, at least one (IP or DNS) must match peer's connecting IP. No SANs: skip. **[MTLS-073, MTLS-074, MTLS-075]** | Connection reused in reverse. | Connection NOT reused. New outbound connection attempted instead. **[MTLS-066]** Inbound connection remains open. **[MTLS-077]** |
+C = client validates, S = server validates. **Custom** = deviates from standard mTLS.
+
+| Scenario | SNI | Server cert chain | Server SANs | Client cert chain | Client SANs | On failure |
+|---|---|---|---|---|---|---|
+| **Outbound** | C sets team ID **[MTLS-084]** | C validates **[MTLS-061]** | C validates **[MTLS-090]** | S validates **[MTLS-061]** | No | Handshake fails |
+| **Inbound** | C sets team ID **[MTLS-055]** | C validates **[MTLS-061]** | C validates | **Custom:** S validates per-team trust anchors selected by SNI **[MTLS-087]** | No | Handshake fails |
+| **Reverse reuse** | N/A | N/A | N/A | N/A | **Custom:** S validates **[MTLS-073, MTLS-074, MTLS-075]** | Not reused; new outbound attempted **[MTLS-066]** |
+
+Notes:
+- SNI contains the team ID (base58), not a hostname. **[MTLS-084]**
+- Standard mTLS uses a single global trust store for client cert validation. Our server selects per-team trust anchors based on the team ID in SNI. **[MTLS-087]**
+- Client SANs are not checked during the TLS handshake (standard mTLS behavior). They are only checked at the application layer when deciding whether to reuse an inbound connection in reverse. **[MTLS-072]**
+- On reverse reuse failure, the inbound connection remains open for the peer to continue syncing to us. **[MTLS-077]**
 
 Client SAN verification is performed at the application layer after the TLS handshake, not inside `ClientCertVerifier`. The `ClientCertVerifier` trait does not have access to the peer's IP address and is only responsible for cert chain validation during the handshake per **[MTLS-087]**.
 
