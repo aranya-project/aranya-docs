@@ -4,6 +4,26 @@ title: "Policy Lang: 'or' and 'recall'"
 permalink: "/policy-or-recall/"
 ---
 
+## The "never" type and control flow escape
+
+Some expressions in the policy language don't actually produce values,
+because they cause some kind of escape from their evaluation. `todo()`,
+for example, immediately panics the VM with an error. or `return` within
+a function, which exits the function with a value. These expressions
+internally have the "never" type, which means they will never produce a
+value.
+
+Practically, that means these expressions can work as any type because
+their value will never be calculated. Which means they can exist in some weird places.
+
+```policy
+function foo() bool {
+    let x = query Foo[x: return false]
+}
+```
+
+I recommend you don't do this.
+
 ## `or` operator
 
 `or` is an optional coalescing operator that combines `unwrap` with a
@@ -94,7 +114,28 @@ command Foo {
 The `recall` keyword is followed by a function call-like item that
 refers to a recall block within the command. The command is recalled, and evaluation continues at the named recall block.
 
+In expression form, `recall` has the "never" type, as it does not
+produce a value and instead transfers control.
+
 `recall` is valid only within `policy` blocks.
+
+## `check ... else ...`
+
+The expression in `check` is now followed by an `else` keyword and a
+terminal expression. Specifically, that means something that has the
+"never" type.
+
+```policy
+check authorized else recall unauthorized()
+check valid_user(user_id) else return Err(Error::InvalidUser)
+```
+
+Thus, failing the checked expression still performs an early exit, but
+`check` is now a more explicit and flexible control flow statement.
+
+`check` is still valid in policy blocks and functions, but the use of
+either `recall` or `return` is restricted to policy blocks and
+functions, respectively.
 
 ## Removal of `unwrap` and `check_unwrap`
 
@@ -111,8 +152,8 @@ let x = y or todo()
 ```
 
 But what is better is using `or` to report error conditions by early
-exiting with a `recall` (appropriate within policy blocks) or a `result`
-(for everywhere else).
+exiting with a `recall` (within policy blocks) or returning a `result`
+(within pure functions).
 
 ```policy
 let x = y or recall policy_failed()
