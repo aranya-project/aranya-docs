@@ -27,11 +27,7 @@ Where m is the average number of branches at a given max cut and n is the
 number of segments in the graph. Typically m should be less than 2.
 
 Each segment will have skips to segments further towards the root of the
-graph. A skip is a reference to a segment. When a segment is created we will
-randomly generate three different max cuts that are less than the new segment's
-max cut. The segment will then have skips to segments with matching max cuts.
-This will usually result in three skips, but it can be less if two different
-max cuts reference the same segment.
+graph. A skip is a reference to a segment.
 
 A skip can't jump into a branch. If this was allowed we'd have to backtrack
 to find missed branches. A skip can jump back to the last merge
@@ -74,45 +70,65 @@ Segment {
 },
 ```
 
-### Search algorithm
-Search will start at the head of the graph. If the max cut of the command is within
-the head segment that segment will be checked. If the command is found it will be
-returned. If the command is not found, the skip segment with lowest low_max_cut that is
->= to the command's max cut will be checked. If there is no skip segment to check
-the segments parent will be checked. If a merge command is reached both
-parent segments will be added to the list of heads. The algorithm will then be
-repeated with all of the added heads.
+## Skip List Construction
 
-This will result in quickly skipping deeply into the graph. When the search gets
-close and can no longer skip it'll fall back to checking segments and if a
-segment is reached whose low_max_cut is less than the commands max cut, then the
-search will back up and continue from a previous head.
+### Skip Targets
 
-```rust
-fn locate(id: Id, max_cut: usize) -> Some(Command) {
-    heads = [head.segment];
-    'outer: while let Some(head) = heads.pop() {
-        if head.high_max_cut < max_cut {
-            // we are too far back
-            continue;
-        }
-        if head.low_max_cut <= max_cut {
-            let command = head[max_cut - head.low_max_cut];
-            if command.id == id {
-                return Some(command);
-            }
-            continue;
-        }
-        // Assumes this is in ascending order
-        // Find the lowest skip that is not "below" the max_cut
-        for segment in head.skip_segments {
-            if segment.high_max_cut >= max_cut {
-                heads.push(segment);
-                continue 'outer;
-            }
-        }
-        heads.extend(head.parents());
-    }
-    None
-}
+For all segments, skip entries are placed at exponentially-spaced
+distances from the current max cut toward the root:
+
 ```
+N/2, 3N/4, 7N/8, 15N/16, ...
+```
+
+This continues until the gap between the current position and the next
+target is less than or equal to MIN_SKIP_GAP (10). For a segment at
+max cut N, this produces approximately log2(N/10) skip entries:
+
+```
+N = 100:    entries at 50, 75, 87, 93 (4 entries)
+N = 1000:   entries at 500, 750, 875, 937, 968, 984, 992 (7 entries)
+N = 10000:  entries at 5000, 7500, 8750, ... (10 entries)
+N = 1000000000: approximately 27 entries
+```
+
+### Merge Segments
+
+Merge segments use the same exponentially-spaced targets as non-merge
+segments, but the walk to find them starts from the least common
+ancestor (LCA) instead of the parent. Targets above the LCA's max cut
+are in a branch and naturally unreachable during the walk, so they
+are skipped. The LCA is always included in the skip list even if the
+sparse check (below) determines no other entries are needed.
+
+### Sparse Construction
+
+Not every segment needs a skip list. Before constructing one, check
+whether any ancestor within MIN_SKIP_GAP (10) segments already has a
+non-empty skip list. If so, skip construction entirely and write an
+empty skip list. Merge segments count as having a skip list since
+they always contain the LCA. For merge segments where the sparse check
+says no skip list is needed, the LCA is still included as the sole
+entry.
+
+This means approximately 1 in 10 segments builds a skip list. The other
+9 rely on a nearby ancestor's skip list, reachable within at most 10
+prior steps.
+
+### Finding Skip Targets
+
+Skip targets are found by walking backwards in a single pass. For
+non-merge segments the walk starts from the parent. For merge segments
+the walk starts from the LCA. The walk uses existing skip lists on
+intermediate segments to jump when possible:
+
+1. Compute all target max cuts (N/2, 3N/4, 7N/8, ...).
+2. Walk backwards from the start point, using skip entries that stay
+   at or above the lowest remaining target.
+3. As each target boundary is crossed, record the segment's first
+   location as a skip entry.
+4. Stop when all targets are collected.
+
+On a graph with well-formed skip lists, this walk takes O(log n) steps
+since intermediate segments have their own skip entries that allow
+jumping. The walk visits each segment at most once.
