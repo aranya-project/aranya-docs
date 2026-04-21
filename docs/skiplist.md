@@ -72,6 +72,35 @@ Segment {
 
 ## Skip List Construction
 
+### Why Not Probabilistic
+
+The classical probabilistic skip list (Pugh 1990) assigns each element
+a random level and chains same-level elements together, halving span
+per level to reach O(log n) expected time. Two obstacles rule this out
+here:
+
+1. The O(log n) guarantee comes from the chain structure, not from
+   randomness alone. Independent uniform-random skips per segment --
+   without chains -- give expected search cost O(sqrt(N/k)) for k skips
+   per segment, because most random skips overshoot or land uselessly
+   for any given query. Matching O(log n) search requires k proportional
+   to N/log^2(N) per segment, nearly linear in N. An earlier version of
+   this design used three random skips per segment and exhibited this
+   behavior: for a target at distance 1000 in a graph of 50,000
+   segments, search visited roughly 200 segments instead of the
+   ~log2(1000) = 10 achievable with structured skips.
+
+2. Chains assume a sequence. A skip cannot jump into a branch (see
+   above), so same-level chains crossing merge points would require
+   per-branch tracking and LCA resolution -- most of the structural
+   work done below.
+
+The deterministic exponential spacing described in the following
+sections places log n entries per segment at distinct distance scales
+(N/2, 3N/4, 7N/8, ...), giving O(log n) worst-case search with log n
+pointers per segment. Each pointer is guaranteed useful at some
+distance rather than probabilistically so.
+
 ### Skip Targets
 
 For all segments, skip entries are placed at exponentially-spaced
