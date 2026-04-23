@@ -16,6 +16,7 @@
 - [Types](reference/types.md)
   - [Basic Types](reference/types/basic.md)
   - [Optional Types](reference/types/optional.md)
+  - [Result Types](reference/types/result.md)
   - [Structs](reference/types/structs.md)
   - [Enumerations](reference/types/enums.md)
   - [Opaque Types](reference/types/opaque.md)
