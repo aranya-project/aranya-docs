@@ -1,6 +1,6 @@
 # Result type
 
-A type that captures the outcome of an operation, and the resulting value or error.
+A type that represents either a success (with an associated value), or a failure with a value descripbing the error . A `result[T, E]` is either `Ok(v)`, where `v` is a value of type `T` produced on success, or `Err(e)`, where `e` is a value of type `E` describing the failure. Result values can be inspected with a `match` to extract the inner value or propagate the error.
 
 <img src="result-literal.svg">
 
