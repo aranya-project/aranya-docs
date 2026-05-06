@@ -165,3 +165,47 @@ Each entry grows from 16 bytes (`Location`) to 24 bytes (`(Location, bool)` with
 **Segment max_cut ranges**: The `Segment` trait exposes `shortest_max_cut()` (first command) and `longest_max_cut()` (last command). Heads entries carry `longest_max_cut` (via prior Locations pointing to segment heads) and are popped highest first. Pending entries carry `shortest_max_cut` (via `first_location()`). The flush condition compares pending `shortest_max_cut` against the current head's `longest_max_cut`, ensuring correctness when ranges overlap.
 
 **Result ordering**: The result may need a final sort to ensure causal order (parents before children).
+
+## Skip List Optimization
+
+The single-pass traversal described above is O(n) per sync round where
+n is the number of segments between the head and the peer's known
+commands. When syncing a large graph across many rounds (each
+transferring SEGMENT_BUFFER_MAX segments), the total cost is O(n^2)
+because each round re-walks from the head.
+
+### Approach
+
+Before starting the main traversal, use skip lists to jump from the
+graph head to approximately `highest_have + SEGMENT_BUFFER_MAX`. This
+skips over the large uncovered region that won't fit in the current
+batch anyway (only SEGMENT_BUFFER_MAX segments are collected per
+round).
+
+The jump works as follows:
+
+1. Compute the target: `highest_have_max_cut + SEGMENT_BUFFER_MAX`,
+   where `highest_have` is the max cut of the peer's most recent known
+   command.
+2. Walk backwards from head using skip entries that stay at or above
+   the target. Do not follow any skip or prior that would go below the
+   target.
+3. Stop when no further step can be taken without going below the
+   target.
+4. Begin the normal traversal from that point instead of from head.
+
+This reduces the per-round cost from O(n) to O(log n + SEGMENT_BUFFER_MAX),
+making the total cost across all sync rounds O(n log n) instead of
+O(n^2).
+
+### Correctness
+
+The optimization is safe because:
+
+- Everything above the target is uncovered (no have_location has a
+  higher max cut than `highest_have`).
+- The normal traversal from the landing point will find the
+  SEGMENT_BUFFER_MAX lowest uncovered segments, which is the same set
+  the full traversal would collect.
+- Skip entries never jump into branches, so the landing point is
+  always an ancestor of the head on the same traversal path.
