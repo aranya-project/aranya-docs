@@ -37,9 +37,9 @@ Local authoring rebuilds the cache if stale, collapses the head set pairwise int
 
 ### Storage model
 
-The persisted graph state changes from `head: Location` to `heads: HeadSet`, where `HeadSet` is a small bounded vector of locations. The single-head case is a one-element head set.
+The persisted graph state changes from `head: Location` to `heads: HeadSet`, where `HeadSet` is a bounded vector of locations. The cap matches the braid's max-cut limit (256 concurrent authors); sync ingestion that would push the head set past capacity returns an error rather than forcing an inline merge — the same posture the braid takes today. The single-head case is a one-element head set.
 
-`Writer::head() -> Location` becomes `Writer::heads() -> HeadSet`. `Writer::commit(head: Location)` becomes `Writer::commit(heads: HeadSet, fact_cache: FactCacheRef)`.
+`Writer::head() -> Location` becomes `Writer::heads() -> HeadSet`. `Writer::commit(head: Location)` becomes `Writer::commit(heads: HeadSet, fact_cache: FactCacheRef)`; the fact cache is a separate persisted record (see [Fact Cache](#fact-cache)), and commit writes both atomically.
 
 ## Transaction Lifecycle
 
@@ -64,7 +64,9 @@ Init creates the graph and seeds `self.heads` with the init command directly; it
 
 ## Fact Cache
 
-The fact cache is a persisted record holding the merged fact perspective for some head set, separate from any merge segment. It contains:
+Today the merged perspective lives on the latest merge segment's fact index — every commit writes a merge, and that merge's `FactIndex` *is* the cache. Lazy merging removes the merge from the sync path, so the perspective has nowhere to live unless we give it a dedicated home.
+
+The fact cache is that home: a persisted record holding the merged fact perspective for some head set, separate from any merge segment. It contains:
 
 - A reference to the cached `FactIndex`.
 - The head set fingerprint at cache build time.
@@ -99,21 +101,8 @@ ingest(commands):
     // fact cache is left as-is; the next cache read rebuilds if stale
 
 update_head_set(cmd):
-    match cmd.parent():
-        Single(parent):
-            if parent in head_set:
-                replace parent with cmd in head_set
-            else:
-                add cmd to head_set
-                minimize head_set (remove ancestors)
-        Merge(left, right):
-            if {left, right} are both in head_set:
-                replace {left, right} with cmd in head_set
-            else:
-                add cmd to head_set
-                minimize head_set
-        None:
-            // init command; head set starts as {cmd}
+    head_set.insert(cmd)
+    head_set.retain(|h| !is_ancestor(h, cmd))
 ```
 
 ### Cache read and rebuild
