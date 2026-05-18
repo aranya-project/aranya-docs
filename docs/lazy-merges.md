@@ -105,6 +105,12 @@ update_head_set(cmd):
     head_set.retain(|h| !is_ancestor(h, cmd))
 ```
 
+### Merge ingestion
+
+A merge command carries only its parent addresses on the wire (`CommandMeta` in `sync/wire.rs`); the fact index is not transmitted, and a receiver has no way to verify a peer's fact index short of redoing the braid. So sync ingestion of a peer-authored merge braids the two parents locally and populates the merge segment's `FactIndex` from the result. This is the existing `add_merge` path in `Transaction::add_commands` (`crates/aranya-runtime/src/client/transaction.rs`) and is unchanged.
+
+In the lazy regime peers don't author merges during sync, so the merges on the wire are only those a peer wrote at commit time to collapse for a local action. Compared to eager — where every sync batch generates a peer-local merge that other peers then ingest — the merge volume drops sharply, which is what keeps the per-ingest braid cost affordable.
+
 ### Cache read and rebuild
 
 Every cache read goes through `read_cache`, which checks freshness and rebuilds if stale. Query, session, and author callers do not call a separate `ensure_cache_fresh`; they read the cache and the rebuild happens implicitly. Queries pass a `NullSink`; author and the public `refresh_cache` API thread the caller's sink so braid-fold effects flow out during rebuild.
@@ -138,7 +144,7 @@ Per-event costs:
 | Event | Cost |
 |:---|:---|
 | Sync ingest one command | O(1) head-set update plus per-segment write |
-| Sync ingest a merge command from a peer (both parents heads) | O(1) head-set update; no braid work |
+| Sync ingest a merge command from a peer | O(1) head-set update plus one braid over the two parents to populate the merge's fact index (see [Merge ingestion](#merge-ingestion)) |
 | Query, fresh cache | O(1) |
 | Query, stale cache | O(N + n) rebuild where N = head set size, n = commands since LCA |
 | Local author, fresh cache | (N-1) pairwise braids plus authored command write |
