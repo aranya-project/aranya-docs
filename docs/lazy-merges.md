@@ -43,7 +43,7 @@ The persisted graph state changes from `head: Location` to `heads: HeadSet`, whe
 
 ## Transaction Lifecycle
 
-`Transaction` carries `self.heads: BTreeMap<CmdId, Location>`. Today it tracks only commands written during the transaction and is pairwise-merged at commit. Under lazy merging, `self.heads` is seeded with the graph's head set at transaction start and mutated as commands arrive. The single `original_head` snapshot becomes `original_heads`, used only for concurrency detection.
+`Transaction` carries `self.heads: BTreeMap<CmdId, Location>`. Today it tracks only commands written during the transaction and is pairwise-merged at commit. Under lazy merging, `self.heads` is seeded with the graph's head set at transaction start and mutated as commands arrive.
 
 Ingestion updates `self.heads` in place:
 
@@ -159,9 +159,9 @@ Compared to eager:
 
 ## Edge Cases
 
-### Concurrent transactions
+### Concurrency
 
-`Transaction::commit` errors with `ClientError::ConcurrentTransaction` when `original_head != storage.get_head()`. In the head-set model the check becomes: every member of `original_heads` must still be present in the current head set or covered by a descendant. Elements removed without a descendant subsuming them reject the transaction.
+Single-writer is a property of the runtime: `ClientState` requires `&mut self` for all graph operations, and the storage backend contractually requires a single writer per file (see the comment at the top of `storage/linear/io.rs`). The lazy-merges design doesn't change that.
 
 ### Sessions
 
@@ -179,7 +179,6 @@ Compared to eager:
 
 ### Transaction
 
-- `Transaction::original_head: Option<Location>` becomes `original_heads: Option<HeadSet>`.
 - `self.heads` is seeded with `storage.get_heads()?` on first use instead of being empty.
 - Ingestion mutates `self.heads` in place; commit persists it directly when no authoring occurred.
 - The pairwise merge loop in `Transaction::commit` runs only on the authoring path and seeds the final merge's fact index from the cache.
