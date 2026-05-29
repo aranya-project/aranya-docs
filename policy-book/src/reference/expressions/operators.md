@@ -47,9 +47,47 @@ Integers can be compared against each other.
 | `check_unwrap` | Same as `unwrap`, but stop with a [check failure](../errors.md#check-failures) instead of a runtime exception |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
+| `or` | `A or B` evaluates to the value inside A if it is Some, otherwise evaluates to B |
 
 Using `is` on a non-optional value will fail with a compile error or
 runtime exception.
+
+The `or` operator requires A to be `optional[T]` and B to be of type `T`.
+The result type is `T`. B is only evaluated when A is None (short-circuit
+evaluation). `or` is right-associative, so `a or b or c` is parsed as
+`a or (b or c)`.
+
+```
+let x = Some(1)
+let y = None
+
+let a = Some(1) or 0    // a = 1
+let b = None or 0       // b = 0
+
+// chaining: evaluates left to right, stopping at the first Some.
+// c = 1
+let c = None or Some(1) or 42
+```
+
+### Nested optionals
+
+`or` peels just one layer of optionality. When A is `optional[optional[T]]`,
+the inner type is `optional[T]`, so B must also be `optional[T]` and the result
+is `optional[T]`, not `T`.
+
+| Value of A | Result of `A or B` |
+|---|---|
+| `None` | B (outer is absent) |
+| `Some(Some(v))` | `Some(v)` |
+| `Some(None)` | `None` (outer is present; its inner value is returned, B is not evaluated) |
+
+The `Some(None)` case means `or` does not flatten nested optionals. To collapse
+`optional[optional[T]]` all the way to `T`, apply `or` twice:
+
+```policy
+let inner = Some(Some(1)) or Some(0)  // optional[int]
+let value = inner or 0    // int
+```
 
 ## Operator Precedence
 
@@ -62,3 +100,4 @@ runtime exception.
 | 5        | `>`, `<`, `>=`, `<=`, `is` |
 | 6        | `==`, `!=` |
 | 7        | `&&`, `\|\|` |
+| 8        | `or` |
