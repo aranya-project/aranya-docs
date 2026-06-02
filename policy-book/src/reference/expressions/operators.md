@@ -59,7 +59,7 @@ The result type is `T`. The RHS is only evaluated when the LHS is None (short-ci
 
 ```policy
 let a = Some(5) or foo() // c = 5, foo() not called
-let b = None or Some(0)  // b = 0
+let b = None or Some(0)  // b = Some(0), RHS not unwraped
 ```
 
 #### Associativity and evaluation order
