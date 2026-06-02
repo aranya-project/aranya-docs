@@ -69,7 +69,7 @@ left-to-right, meaning if both sides are non-None, the left side is chosen.
 
 ```policy
 let one = None or Some(1) or 42 
-// None or (Some(1) or 42) -> None or 1 -> 1
+// None or (Some(1) or 42) -> Some(1) or 42 -> 1
 ```
 
 ### Nested optionals
