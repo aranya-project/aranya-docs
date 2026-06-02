@@ -52,21 +52,24 @@ Integers can be compared against each other.
 Using `is` on a non-optional value will fail with a compile error or
 runtime exception.
 
-The `or` operator requires A to be `optional[T]` and B to be of type `T`.
-The result type is `T`. B is only evaluated when A is None (short-circuit
-evaluation). `or` is right-associative, so `a or b or c` is parsed as
-`a or (b or c)`.
+### Coalescing `or`
 
+The `or` operator requires the LHS to be `optional[T]` and the RHS to be of type `T`.
+The result type is `T`. The RHS is only evaluated when the LHS is None (short-circuit evaluation).
+
+```policy
+let a = Some(5) or foo() // c = 5, foo() not called
+let b = None or Some(0)  // b = 0
 ```
-let x = Some(1)
-let y = None
 
-let a = Some(1) or 0    // a = 1
-let b = None or 0       // b = 0
+#### Associativity and evaluation order
 
-// chaining: evaluates left to right, stopping at the first Some.
-// c = 1
-let c = None or Some(1) or 42
+`or` is right-associative, so `a or b or c` is parsed as `a or (b or c)`. Evaluation order is
+left-to-right, meaning if both sides are non-None, the left side is chosen.
+
+```policy
+let one = None or Some(1) or 42 
+// None or (Some(1) or 42) -> None or 1 -> 1
 ```
 
 ### Nested optionals
