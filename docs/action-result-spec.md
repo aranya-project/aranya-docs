@@ -38,7 +38,18 @@ before/without publishing any commands.
 
 3. `check_unwrap` is removed
 
-This change breaks check_unwrap, because the PolicyError::Check variant gains a required error-value payload, which the check_unwap statement doesn't provide
+    The `check_unwrap` statement broke after the default recall block went away - no syntax to
+    specify which recall block to run. It is therefore removed, and existing policies can use `match`
+    instead:
+
+    ```policy
+    let x = query Foo[...]
+    if x is None {
+        recall Err::not_found
+    }
+    ```
+    *TODO Add ticket to implement optional matching so we can do `let x = match query { ... }`.
+    At that point, we probably don't need `unwrap` either - one less way to panic.*
 
 ### Runtime changes
 
@@ -53,10 +64,6 @@ either case, return a success value to the caller (client/session).
 
 
 TODO:
-- figure out check_unwrap
-    - broken already (by multiple recalls): doesn't call recall block.
-    - infallible actions can't return, so can't use anything that check-exits
-    - fallible actions can't specify which error to return
 - if PolicyError::Check has required value, how does that work with #648 (invoke-recall-from-policy)?
     actions return Err(<value>), but commands don't. yet both produce Check exit
 - figure out what's needed for `ifgen`
