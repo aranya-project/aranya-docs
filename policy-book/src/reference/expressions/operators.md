@@ -47,9 +47,50 @@ Integers can be compared against each other.
 | `check_unwrap` | Same as `unwrap`, but stop with a [check failure](../errors.md#check-failures) instead of a runtime exception |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
+| `or` | `A or B` evaluates to the value inside A if it is Some, otherwise evaluates to B |
 
 Using `is` on a non-optional value will fail with a compile error or
 runtime exception.
+
+### Coalescing `or`
+
+The `or` operator requires the LHS to be `optional[T]` and the RHS to be of type `T`.
+The result type is `T`. The RHS is only evaluated when the LHS is None (short-circuit evaluation).
+
+```policy
+let a = Some(5) or foo() // c = 5, foo() not called
+let b = None or Some(0)  // b = Some(0), RHS not unwraped
+```
+
+#### Associativity and evaluation order
+
+`or` is right-associative, so `a or b or c` is parsed as `a or (b or c)`. Evaluation order is
+left-to-right, meaning if both sides are non-None, the left side is chosen.
+
+```policy
+let one = None or Some(1) or 42 
+// None or (Some(1) or 42) -> Some(1) or 42 -> 1
+```
+
+### Nested optionals
+
+`or` peels just one layer of optionality. When A is `optional[optional[T]]`,
+the inner type is `optional[T]`, so B must also be `optional[T]` and the result
+is `optional[T]`, not `T`.
+
+| Value of A | Result of `A or B` |
+|---|---|
+| `None` | B (outer is absent) |
+| `Some(Some(v))` | `Some(v)` |
+| `Some(None)` | `None` (outer is present; its inner value is returned, B is not evaluated) |
+
+The `Some(None)` case means `or` does not flatten nested optionals. To collapse
+`optional[optional[T]]` all the way to `T`, apply `or` twice:
+
+```policy
+let inner = Some(Some(1)) or Some(0)  // optional[int]
+let value = inner or 0    // int
+```
 
 ## Operator Precedence
 
@@ -62,3 +103,4 @@ runtime exception.
 | 5        | `>`, `<`, `>=`, `<=`, `is` |
 | 6        | `==`, `!=` |
 | 7        | `&&`, `\|\|` |
+| 8        | `or` |
