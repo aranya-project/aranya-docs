@@ -42,7 +42,7 @@ merges.
 On ext4 the runtime is dominated by the writer's 1,000 durable
 commits; the subscriber's ~10 batched commits add little.
 
-## Scenario 2: small branching
+## Scenario 2: low branching
 
 Same as scenario 1, except the second peer also writes once every 100
 commands. Each of those writes lands on a head up to 100 commands
@@ -55,7 +55,7 @@ across the 1,000-command run.
 | File-backed, tmpfs | 0.48 s | ~2,100 |
 | File-backed, ext4 (fsync) | 22.1 s | ~45 |
 
-Relative to scenario 1, small branching costs ~4% on fsync-bound ext4,
+Relative to scenario 1, low branching costs ~4% on fsync-bound ext4,
 where durable command commits dominate. The relative cost is larger on
 fast storage (0.28 s vs 0.13 s in-memory), where merge handling and
 the second sync direction are a bigger share of the total.
