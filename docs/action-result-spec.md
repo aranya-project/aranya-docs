@@ -5,7 +5,7 @@ succeeded, and if not, a reason for the failure.
 
 ## Motivation
 
-Today, a failing action produces a `runtime::ClientError`, but there is no way to pass an error
+Today, a failing action produces a `runtime::ClientError`, but there is no way to pass a reason
 value back to the runtime. Failing commands can publish error effects, but an action can fail
 before/without publishing any commands.
 
@@ -13,16 +13,17 @@ before/without publishing any commands.
 
 ### Language changes
 
-1. Actions gain *optional* `result` return type
+1. Actions gain an *optional* `result` return type
 
     ```policy
     action infallible() {}
     action can_fail() result[unit, enum Error] {}
     ```
     
-    The success type is limited to `unit`; returning success values from actions is disallowed
-    because the action result is not authoritative, the sink is.
-    *Note: This assumes the [unit type PR](https://github.com/aranya-project/aranya-core/pull/669) has landed.*
+    The success type is limited to `unit`. Applications should not rely on the return value of an
+    action, because its success does not mean the command(s) and their effect will be
+    accepted on the graph.
+    
     The error type can be any `policy_vm::data::Value` type, including `unit`. Sometimes it's
     enough just to signal failure, without providing an additional value.
 
@@ -35,35 +36,28 @@ before/without publishing any commands.
     - Any commands that have not been updated since the multiple-recall rollout will also need to
       be updated to specify which recall block to invoke, since there is no default recall block
       anymore.
+    - `check` no longer exits with `Check` reason
+      Since the else clause is required, a check failure will run the terminal else expression:
+      return or recall.
+    - `check` not allowed in recall
+      Recall blocks cannot return or call other recall blocks, so the check statement cannot be
+      used in this context.
 
-3. `check_unwrap` is removed
 
-    The `check_unwrap` statement broke after the default recall block went away - no syntax to
-    specify which recall block to run. It is therefore removed, and existing policies can use `match`
-    instead:
+### Error value propagation
 
-    ```policy
-    let x = query Foo[...]
-    if x is None {
-        recall Err::not_found
-    }
-    ```
-    *TODO Add ticket to implement optional matching so we can do `let x = match query { ... }`.
-    At that point, we probably don't need `unwrap` either - one less way to panic.*
+Actions don't exit, they simply return; this is to allow nested action calls. So execution ends not
+when a check fails, but when the outermost action returns. The runtime detects when the call stack
+becomes empty, and that signals the end of execution. This unchanged; what's new is how the return
+value is propagated to the calling application.
 
-### Runtime changes
+After execution has completed (with a Normal reason), the runtime checks the VM stack for the
+action's return value.
 
-Returning from an action terminates the policy with a Normal exit. The VmPolicy then tries to
-retrieve the return value from the stack.
-- If the value is `Err`, the extract its payload, and return a `PolicyError::Check`,
-with the payload. The `PolicyError::Check` variant gains a payload of type `Value`.
+- If the value is `Err`, then extract its payload, and return a `PolicyError::Check(reason)`. The
+  `PolicyError::Check` variant gains a payload of type `Value`.
 - If the value is `unit`, the action succeeded. If it is not found, the action is infallible. In
-either case, return a success value to the caller (client/session).
+  either case, return a success value to the caller (client/session).
 
-
-
-
-TODO:
-- if PolicyError::Check has required value, how does that work with #648 (invoke-recall-from-policy)?
-    actions return Err(<value>), but commands don't. yet both produce Check exit
-- figure out what's needed for `ifgen`
+Note that check failures exit with a `Normal` reason, not `Check`. This is because actions simply
+return. The runtime will return a `PolicyError::Check` if the action returned an error.
