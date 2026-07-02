@@ -38,6 +38,7 @@ merges.
 | In-memory | 0.13 s | ~7,700 |
 | File-backed, tmpfs | 0.25 s | ~4,000 |
 | File-backed, ext4 (fsync) | 21.3 s | ~47 |
+| File-backed, ext4 (fsync), optimize-fsync branch | 0.20 s | ~5,000 |
 
 On ext4 the runtime is dominated by the writer's 1,000 durable
 commits; the subscriber's ~10 batched commits add little.
@@ -54,6 +55,7 @@ across the 1,000-command run.
 | In-memory | 0.28 s | ~3,600 |
 | File-backed, tmpfs | 0.48 s | ~2,100 |
 | File-backed, ext4 (fsync) | 22.1 s | ~45 |
+| File-backed, ext4 (fsync), optimize-fsync branch | 2.6 s | ~390 |
 
 Relative to scenario 1, low branching costs ~4% on fsync-bound ext4,
 where durable command commits dominate. The relative cost is larger on
