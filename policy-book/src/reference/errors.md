@@ -1,15 +1,16 @@
 # Errors
 
-Two types of terminating errors can be produced by executing policy
-code. Check failures are caused by not meeting the expectations of a
-`check` or `check_unwrap`. A runtime exception occurs when code violates
-some execution invariant.
+Two types of terminating errors can be produced by executing policy code:
+
+- Command recalls, usually caused by not meeting the expectations of a
+  `check` statement.
+- Runtime exceptions, caused by code violating some execution invariant.
 
 ## Check failures
 
-The `check` statement and the `check_unwrap` expression report failure
-by exiting with a _check failure_. A check failure is distinct from
-other errors in that it causes execution to fall to the `recall` block.
+The `check` statement either returns from the current function/action or
+recalls the current command by executing a named recall block. The recall
+block terminates with a _check failure_.
 A check failure represents a failed precondition that the policy author
 recognized could be possible in normal operation.
 
@@ -17,7 +18,7 @@ For example, an authorization check may depend on a device being an
 administrator, which could be revoked by another command. If you stored
 administrator status in a fact, querying that fact would return `None`
 when the administrator status was revoked. So something like
-`check_unwrap query Administrators[deviceId: this.adminId]` would capture
+`check query Administrators[deviceId: this.adminId] is Some else recall unauthorized()` would capture
 the intent to produce a check failure in that case.
 
 ## Runtime exceptions
@@ -25,8 +26,6 @@ the intent to produce a check failure in that case.
 Runtime exceptions happen when an execution invariant is violated. Many
 things can cause runtime exceptions, including but not limited to:
 
-- `unwrap`ping `None`
-- integer over/underflow
 - Running out of memory (including overflowing the VM stack)
 - Creating a fact that already exists
 - VM stack underflow caused by compiler errors or badly behaving FFI
@@ -37,23 +36,23 @@ instead return an error to the application.
 
 ## Errors in Actions
 
-Errors in action code can fail as you'd expect, but they can also fail
-if their `publish`ed commands fail. Regardless of whether the commands
+An action can fail as you'd expect, but it can also fail if its
+`publish`ed commands fail. Regardless of whether the commands
 fail due to check failure or a runtime exception, any failure during an
 action causes all commands published from the action to not be accepted
 into the graph[^atomic-action-clarifier]. For example, this action will
 never successfully publish a command:
 
-```
-action do_nothing() {
+```policy
+action do_nothing() result[unit, int] {
     publish SomeCommand{}
-    check false
+    return Err(0)
 }
 ```
 
 And neither will this:
 
-```
+```policy
 command FailCommand {
     fields {
         fail bool
@@ -62,8 +61,10 @@ command FailCommand {
     // omit seal and open for example
 
     policy {
-        check !this.fail
+        check this.fail else recall failed()
     }
+
+    recall failed() {}
 }
 
 action do_nothing_harder() {
