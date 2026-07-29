@@ -14,8 +14,8 @@ command Foo {
 
     policy {
         let author = envelope::author_id(envelope)
-        check count_valid(this.b)
-        let fc = unwrap query FooCounter[device: author]
+        check count_valid(this.b) else recall failed()
+        let fc = query FooCounter[device: author] or recall failed()
 
         let new_count = fc.count + this.a
         finish {
@@ -27,7 +27,7 @@ command Foo {
         }
     }
 
-    recall {
+    recall failed() {
         finish {
             emit FooError {
                 kind: "bad FooCounter state",

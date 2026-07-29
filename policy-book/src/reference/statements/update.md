@@ -32,8 +32,8 @@ exist matching key and value fields, policy evaluation terminates with a
 runtime exception. This is conceptually similar to:
 
 ```
-let unused = unwrap query FooCounter[deviceId: myId]
-check unused.count == 0
+let unused = query FooCounter[deviceId: myId] or recall failed()
+check unused.count == 0 else recall failed()
 finish {
     update FooCounter[deviceID: myId] to {count: 1}
 }

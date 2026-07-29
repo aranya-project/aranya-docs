@@ -17,9 +17,9 @@
 ```
 let foo = 3
 match foo {
-    3 => { check bar == 3 }
-    4 => { check bar == 0 }
-    _ => { check bar > 3 }
+    3 => { check bar == 3 else recall failed() }
+    4 => { check bar == 0 else recall failed() }
+    _ => { check bar > 3 else recall failed() }
 }
 ```
 

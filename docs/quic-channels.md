@@ -653,61 +653,73 @@ function is_valid_psk_length(size int) bool {
 
 // Returns the channel operations that this device is allowed to
 // perform for a particular label.
-function get_allowed_op(device_id id, label_id id) enum ChanOp {
-    let assigned = check_unwrap query AssignedLabel[device_id: device_id, label_id: label_id]
-    return assigned.op
+function get_allowed_op(device_id id, label_id id) result[enum ChanOp, int] {
+    let assigned = query AssignedLabel[device_id: device_id, label_id: label_id] or return Err(0)
+    return Ok(assigned.op)
 }
 
 // Reports whether the devices have permission to create
 // a bidirectional AQC channel with each other.
-function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) bool {
+function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result[bool, int] {
     // Devices cannot create channels with themselves.
     //
     // This should have been caught by the AQC FFI, so check
     // instead of just returning false.
-    check device1 != device2
+    check device1 != device2 else return Err(0)
 
     // Both devices must have permissions to read (recev) and
     // write (send) data.
-    let device1_op = get_allowed_op(device1, label_id)
-    if device1_op != ChanOp::SendRecv {
-        return false
+    let device1_op = match get_allowed_op(device1, label_id) {
+        Ok(id) => {
+            if device1_op != ChanOp::SendRecv {
+                return Ok(false)
+            }
+        }
+        Err(e) => return Err(e)
     }
 
-    let device2_op = get_allowed_op(device2, label_id)
-    if device2_op != ChanOp::SendRecv {
-        return false
+    let device2_op = match get_allowed_op(device2, label_id) {
+        Ok(id) => {
+            if device2_op != ChanOp::SendRecv {
+                return Ok(false)
+            }
+        }
+        Err(e) => return Err(e)
     }
 
-    return true
+    return Ok(true)
 }
 
 // Reports whether the devices have permission to create
 // a unidirectional AQC channel with each other.
-function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) bool {
+function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) result[bool, int] {
     // Devices cannot create channels with themselves.
     //
     // This should have been caught by the AQC FFI, so check
     // instead of just returning false.
-    check sender_id != receiver_id
+    check sender_id != receiver_id else return Err(0)
 
     // The writer must have permissions to write (send) data.
-    let writer_op = get_allowed_op(sender_id, label_id)
-    match writer_op {
-        ChanOp::RecvOnly => { return false }
-        ChanOp::SendOnly => {}
-        ChanOp::SendRecv => {}
+    let writer_op = match get_allowed_op(sender_id, label_id) {
+        Ok(op) => {
+            if writer_op == ChanOp::RecvOnly {
+                return Ok(false)
+            }
+        }
+        Err(e) => return Err(e)
     }
 
     // The reader must have permission to read (receive) data.
-    let reader_op = get_allowed_op(receiver_id, label_id)
-    match reader_op {
-        ChanOp::RecvOnly => {}
-        ChanOp::SendOnly => { return false }
-        ChanOp::SendRecv => {}
+    let reader_op = match get_allowed_op(receiver_id, label_id) {
+        Ok(op) => {
+            if reader_op == ChanOp::SendOnly {
+                return Ok(false)
+            }
+        }
+        Err(e) => return Err(e)
     }
 
-    return true
+    return Ok(true)
 }
 ```
 
@@ -826,16 +838,16 @@ command AqcCreateBidiChannel {
 
     policy {
         let author = get_valid_device(envelope::author_id(envelope))
-        let peer = check_unwrap find_existing_device(this.peer_id)
+        let peer = find_existing_device(this.peer_id) or recall unauthorized()
 
-        check is_valid_psk_length(this.psk_length_in_bytes)
+        check is_valid_psk_length(this.psk_length_in_bytes) else recall unauthorized()
 
         // The label must exist.
-        let label = check_unwrap query Label[label_id: this.label_id]
+        let label = query Label[label_id: this.label_id] or recall unauthorized()
 
         // Check that both devices are allowed to participate in
         // this bidirectional channel.
-        check can_create_aqc_bidi_channel(author.device_id, peer.device_id, label.label_id)
+        check can_create_aqc_bidi_channel(author.device_id, peer.device_id, label.label_id) else recall unauthorized()
 
         // NB: Check roles, other ACLs here.
 
@@ -879,8 +891,12 @@ command AqcCreateBidiChannel {
         } else {
             // This is an off-graph session command, so only the
             // communicating peers should process this command.
-            check false
+            check false else recall unauthorized()
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 ```
@@ -1018,23 +1034,23 @@ command AqcCreateUniChannel {
         // Ensure that the author is one of the channel
         // participants.
         check author.device_id == this.sender_id ||
-              author.device_id == this.receiver_id
+              author.device_id == this.receiver_id else recall unauthorized()
 
         let peer_id = if author.device_id == this.sender_id {
             :this.receiver_id
         } else {
             :this.sender_id
         }
-        let peer = check_unwrap find_existing_device(peer_id)
+        let peer = find_existing_device(peer_id) or recall unauthorized()
 
-        check is_valid_psk_length(this.psk_length_in_bytes)
+        check is_valid_psk_length(this.psk_length_in_bytes) else recall unauthorized()
 
         // The label must exist.
-        let label = check_unwrap query Label[label_id: label_id]
+        let label = query Label[label_id: label_id] or recall unauthorized()
 
         // Check that both devices are allowed to participate in
         // this unidirectional channel.
-        check can_create_aqc_uni_channel(this.sender_id, this.receiver_id, label.label_id)
+        check can_create_aqc_uni_channel(this.sender_id, this.receiver_id, label.label_id) else recall unauthorized()
 
         // NB: Check roles, other ACLs here.
 
@@ -1080,8 +1096,12 @@ command AqcCreateUniChannel {
         } else {
             // This is an off-graph session command, so only the
             // communicating peers should process this command.
-            check false
+            recall unauthorized()
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 ```
@@ -1216,7 +1236,7 @@ command CreateLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists Label[label_id: label_id]
+        check !exists Label[label_id: label_id] else recall unauthorized()
 
         finish {
             create Label[label_id: label_id]=>{name: this.label_name, author_id: author.device_id}
@@ -1227,6 +1247,10 @@ command CreateLabel {
                 label_author_id: author.device_id,
             }
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 
@@ -1266,7 +1290,7 @@ command DeleteLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        let label = check_unwrap query Label[label_id: this.label_id]
+        let label = query Label[label_id: this.label_id] or recall unauthorized()
 
         finish {
             delete Label[label_id: label.label_id]=>{}
@@ -1281,6 +1305,10 @@ command DeleteLabel {
                 author_id: author.device_id,
             }
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 
@@ -1376,7 +1404,7 @@ command AssignLabel {
 
         // NB: Check roles, other ACLs here.
 
-        let label = check_unwrap query Label[label_id: this.label_id]
+        let label = query Label[label_id: this.label_id] or recall unauthorized()
 
         // Verify that the device has not already been granted
         // permission to use the label.
@@ -1384,7 +1412,7 @@ command AssignLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check !exists AssignedLabel[device_id: target.device_id, label_id: label.label_id]
+        check !exists AssignedLabel[device_id: target.device_id, label_id: label.label_id] else recall unauthorized()
 
         finish {
             create AssignedLabel[device_id: target.device_id, label_id: label.label_id]=>{op: this.op}
@@ -1396,6 +1424,10 @@ command AssignLabel {
                 author_id: author.device_id,
             }
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 
@@ -1442,7 +1474,7 @@ command RevokeLabel {
 
         // NB: Check roles, other ACLs here.
 
-        let label = check_unwrap query Label[label_id: this.label_id]
+        let label = query Label[label_id: this.label_id] or recall unauthorized()
 
         // Verify that the device has been granted permission to
         // use the label.
@@ -1450,7 +1482,7 @@ command RevokeLabel {
         // This will happen in the `finish` block if we try to
         // create an already true label, but checking first
         // results in a nicer error (I think?).
-        check exists AssignedLabel[device_id: target.device_id, label_id: label.label_id]
+        check exists AssignedLabel[device_id: target.device_id, label_id: label.label_id] else recall unauthorized()
 
         finish {
             delete AssignedLabel[device_id: target.device_id, label_id: label.label_id]
@@ -1462,6 +1494,10 @@ command RevokeLabel {
                 author_id: author.device_id,
             }
         }
+    }
+
+    recall unauthorized() {
+        finish {}
     }
 }
 
@@ -1480,9 +1516,9 @@ effect LabelRevoked {
 
 // Emits `QueriedLabelAssignment` for all labels the device has
 // been granted permission to use.
-action query_label_assignments(device_id id) {
+action query_label_assignments(device_id id) result[unit, int] {
     map AssignedLabel[device_id: device_id, label_id: ?] as f {
-        let label = check_unwrap query Label[label_id: f.label_id]
+        let label = query Label[label_id: f.label_id] or return Err(0)
         publish QueryLabelAssignment {
             device_id: device_id,
             label_id: f.label_id,
@@ -1490,6 +1526,7 @@ action query_label_assignments(device_id id) {
             label_author_id: label.author_id,
         }
     }
+    Ok(Unit)
 }
 
 command QueryLabelAssignment {

@@ -16,8 +16,8 @@ command AddBalance {
     }
 
     policy {
-        check amount > 0
-        let account = check_unwrap query Account[id: this.user]=>{balance: ?}
+        check amount > 0 else recall invalid_amount()
+        let account = query Account[id: this.user]=>{balance: ?} or recall account_not_found()
         let current_balance = account.balance
         let new_balance = current_balance + this.amount
 

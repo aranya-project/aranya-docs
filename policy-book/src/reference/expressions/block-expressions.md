@@ -21,9 +21,9 @@ expressions](functions/if-match.md#if):
 function saturated_level(level int) int {
     let result = if level > saturation_threshold then {
         let a = saturate(level)
-        check a > 0
+        check a > 0 else return 0
         let b = granulate(level)
-        check b > 0
+        check b > 0 else return 0
         : a + b
     }
 }
@@ -35,8 +35,8 @@ Or [`match` expressions](functions/if-match.md#match).
 action foo(location id, cap enum Capability) {
     let level = match x {
         Capability::Jump => {
-            let user_perms = unwrap_check
-                query UserJump[location: location]=>{allowed_level: ?}
+            let user_perms =
+                query UserJump[location: location]=>{allowed_level: ?} or return
             : user_perms.allowed_level
         }
         ...

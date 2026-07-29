@@ -5,7 +5,7 @@
 | Scope  | |
 |--------|----|
 | global | ❌ |
-| `action` | ❌ |
+| `action` | ✅ |
 | `function` | ✅ |
 | `policy`/`recall` | ❌ |
 | `seal`/`open` | ✅ |
@@ -16,7 +16,7 @@
 
 ```
 function foo() int {
-    let x = unwrap query FooCount[deviceID: myId]
+    let x = query FooCount[deviceID: myId] or return 0
     return x.count
 }
 ```

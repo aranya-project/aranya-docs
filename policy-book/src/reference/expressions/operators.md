@@ -43,8 +43,7 @@ Integers can be compared against each other.
 
 | Operator | Meaning |
 |----------|---------|
-| `unwrap` | `unwrap A` is the value inside A if the option is Some, or else stop with a [runtime exception](../errors.md#runtime-exceptions) |
-| `check_unwrap` | Same as `unwrap`, but stop with a [check failure](../errors.md#check-failures) instead of a runtime exception |
+| `or` | `A or B` is the value inside `A` if `A` is `Some`; otherwise it evaluates to `B`. `B` may be a fallback value of `A`'s inner type, or a control-flow escape such as `return` or `recall` |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
 
@@ -57,7 +56,7 @@ runtime exception.
 |----------|----|
 | 1        | `.` |
 | 2        | `substruct`, `as` |
-| 3        | `-` (prefix), `!`, `unwrap`, `check_unwrap` |
+| 3        | `-` (prefix), `!` |
 | 4        | `+`, `-` (infix) |
 | 5        | `>`, `<`, `>=`, `<=`, `is` |
 | 6        | `==`, `!=` |
