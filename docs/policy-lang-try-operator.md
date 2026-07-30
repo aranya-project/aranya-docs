@@ -54,10 +54,13 @@ match e {
 
 If `e` evaluates to `Ok(v)`, the `e?` expression evaluates to `v`. If `e`
 evaluates to `Err(err)`, `?` performs an early `return Err(err)` from the
-enclosing function or action, and no further statements in the caller run.
+enclosing definition, and no further statements in the caller run.
 
-Because the failing branch is a `return`, `?` is only valid where such
-a `return` is legal - in functions and actions returning `result[_, E]`.
+Because the failing branch is a `return Err(err)`, `?` is only valid where
+that exact `return` is legal: the enclosing definition must return a value,
+that value must be a `result`, and its error type must match the operand's
+error type. The three ways this can fail are described in [Enclosing context
+requirements](#enclosing-context-requirements).
 
 ## Type rules
 
@@ -65,37 +68,21 @@ a `return` is legal - in functions and actions returning `result[_, E]`.
   other type (for example an `optional` or a plain `int`) is a compile
   error.
 - `e?` has type `T`, the success type of the operand.
+- The enclosing definition must return `result[_, E]`, with the same `E` as
+  the operand.
 - `?` is a postfix operator and binds more tightly than any prefix or infix
   operator. So `a + f()?` parses as `a + (f()?)`, and `x?.field` as
   `(x?).field`. Parentheses can override this as usual.
-
-## Error type compatibility
-
-The `?` operator ties the operand's error type to the enclosing
-definition's error type. The error types must match by type; there
-is no implicit conversion between error types.
-
-To carry a value across two different error types, convert the error
-explicitly:
-
-```policy
-function to_my_error(e OtherError) MyError { ... }
-
-function outer() result[int, MyError] {
-    // inner() returns result[int, OtherError]
-    let n = match inner() {
-        Ok(v) => v
-        Err(e) => return Err(to_my_error(e))
-    }
-    return Ok(n)
-}
-```
 
 ## Error messages
 
 Because `?` expands to generated code that does not literally appear in the
 policy source, diagnostics need to be mapped back to the operator carefully.
-A type error from the propagated `Err` - most commonly an error type mismatch
-with the enclosing function, described above - should point at the `?` operator
-and its operand, not at the generated `return`. The same applies when `?` is
-used in a context that cannot return a `result`.
+Every error above should point at the `?` operator and its operand, not at the
+generated `return`:
+
+| Case | Diagnostic should say |
+|---|---|
+| Enclosing definition returns nothing | `?` is not allowed in this context |
+| Enclosing definition returns a non-`result` | `?` requires a `result` return type |
+| Error types do not match | expected error type {e}, but `?` produces {f}  |
