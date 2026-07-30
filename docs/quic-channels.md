@@ -674,6 +674,7 @@ function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result
             if device1_op != ChanOp::SendRecv {
                 return Ok(false)
             }
+            :id
         }
         Err(e) => return Err(e)
     }
@@ -683,6 +684,7 @@ function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result
             if device2_op != ChanOp::SendRecv {
                 return Ok(false)
             }
+            :id
         }
         Err(e) => return Err(e)
     }
@@ -705,6 +707,7 @@ function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) r
             if writer_op == ChanOp::RecvOnly {
                 return Ok(false)
             }
+            :op
         }
         Err(e) => return Err(e)
     }
@@ -715,6 +718,7 @@ function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) r
             if reader_op == ChanOp::SendOnly {
                 return Ok(false)
             }
+            :op
         }
         Err(e) => return Err(e)
     }
@@ -891,7 +895,7 @@ command AqcCreateBidiChannel {
         } else {
             // This is an off-graph session command, so only the
             // communicating peers should process this command.
-            check false else recall unauthorized()
+            recall unauthorized()
         }
     }
 
@@ -1034,7 +1038,8 @@ command AqcCreateUniChannel {
         // Ensure that the author is one of the channel
         // participants.
         check author.device_id == this.sender_id ||
-              author.device_id == this.receiver_id else recall unauthorized()
+              author.device_id == this.receiver_id
+              else recall unauthorized()
 
         let peer_id = if author.device_id == this.sender_id {
             :this.receiver_id
