@@ -63,7 +63,7 @@ command FailCommand {
     // omit seal and open for example
 
     policy {
-        check this.fail else recall failed()
+        check !this.fail else recall failed()
     }
 
     recall failed() {}

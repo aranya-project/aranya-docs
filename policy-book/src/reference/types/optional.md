@@ -1,19 +1,19 @@
 # Optional Types
 
 A type which can contain a value (`Some`) or no value (`None`). The type
-of the value is specified after `optional`, e.g. `optional[int]`. The
-literal expressions for optionals are `None` and `Some(❮expression❯)`.
+of the value is specified after `option`, e.g. `option[int]`. The literal
+expressions for optionals are `None` and `Some(❮expression❯)`.
 
 ```policy
 // declare an optional field
 effect Foo {
     a string,
-    b optional[int]
+    b option[int]
 }
 
 // initialize an optional
-let player1 = Some("George")
-let player2 = None
+let player1 = Some("George")    // type is `option[string]`
+let player2 = None              // type matches any optional type
 
 // access the inner value with the coalescing `or`, providing a
 // fallback when the optional is `None`
