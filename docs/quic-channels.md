@@ -644,6 +644,15 @@ enum ChanOp {
 #### Utility Routines
 
 ```policy
+enum Error {
+    // The device does not have permission to use the label.
+    Unauthorized,
+    // A device tried to create a channel with itself.
+    SameDevice,
+    // The label does not exist.
+    LabelNotFound,
+}
+
 // Reports whether `size` is a valid PSK length (in bytes).
 //
 // Per the AQC specification, PSKs must be in the range [32, 2^16).
@@ -653,19 +662,19 @@ function is_valid_psk_length(size int) bool {
 
 // Returns the channel operations that this device is allowed to
 // perform for a particular label.
-function get_allowed_op(device_id id, label_id id) result[enum ChanOp, int] {
-    let assigned = query AssignedLabel[device_id: device_id, label_id: label_id] or return Err(0)
+function get_allowed_op(device_id id, label_id id) result[enum ChanOp, enum Error] {
+    let assigned = query AssignedLabel[device_id: device_id, label_id: label_id] or return Err(Error::Unauthorized)
     return Ok(assigned.op)
 }
 
 // Reports whether the devices have permission to create
 // a bidirectional AQC channel with each other.
-function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result[bool, int] {
+function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result[bool, enum Error] {
     // Devices cannot create channels with themselves.
     //
     // This should have been caught by the AQC FFI, so check
     // instead of just returning false.
-    check device1 != device2 else return Err(0)
+    check device1 != device2 else return Err(Error::SameDevice)
 
     // Both devices must have permissions to read (recev) and
     // write (send) data.
@@ -694,12 +703,12 @@ function can_create_aqc_bidi_channel(device1 id, device2 id, label_id id) result
 
 // Reports whether the devices have permission to create
 // a unidirectional AQC channel with each other.
-function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) result[bool, int] {
+function can_create_aqc_uni_channel(sender_id id, receiver_id id, label_id id) result[bool, enum Error] {
     // Devices cannot create channels with themselves.
     //
     // This should have been caught by the AQC FFI, so check
     // instead of just returning false.
-    check sender_id != receiver_id else return Err(0)
+    check sender_id != receiver_id else return Err(Error::SameDevice)
 
     // The writer must have permissions to write (send) data.
     let writer_op = match get_allowed_op(sender_id, label_id) {
@@ -1521,9 +1530,9 @@ effect LabelRevoked {
 
 // Emits `QueriedLabelAssignment` for all labels the device has
 // been granted permission to use.
-action query_label_assignments(device_id id) result[unit, int] {
+action query_label_assignments(device_id id) result[unit, enum Error] {
     map AssignedLabel[device_id: device_id, label_id: ?] as f {
-        let label = query Label[label_id: f.label_id] or return Err(0)
+        let label = query Label[label_id: f.label_id] or return Err(Error::LabelNotFound)
         publish QueryLabelAssignment {
             device_id: device_id,
             label_id: f.label_id,

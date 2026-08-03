@@ -15,8 +15,10 @@
 </div>
 
 ```policy
+enum Error { EmptyCounter, InvalidOwner }
+
 map FooCounter[deviceId: ?]=>{count: ?} as counter {
-    check counter.count > 0 else return Err(0)
+    check counter.count > 0 else return Err(Error::EmptyCounter)
 }
 ```
 
@@ -33,7 +35,7 @@ facts. The name given after `as` is scoped to the block.
  ```policy
  map Devices[deviceId:?] as device {
     map Keys[deviceId: device, id: ?] as key {
-        check owner.valid else return Err(0)
+        check owner.valid else return Err(Error::InvalidOwner)
     }
  }
  ```

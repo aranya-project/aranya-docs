@@ -32,7 +32,7 @@ expression decides what happens on failure:
 
 - In a command `policy` block, `recall` the command so the policy can
   take corrective measures after a command is no longer valid. This
-  could, for example, cascade to deleting a fact or emitting an effect
+  could, for example, cascade to deleting a `Fact` or emitting an `Effect`
   the application can use to take further action.
 - In a `function` or `action`, `return` an error to the caller.
 

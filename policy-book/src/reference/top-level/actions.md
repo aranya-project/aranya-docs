@@ -8,9 +8,10 @@ action foo(a int, b string) {
 ```
 
 ```policy
-let E_INVALID_ID = -1
-action foo(a int) result[unit, int] {
-    check a > 0 else return Err(E_INVALID_ID)
+enum Error { InvalidID }
+
+action foo(a int) result[unit, enum Error] {
+    check a > 0 else return Err(Error::InvalidID)
     publish Foo{a: a}
     return Ok(Unit)
 }

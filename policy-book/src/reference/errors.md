@@ -44,9 +44,11 @@ into the graph[^atomic-action-clarifier]. For example, this action will
 never successfully publish a command:
 
 ```policy
-action do_nothing() result[unit, int] {
+enum Error { Failed }
+
+action do_nothing() result[unit, enum Error] {
     publish SomeCommand{}
-    return Err(0)
+    return Err(Error::Failed)
 }
 ```
 
