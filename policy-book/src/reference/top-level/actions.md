@@ -37,8 +37,3 @@ where `E` can be any policy type. The success type is limited to `unit`,
 to discourage applications from relying on the return value of an action,
 because an action's success does not mean its commands have been accepted
 on the graph.
-
-An action without a return type can still return early (e.g.
-`check ... else return`), but that will be interpreted as a successful
-completion, and any commands/effects emitted before the return will be
-processed.

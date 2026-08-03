@@ -6,11 +6,11 @@ Two types of terminating errors can be produced by executing policy code:
   `check` statement.
 - Runtime exceptions, caused by code violating some execution invariant.
 
-## Check failures
+## Rejections
 
-The `check` statement either returns from the current function/action or
-recalls the current command by executing a named recall block. The recall
-block terminates with a _check failure_.
+A failed `check` statement either returns from the current function/action
+or recalls the current command by executing a named recall block. In either
+case, the policy terminates with a _rejection_.
 A check failure represents a failed precondition that the policy author
 recognized could be possible in normal operation.
 
