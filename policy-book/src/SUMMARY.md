@@ -28,6 +28,7 @@
     - [If and Match](reference/expressions/functions/if-match.md)
     - [Serialize and Deserialize](reference/expressions/functions/serialize-deserialize.md)
     - [Todo](reference/expressions/functions/todo.md)
+    - [Test Fail](reference/expressions/functions/test-fail.md)
   - [Block Expressions](reference/expressions/block-expressions.md)
   - [Struct Conversion](reference/expressions/struct-conversion.md)
 - [Top-level Declarations](reference/top-level.md)

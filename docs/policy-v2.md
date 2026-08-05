@@ -282,3 +282,56 @@ action frob(x Bar) {
     let f = x substruct Foo
 }
 ```
+
+## Return from Actions
+
+Actions can declare a return type, so that an action can report
+failure to the calling application.
+
+```policy
+enum Error { InvalidAmount, NoSuchDevice }
+
+action deposit(device id, amount int) result[unit, enum Error] {
+    check amount > 0 else return Err(Error::InvalidAmount)
+    let account = query Account[device: device] or return Err(Error::NoSuchDevice)
+    publish Deposit { device: device, amount: amount }
+    return Ok(Unit)
+}
+```
+
+The return type is optional. If specified, it must be a
+`result[unit, E]`, where `E` may be any policy type. It is commonly an
+`enum`, which gives the application a fixed set of failure cases to
+match on.
+
+The success type is limited to `unit` (whose only value is `Unit`). An
+action succeeding means only that the action itself ran to completion.
+It does not mean the commands it published were accepted onto the graph. Limiting the success type keeps applications from treating an action's
+return value as evidence that its commands took effect.
+
+An action with a return type must return on every path, using
+`return Ok(Unit)` for success and `return Err(e)` for failure. Returning
+`Err` terminates the policy with a rejection, meaning that none of the
+commands it published are accepted onto the graph.
+
+An action with no declared return type cannot report a failure of its
+own. Such actions still fail if any published command fails.
+
+The `return` statement is otherwise unchanged, and remains invalid in
+`policy` and `recall` blocks.
+
+## Errors and control flow
+
+Error handling within policy code is described in [Policy Lang: "or" and
+"recall"](/docs/policy-lang-or-recall.md). In summary:
+
+- `or` is an optional coalescing operator. `a or b` is the value inside
+  `a` when it is `Some`, and `b` otherwise.
+- `recall` is a statement and expression that transfers evaluation to a
+  named recall block. Recall blocks are now named and take parameters,
+  and a command may define more than one.
+- `check` now requires an `else` clause holding a terminal expression
+  (`return`, `recall`, or `todo()`), which determines how the failed
+  check is reported.
+- `unwrap` and `check_unwrap` are removed. Their uses are covered by
+  `or` with a fallback value, a `return`, a `recall`, or `todo()`.

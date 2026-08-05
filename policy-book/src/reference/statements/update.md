@@ -39,8 +39,8 @@ finish {
 }
 ```
 
-Except that this will produce a check error if the `count` is not as
-expected.
+Except that this will [reject](../errors.md#rejections) the command if
+the `count` is not as expected, rather than raising a runtime exception.
 
 In either case, attempting to update a non-existent fact is an error and
 will terminate policy execution with a runtime exception. Updating a

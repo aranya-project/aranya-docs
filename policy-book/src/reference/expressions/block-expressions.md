@@ -19,13 +19,16 @@ expressions](functions/if-match.md#if):
 
 ```policy
 function saturated_level(level int) int {
-    let result = if level > saturation_threshold then {
+    let result = if level > saturation_threshold {
         let a = saturate(level)
         check a > 0 else return 0
         let b = granulate(level)
         check b > 0 else return 0
         : a + b
+    } else {
+        : level
     }
+    return result
 }
 ```
 

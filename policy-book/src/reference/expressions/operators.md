@@ -43,12 +43,13 @@ Integers can be compared against each other.
 
 | Operator | Meaning |
 |----------|---------|
-| `or` | `A or B` is the value inside `A` if `A` is `Some`; otherwise it evaluates to `B`. `B` may be a fallback value of `A`'s inner type, or a control-flow escape such as `return` or `recall` |
+| `or` | `A or B` is the value inside `A` if `A` is `Some`, otherwise `B` |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
 
-Using `is` on a non-optional value will fail with a compile error or
-runtime exception.
+`B` may be a fallback value of `A`'s inner type, or a terminal
+expression such as `return` or `recall`. See [Coalescing with
+`or`](../types/optional.md#coalescing-with-or).
 
 ## Operator Precedence
 
@@ -61,3 +62,5 @@ runtime exception.
 | 5        | `>`, `<`, `>=`, `<=`, `is` |
 | 6        | `==`, `!=` |
 | 7        | `&&`, `\|\|` |
+| 8        | `or` (optional coalescing, right-associative) |
+

@@ -45,12 +45,12 @@ validity and effects of processing that data (the `policy` and `recall`
 blocks).
 
 Policy statements may terminate execution on a variety of conditions,
-like a failed check or unwrapping a `None` optional (see
-[Errors](../errors.md) for how different kinds of errors affect policy
-execution). Policy is transactional - a command is only accepted and
-facts are only updated if policy execution reaches the end of a `finish`
-block without terminating. Recall blocks allow the production of effects
-and mutation of facts after a command is recalled.
+like a failed `check` or a query that returns `None` where the policy
+requires a fact (see [Errors](../errors.md) for how different kinds of
+errors affect policy execution). Policy is transactional - a command is
+only accepted and facts are only updated if policy execution reaches the
+end of a `finish` block without terminating. Recall blocks allow the
+production of effects and mutation of facts after a command is recalled.
 
 Inside a `command` block are several sub-blocks:
 
@@ -188,20 +188,15 @@ values and constants. Any calculations should be done outside the
 ## Recall block
 
 `recall` blocks are executed when a command of this type is recalled.
-When the introduction of new commands causes a command to fail with a
-check error, it is recalled. So the `recall` block is a kind of
-exception handler for failed policy invariants.
+When the introduction of new commands causes a command to fail a policy
+invariant, it is recalled. So a `recall` block is a kind of exception
+handler for failed policy invariants.
 
-The `recall` block is optional, and if not specified, a "default" recall
-will be used that reports a generic check failure to the application.
-Likewise, if a `recall` block encounters runtime exception, the default
-recall will handle and report it.
-
-Recall blocks can execute the same statements as a the `policy` block,
-except for `check` (as its purpose is not to validate anything).
-The application interface will mark effects produced in recall blocks
-as recall effects, so that they can be distinguished from the same
-effects produced in a policy block.
+A recall blocks can execute the same statements as the `policy` block,
+except for `check` (as its purpose is not to validate anything) and
+`recall` itself. The application interface will mark effects produced in
+recall blocks as recall effects, so that they can be distinguished from
+the same effects produced in a policy block.
 
 ## Attributes
 

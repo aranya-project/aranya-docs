@@ -37,3 +37,23 @@ where `E` can be any policy type. The success type is limited to `unit`,
 to discourage applications from relying on the return value of an action,
 because an action's success does not mean its commands have been accepted
 on the graph.
+
+An action with a return type must return a value on every path, with
+`return Ok(Unit)` on success and `return Err(e)` on failure. Returning
+`Err` terminates with a rejection, so none of the commands published up to
+that point are accepted (see [Errors in Actions](../errors.md#errors-in-actions)).
+
+```policy
+enum Error { InvalidAmount, NoSuchDevice }
+
+action deposit(device id, amount int) result[unit, enum Error] {
+    check amount > 0 else return Err(Error::InvalidAmount)
+    let account = query Account[device: device] or return Err(Error::NoSuchDevice)
+    publish Deposit{device: device, amount: amount, balance: account.balance}
+    return Ok(Unit)
+}
+```
+
+The error type is commonly an [enumeration](enumerations.md), which
+gives the application a fixed set of failures to match on, but any policy
+type is allowed.

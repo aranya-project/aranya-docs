@@ -88,8 +88,8 @@ we fetch this fact.
 
 We use [`or`](../reference/expressions/operators.md#optional-operators)
 with `recall` to unwrap the optional given to us by the query. If the
-optional is `None`, the named `recall` block runs, producing a [check
-failure](../reference/errors.md#check-failures). `check` and `or ...
+optional is `None`, the named `recall` block runs, producing a [rejection
+failure](../reference/errors.md#rejection). `check` and `or ...
 recall` should always be used to check the preconditions of a command.
 Next we update the balance, and finally in the `finish` block we use
 [`update`](../reference/statements/update.md) to change the value in the
