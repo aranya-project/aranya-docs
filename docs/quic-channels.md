@@ -244,18 +244,17 @@ fn create_bidi_channel(author, peer) {
         raise SameIdError
     }
 
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     // `psk_length_in_bytes` is the length, in bytes, of the PSK.
-    info = tuple_hash(
-        "AqcBidiPsk",
-        suite_id,
-        parent_cmd_id,
+    info = concat(
+        "AqcBidiPsk-v1",
         i2osp(psk_length_in_bytes, 2),
+        parent_cmd_id,
         DeviceId(author),
         DeviceId(peer),
         label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
     (enc, ctx) = HPKE_SetupAuth(
@@ -295,18 +294,17 @@ fn peer_derive_psk(enc, author) {
         raise PskTooLongError
     }
 
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     // `psk_length_in_bytes` is the length, in bytes, of the PSK.
-    info = tuple_hash(
-        "AqcBidiPsk",
-        suite_id,
-        parent_cmd_id,
+    info = concat(
+        "AqcBidiPsk-v1",
         i2osp(psk_length_in_bytes, 2),
+        parent_cmd_id,
         DeviceId(author),
         DeviceId(peer),
         label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
         skS=sk(EncryptionKey(peer)),
@@ -319,14 +317,13 @@ fn peer_derive_psk(enc, author) {
 
 // Returns the PSK identity.
 fn psk_identity(enc) {
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     id = tuple_hash(
         "ID-v1",
-        suite_id,
+        oids,
         bytes(enc),
         "AqcBidiChannelId",
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     return id
 }
 ```
@@ -350,19 +347,17 @@ fn create_uni_channel(author, peer) {
         raise SameIdError
     }
 
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     // `psk_length_in_bytes` is the length, in bytes, of the PSK.
-    info = tuple_hash(
-        "AqcUniPsk",
-        suite_id,
-        engine_id,
-        parent_cmd_id,
+    info = concat(
+        "AqcUniPsk-v1",
         i2osp(psk_length_in_bytes, 2),
+        parent_cmd_id,
         DeviceId(author),
         DeviceId(peer),
         label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     // `enc` is the peer's encapsulation.
     // `ctx` is the encryption context.
     (enc, ctx) = HPKE_SetupAuth(
@@ -384,7 +379,7 @@ fn author_derive_psk(ctx) {
     if psk_length_in_bytes >= 2^16 {
         raise PskTooLongError
     }
-    psk = ctx.Export("aqc uni psk", psk_length_in_bytes)
+    psk = ctx.Export("aqc uni psk!", psk_length_in_bytes)
     return psk
 }
 
@@ -402,39 +397,36 @@ fn peer_derive_psk(enc, author) {
         raise PskTooLongError
     }
 
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     // `psk_length_in_bytes` is the length, in bytes, of the PSK.
-    info = tuple_hash(
-        "AqcUniPsk",
-        suite_id,
-        engine_id,
-        parent_cmd_id,
+    info = concat(
+        "AqcUniPsk-v1",
         i2osp(psk_length_in_bytes, 2),
+        parent_cmd_id,
         DeviceId(author),
         DeviceId(peer),
         label_id,
+        oids
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     (enc, ctx) = HPKE_SetupAuth(
         mode=mode_auth,
         skS=sk(EncryptionKey(peer)),
         pkR=pk(EncryptionKey(author)),
         info=info,
     )
-    psk = ctx.Export("aqc uni psk", psk_length_in_bytes)
+    psk = ctx.Export("aqc uni psk!", psk_length_in_bytes)
     return psk
 }
 
 // Returns the PSK identity.
 fn psk_identity(enc) {
-    // `suite_id` is derived from the Aranya Team's cipher suite.
-    suite_id = concat(aead_id, kdf_id, signer_id, ...)
     id = tuple_hash(
         "ID-v1",
-        suite_id,
+        oids,
         bytes(enc),
         "AqcUniChannelId",
     )
+    // oids include AEAD, KDF, and HPKE algorithm OIDs for contextual binding
     return id
 }
 ```
@@ -504,12 +496,12 @@ so significantly that it is not even worth calculating.
 The following contextual binding is used when creating the HPKE
 encryption context:
 
-- The strings "AqcBidiPsk" and "AqcUniPsk" bind the HPKE
-  encryption context to a particular channel direction. This
+- The strings "AqcBidiPsk-v1" and "AqcUniPsk-v1" bind the HPKE
+  encryption context to a particular channel direction and version. This
   ensures that a bidirectional channel cannot be substituted for
   a unidirectional channel and vice versa.
 
-- `suite_id` binds the HPKE encryption context to the set of
+- `oids` bind the HPKE encryption context to the set of
   cryptographic primitives used to create it. This helps protect
   against algorithm confusion attacks and prevents the HPKE
   encryption context from being used across Aranya Team cipher
@@ -536,7 +528,7 @@ authentication in [[RFC 9180]] section 5.1.3 and [[AKE]].
 The following contextual binding is used when deriving the PSK
 from the HPKE encryption context:
 
-- The strings "aqc bidi psk" and "aqc uni psk" bind the PSK to
+- The strings "aqc bidi psk" and "aqc uni psk!" bind the PSK to
   either bidirectional or unidirectional channels. This further
   ensures that a bidirectional channel cannot be substituted for
   a unidirectional channel and vice versa.
