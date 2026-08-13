@@ -311,8 +311,8 @@ return value as evidence that its commands took effect.
 
 An action with a return type must return on every path, using
 `return Ok(Unit)` for success and `return Err(e)` for failure. Returning
-`Err` terminates the policy with a rejection, meaning that none of the
-commands it published are accepted onto the graph.
+`Err` terminates the action, meaning that none of the commands it published
+are accepted onto the graph.
 
 An action with no declared return type cannot report a failure of its
 own. Such actions still fail if any published command fails.
