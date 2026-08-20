@@ -1,7 +1,7 @@
 # Optional Types
 
 A type which can contain a value (`Some`) or no value (`None`). The type
-of the value is specified after `option`, e.g. `option[int]`. The literal
+of the value is specified in brackets, e.g. `option[int]`. The literal
 expressions for optionals are `None` and `Some(❮expression❯)`.
 
 ```policy

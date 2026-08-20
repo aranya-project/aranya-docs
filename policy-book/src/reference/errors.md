@@ -2,8 +2,8 @@
 
 Two types of terminating errors can be produced by executing policy code:
 
-- Command recalls, usually caused by not meeting the expectations of a
-  `check` statement.
+- Rejections, which are intentional terminations, usually caused by not meeting
+  the expectations of a `check` statement, or error-returns from an action.
 - Runtime exceptions, caused by code violating some execution invariant.
 
 The difference is that a rejection is an outcome the policy author
