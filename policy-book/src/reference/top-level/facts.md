@@ -21,7 +21,9 @@ storage restrictions. This table defines which types are allowable.
 | `bytes`    | yes      | yes        |
 | `bool`     | yes      | yes        |
 | `id`       | yes      | yes        |
-| `optional` | no       | yes        |
+| `enum`     | yes      | yes        |
+| `option`   | no       | yes        |
+| `result`   | no       | no         |
 | Struct     | no       | yes[^1]    |
 | Opaque     | no       | no         |
 

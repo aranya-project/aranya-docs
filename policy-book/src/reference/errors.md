@@ -68,13 +68,13 @@ action foo(a int) result[unit, enum Error] {
 }
 ```
 
-An action can fail as you'd expect, but it can also fail if its
-`publish`ed commands fail. Regardless of whether the commands
-fail due to a rejection or a runtime exception, any failure during an
-action causes all commands published from the action to not be accepted
-into the graph[^atomic-action-clarifier]. This is also why the success
-type is limited to `unit`: an action returning `Ok` means the action
-itself ran to completion, not that its commands were accepted.
+An action can fail as you'd expect, but it can also fail if its `publish`ed
+commands are recalled at their origin perspective. Regardless of whether the
+commands fail due to a rejection or a runtime exception, any failure during an
+action causes all commands published from the action to not be accepted into
+the graph[^atomic-action-clarifier]. This is also why the success type is
+limited to `unit`: an action returning `Ok` means the action itself ran to
+completion, not that its commands were accepted.
 
 For example, this action will never successfully publish a command:
 

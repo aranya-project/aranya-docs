@@ -304,10 +304,11 @@ The return type is optional. If specified, it must be a
 `enum`, which gives the application a fixed set of failure cases to
 match on.
 
-The success type is limited to `unit` (whose only value is `Unit`). An
-action succeeding means only that the action itself ran to completion.
-It does not mean the commands it published were accepted onto the graph. Limiting the success type keeps applications from treating an action's
-return value as evidence that its commands took effect.
+The success type is limited to `unit` (whose only value is `Unit`). This is
+because actions return values would not be very meaningful - actions cannot
+modify state, only commands can, and they could be rejected after publishing.
+So the outcome of an action only indicates whether it was able to publish its
+commands, it says nothing about the final effect on the sink.
 
 An action with a return type must return on every path, using
 `return Ok(Unit)` for success and `return Err(e)` for failure. Returning
