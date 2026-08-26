@@ -33,10 +33,13 @@ fails, no changes will occur (see [Errors in Actions](../errors.md)).
 
 An action can optionally specify a return type to communicate
 success/failure to the application. The return type is `result[unit, E]`,
-where `E` can be any policy type. The success type is limited to `unit`,
-to discourage applications from relying on the return value of an action,
-because an action's success does not mean its commands have been accepted
-on the graph.
+where `E` can be any policy type.
+
+The success type is limited to `unit` (whose only value is `Unit`). This is
+because action return values would not be very meaningful - actions cannot
+modify state, only commands can, and they could be rejected after publishing.
+So the outcome of an action only indicates whether it was able to publish its
+commands, it says nothing about the final effect on the sink.
 
 An action with a return type must return a value on every path, with
 `return Ok(Unit)` on success and `return Err(e)` on failure. Returning

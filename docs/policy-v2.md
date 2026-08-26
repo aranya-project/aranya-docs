@@ -334,5 +334,18 @@ Error handling within policy code is described in [Policy Lang: "or" and
 - `check` now requires an `else` clause holding a terminal expression
   (`return`, `recall`, or `todo()`), which determines how the failed
   check is reported.
-- `unwrap` and `check_unwrap` are removed. Their uses are covered by
-  `or` with a fallback value, a `return`, a `recall`, or `todo()`.
+- `unwrap` and `check_unwrap` are removed. Their use cases are covered by:
+  - `or` with a fallback value, `return`, `recall`, or `todo()`.
+    ```policy
+    let x = query Foo[] or recall no_foo()
+    ```
+  - `match` statement/expression, which now supports identifier binding.
+    ```policy
+    let foo = match query Foo[] {
+        Some(f) => {
+            // do additional work, then return the fact
+            :f
+        }
+        _ => { recall no_foo() }
+    }
+    ```

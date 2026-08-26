@@ -64,10 +64,10 @@ let value = get_cached() or get_from_db() or default_value()
 
 ### Escaping instead of falling back
 
-The right side may also be a terminal expression &ndash;
-[`return`](../statements/return.md),
+The right side may also be a terminal expression
+([`return`](../statements/return.md),
 [`recall`](../top-level/commands.md#recall-block), or
-[`todo()`](../expressions/functions/todo.md) &ndash; which leaves the
+[`todo()`](../expressions/functions/todo.md)), which leaves the
 current block instead of producing a value. This is how a `None` is
 turned into an error:
 

@@ -23,7 +23,7 @@ storage restrictions. This table defines which types are allowable.
 | `id`       | yes      | yes        |
 | `enum`     | yes      | yes        |
 | `option`   | no       | yes        |
-| `result`   | no       | no         |
+| `result`   | no       | yes        |
 | Struct     | no       | yes[^1]    |
 | Opaque     | no       | no         |
 

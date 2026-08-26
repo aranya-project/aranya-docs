@@ -20,9 +20,9 @@ check envelope::author_id(envelope) == device else recall unauthorized()
 
 `check` evaluates a boolean expression. If it is true, execution
 continues with the next statement. If it is false, the `else` expression
-is evaluated instead. The `else` expression must be terminal &ndash; a
+is evaluated instead. The `else` expression must be terminal (a
 [`recall`](../top-level/commands.md#recall-block), a [`return`](return.md),
-or [`todo()`](../expressions/functions/todo.md) &ndash; so a failed
+or [`todo()`](../expressions/functions/todo.md)), so a failed
 `check` always performs an early exit.
 
 `check` statements are meant to enforce policy invariants. For example, if

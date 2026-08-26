@@ -24,5 +24,4 @@ let x = y or todo()
 
 Handling the `None` with a fallback value, a `return`, or a `recall` is
 always preferable; `todo()` states that the case is simply not handled
-yet. To state instead that a case should never be reached, see
-[`test_fail()`](test-fail.md).
+yet.

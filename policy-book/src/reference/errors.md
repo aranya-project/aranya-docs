@@ -73,8 +73,9 @@ commands are recalled at their origin perspective. Regardless of whether the
 commands fail due to a rejection or a runtime exception, any failure during an
 action causes all commands published from the action to not be accepted into
 the graph[^atomic-action-clarifier]. This is also why the success type is
-limited to `unit`: an action returning `Ok` means the action itself ran to
-completion, not that its commands were accepted.
+limited to `unit`: the outcome of an action only indicates whether it was
+able to publish its commands, it says nothing about the final effect on the
+sink.
 
 For example, this action will never successfully publish a command:
 
