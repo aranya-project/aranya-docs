@@ -43,13 +43,13 @@ Integers can be compared against each other.
 
 | Operator | Meaning |
 |----------|---------|
-| `unwrap` | `unwrap A` is the value inside A if the option is Some, or else stop with a [runtime exception](../errors.md#runtime-exceptions) |
-| `check_unwrap` | Same as `unwrap`, but stop with a [check failure](../errors.md#check-failures) instead of a runtime exception |
+| `or` | `A or B` is the value inside `A` if `A` is `Some`, otherwise `B` |
 | `is None` | `A is None` is true if there is no value inside the optional A |
 | `is Some` | `A is Some` is true if there is a value inside the optional A |
 
-Using `is` on a non-optional value will fail with a compile error or
-runtime exception.
+`B` may be a fallback value of `A`'s inner type, or a terminal
+expression such as `return` or `recall`. See [Coalescing with
+`or`](../types/optional.md#coalescing-with-or).
 
 ## Operator Precedence
 
@@ -57,8 +57,10 @@ runtime exception.
 |----------|----|
 | 1        | `.` |
 | 2        | `substruct`, `as` |
-| 3        | `-` (prefix), `!`, `unwrap`, `check_unwrap` |
+| 3        | `-` (prefix), `!` |
 | 4        | `+`, `-` (infix) |
 | 5        | `>`, `<`, `>=`, `<=`, `is` |
 | 6        | `==`, `!=` |
 | 7        | `&&`, `\|\|` |
+| 8        | `or` (optional coalescing, right-associative) |
+

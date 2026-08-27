@@ -14,9 +14,11 @@
 
 </div>
 
-```
+```policy
+enum Error { EmptyCounter, InvalidOwner }
+
 map FooCounter[deviceId: ?]=>{count: ?} as counter {
-    check counter.count > 0
+    check counter.count > 0 else return Err(Error::EmptyCounter)
 }
 ```
 
@@ -30,10 +32,10 @@ facts. The name given after `as` is scoped to the block.
 
  `map` can be nested.
 
- ```
+ ```policy
  map Devices[deviceId:?] as device {
     map Keys[deviceId: device, id: ?] as key {
-        check owner.valid
+        check owner.valid else return Err(Error::InvalidOwner)
     }
  }
  ```
@@ -42,3 +44,5 @@ Like `query` and related functions, fact values or the entire value part
 of the fact literal can be omitted. And likewise, bind values must
 [follow the positioning
 rules](../expressions/functions/queries.md#bind-marker).
+
+The map statement is allowed only in actions, because the main use case is to publish commands for each fact; only actions may publish.

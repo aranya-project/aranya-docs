@@ -8,11 +8,11 @@ certain operational constants that will be used repeatedly. See [Global
 Values](../reference/top-level/global-values.md) for more information on
 what is allowed in global scope.
 
-```
+```policy
 let MAX_RETRIES = 3
 
 function retry_thing() bool {
-    let state = unwrap_check query State[]=>{retries: ?}
+    let state = query State[]=>{retries: ?} or return false
     return state.retries > MAX_RETRIES
 }
 ```
@@ -46,7 +46,7 @@ global scope is the last scope in this search and is always present.
 current scope. Shadowing an existing identifier this way is a compile
 error.
 
-```
+```policy
 action foo() {
     let x = 1
     if x == 1 {

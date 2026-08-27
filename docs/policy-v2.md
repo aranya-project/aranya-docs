@@ -282,3 +282,70 @@ action frob(x Bar) {
     let f = x substruct Foo
 }
 ```
+
+## Return from Actions
+
+Actions can declare a return type, so that an action can report
+failure to the calling application.
+
+```policy
+enum Error { InvalidAmount, NoSuchDevice }
+
+action deposit(device id, amount int) result[unit, enum Error] {
+    check amount > 0 else return Err(Error::InvalidAmount)
+    let account = query Account[device: device] or return Err(Error::NoSuchDevice)
+    publish Deposit { device: device, amount: amount }
+    return Ok(Unit)
+}
+```
+
+The return type is optional. If specified, it must be a
+`result[unit, E]`, where `E` may be any policy type. It is commonly an
+`enum`, which gives the application a fixed set of failure cases to
+match on.
+
+The success type is limited to `unit` (whose only value is `Unit`). This is
+because actions return values would not be very meaningful - actions cannot
+modify state, only commands can, and they could be rejected after publishing.
+So the outcome of an action only indicates whether it was able to publish its
+commands, it says nothing about the final effect on the sink.
+
+An action with a return type must return on every path, using
+`return Ok(Unit)` for success and `return Err(e)` for failure. Returning
+`Err` terminates the action, meaning that none of the commands it published
+are accepted onto the graph.
+
+An action with no declared return type cannot report a failure of its
+own. Such actions still fail if any published command fails.
+
+The `return` statement is otherwise unchanged, and remains invalid in
+`policy` and `recall` blocks.
+
+## Errors and control flow
+
+Error handling within policy code is described in [Policy Lang: "or" and
+"recall"](/docs/policy-lang-or-recall.md). In summary:
+
+- `or` is an optional coalescing operator. `a or b` is the value inside
+  `a` when it is `Some`, and `b` otherwise.
+- `recall` is a statement and expression that transfers evaluation to a
+  named recall block. Recall blocks are now named and take parameters,
+  and a command may define more than one.
+- `check` now requires an `else` clause holding a terminal expression
+  (`return`, `recall`, or `todo()`), which determines how the failed
+  check is reported.
+- `unwrap` and `check_unwrap` are removed. Their use cases are covered by:
+  - `or` with a fallback value, `return`, `recall`, or `todo()`.
+    ```policy
+    let x = query Foo[] or recall no_foo()
+    ```
+  - `match` statement/expression, which now supports identifier binding.
+    ```policy
+    let foo = match query Foo[] {
+        Some(f) => {
+            // do additional work, then return the fact
+            :f
+        }
+        _ => { recall no_foo() }
+    }
+    ```

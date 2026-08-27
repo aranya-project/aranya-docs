@@ -116,27 +116,6 @@ The Access Control Plane is the top level control plane, enabling IDAM operation
 on-graph operations. The Access Control Plane is used to manage keys, address assignment, roles,
 and labels as set out in the policy which is written in the MVP using [version 2.0 of the policy language](/docs/policy-v2.md).
 
-For the MVP, Aranya Quic Channels (AQC) will be built to provide a simple API for sending and
-receiving messages using a modified Quic transport. The Aranya Quic Channels contains its own
-control plane for control messages, as well as the main data plane for moving data between devices.
-See [Aranya Quic Channels API](#aranya-quic-channels-api).
-
-Component structure:
-
-- Local Client API: syncing, local device management
-  - Access control plane (IDAM control plane): IDAM lifecycle
-    - Quic Channels
-      - Quic Channels control plane
-      - Quic Channels data plane
-    - AFC (build flag required to enable API)
-      - AFC control plane
-      - AFC data plane
-    - ... additional planes in future versions
-
-Rust features will be used for some features like the raw AFC interface. By default, AFC will not
-be included in the user facing API unless a specific build flag is present. The goal of this choice
-is to better signal which APIs are best suited for common use.
-
 ### Client APIs
 
 The client APIs are local-only API endpoints that do not create commands on the graph. They are
@@ -269,21 +248,6 @@ beta spec and other existing documentation ([AFC](/docs/afc.md) and [AFC-Crypto]
 AQC uses a modified Quic transport implementation that supports the ability to use custom
 cryptography and has latency-based congestion control (see (s2n-quic)[https://github.com/aws/s2n-quic]).
 More information on AQC, including the list of AQC-specific APIs, can be found in the AQC spec:
-- Draft version: https://github.com/aranya-project/aranya-docs/blob/2-quic-channels/docs/quic-channels.md
-- Eventually where the final spec will live: https://github.com/aranya-project/aranya-docs/blob/main/docs/quic-channels.md
-
-The Quic Channels plane is split in two different sub-planes: the Quic channels
-control plane and the Quic channels data plane. The AQC control plane is responsible for any Aranya command or ephemeral commands, while the AQC data plane contains only data-related APIs.
-
-Embedded devices that implement a subset of Aranya library should still be able to sync with
-clients that have the full product integrated. This compatibility is planned for Post-MVP.
-
-Both peer devices must be granted permission to use a label prior to creating an AFC or AQC channel with each other:
-
-- `CreateLabel(team_id, label)` - create a label
-- `DeleteLabel(team_id, label)` - delete a label
-- `AssignLabel(team_id, device_id, label)` - assign a label to a device
-- `RevokeLabel(team_id, device_id, label)` - revoke a label from a device
 
 #### AFC API
 

@@ -29,12 +29,14 @@ command Enroll {
     }
 
     policy {
-        check !exists Account[user: this.user]
+        check !exists Account[user: this.user] else recall already_enrolled()
 
         finish {
             create Account[user: this.user]=>{balance: 0}
         }
     }
+
+    ...
 }
 ```
 
@@ -58,8 +60,8 @@ command AddBalance {
     }
 
     policy {
-        check amount > 0
-        let account = check_unwrap query Account[id: this.user]=>{balance: ?}
+        check amount > 0 else recall invalid_amount()
+        let account = query Account[id: this.user]=>{balance: ?} or recall account_not_found()
         let current_balance = account.balance
         let new_balance = current_balance + this.amount
 
@@ -84,15 +86,13 @@ we fetch this fact.
     shortcut this and omit the value side entirely: `query Counter[user:
     this.user]`.
 
-We use
-[`check_unwrap`](../reference/expressions/operators.md#optional-operators)
-to unwrap the optional given to us by the query. If the optional is
-`None`, `check_unwrap` exits with a [check
-failure](../reference/errors.md#check-failures). `check` and
-`check_unwrap` should always be used to check the preconditions of a
-command. Next we update the balance, and finally in the `finish` block
-we use [`update`](../reference/statements/update.md) to change the value
-in the fact database.
+We use [`or`](../reference/expressions/operators.md#optional-operators)
+with `recall` to unwrap the optional given to us by the query. If the
+optional is `None`, the named `recall` block runs, producing a [rejection](../reference/errors.md#rejection). `check` and `or ...
+recall` should always be used to check the preconditions of a command.
+Next we update the balance, and finally in the `finish` block we use
+[`update`](../reference/statements/update.md) to change the value in the
+fact database.
 
 And finally, let's write a command that does something with this.
 
@@ -109,7 +109,7 @@ command Withdrawal {
     }
 
     policy {
-        let account = check_unwrap query Account[user: this.user]
+        let account = query Account[user: this.user] or recall account_not_found()
         let completed = account.balance >= this.amount
 
         if completed {
@@ -130,6 +130,8 @@ command Withdrawal {
             }
         }
     }
+
+    ...
 }
 ```
 

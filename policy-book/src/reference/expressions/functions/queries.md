@@ -15,9 +15,10 @@ auto-generated struct for the fact.
 
 In the above example, `x` is an `optional struct Foo` with two fields,
 for `deviceID` and `count`. If no facts are found, it returns `None`.
-`query` is commonly used with `unwrap` or `check_unwrap` to terminate
-execution immediately if the fact does not exist, or to access field
-values in the returned struct if it does.
+`query` is commonly used with [`or`](../operators.md#optional-operators)
+to provide a fallback, or to terminate execution (via `recall` or
+`return`) if the fact does not exist, or to access field values in the
+returned struct if it does.
 
 ### Bind Marker
 
@@ -40,7 +41,7 @@ Iteration](../../queries-and-iteration.md)).
 ## `at_least N`, `at_most N`, `exactly N`
 
 ```
-check at_most 1 Foo[deviceID: ?]
+check at_most 1 Foo[deviceID: ?] else recall too_many()
 let sufficient_admins = at_least 2 TeamAdmin[teamID: t, deviceID: ?]
 let is_highlander = exactly 1 Immortals[name: ?]
 ```
@@ -57,7 +58,7 @@ must be on the right.
 ## `exists`
 
 ```
-check !exists FooCounter[deviceID: this.deviceId]
+check !exists FooCounter[deviceID: this.deviceId] else recall already_exists()
 ```
 
 `exists` is syntactic sugar for `at_least 1`.

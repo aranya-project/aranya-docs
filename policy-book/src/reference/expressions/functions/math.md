@@ -9,7 +9,7 @@ operations.
 
 # `add(x int, y int) option[int]`
 
-`add` calculates `x + y`, returning the sum as an `optional[int]`. The
+`add` calculates `x + y`, returning the sum as an `option[int]`. The
 optional is `Some(x + y)` if addition succeeds without overflow or
 underflow, or `None` if it does not.
 
@@ -22,7 +22,7 @@ bounds of what can be represented in an `int`.
 # `sub(x int, y int) option[int]`
 
 `sub` calculates `x - y`, returning the difference as an
-`optional[int]`. The optional is `Some(x - y)` if subtraction succeeds
+`option[int]`. The optional is `Some(x - y)` if subtraction succeeds
 without overflow or underflow, or `None` if it does not.
 
 # `saturating_sub(x int, y int) int`

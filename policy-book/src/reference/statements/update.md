@@ -32,15 +32,15 @@ exist matching key and value fields, policy evaluation terminates with a
 runtime exception. This is conceptually similar to:
 
 ```
-let unused = unwrap query FooCounter[deviceId: myId]
-check unused.count == 0
+let unused = query FooCounter[deviceId: myId] or recall failed()
+check unused.count == 0 else recall failed()
 finish {
     update FooCounter[deviceID: myId] to {count: 1}
 }
 ```
 
-Except that this will produce a check error if the `count` is not as
-expected.
+Except that this will [reject](../errors.md#rejections) the command if
+the `count` is not as expected, rather than raising a runtime exception.
 
 In either case, attempting to update a non-existent fact is an error and
 will terminate policy execution with a runtime exception. Updating a

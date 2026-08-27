@@ -16,9 +16,9 @@
 
 ```
 if x == 3 {
-    check bar == 3
+    check bar == 3 else recall bad_bar()
 } else if x == 2 {
-    check bar == 2
+    check bar == 2 else recall bad_bar()
 } else {
     finish {
         emit BadBar {}
