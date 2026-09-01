@@ -4,6 +4,11 @@ title: "Policy Lang: 'or' and 'recall'"
 permalink: "/policy-or-recall/"
 ---
 
+This document describes the semantics of `or`, `recall`, and related
+control flow. For step-by-step instructions on updating an existing
+policy to use them, see
+[Migrating Policies to aranya-core v2](/docs/policy-migration-core-v2.md).
+
 ## The "never" type and control flow escape
 
 Some expressions in the policy language don't actually produce values,

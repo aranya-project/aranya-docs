@@ -8,6 +8,9 @@ permalink: "/policy-language-v2/"
 
 All elements of [Policy Language v1](/docs/policy-v1.md) not modified by this document are unchanged.
 
+Policies written against releases before `aranya-core` 2.0.0 need source
+changes; see [Migrating Policies to aranya-core v2](/docs/policy-migration-core-v2.md).
+
 ## File Format
 
 The `policy-version` front-matter field can now accept the value `2` to specify
