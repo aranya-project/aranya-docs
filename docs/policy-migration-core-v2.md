@@ -56,6 +56,13 @@ Which terminal expression to use depends on the block:
   (see section 3).
 - `recall` blocks must be infallible.
 
+To get a policy compiling quickly, write `else todo()` (and
+`or todo()`, below) everywhere first, then replace each one. `todo()`
+is only accepted when the compiler is in debug mode
+(`Compiler::debug(true)`, default `cfg!(debug_assertions)`); a
+release-mode compile fails with `DebugModeRequired` until they are
+gone.
+
 ```policy
 // before
 policy {
