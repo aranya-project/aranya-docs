@@ -14,10 +14,7 @@ command Foo {
     open {
         // `envelope` is auto-defined in `open` but cannot be used directly. Here
         // it is processed through an FFI function to produce a usable object.
-        let obj = envelope::do_open(envelope)
-        // `deserialize` is a built-in that turns a serialized `bytes` object into a
-        // struct.
-        return deserialize(obj)
+        return envelope::do_open(payload, envelope)
     }
 
     ...

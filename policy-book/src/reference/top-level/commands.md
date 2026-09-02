@@ -85,22 +85,26 @@ command is published, or when it is received via syncing). `seal` and
 These blocks operate like [pure
 functions](functions.md#pure-functions) - `seal` has an implicit
 argument `this`, which contains the pending command's fields just as it
-does in the `policy` block. `seal` should return an envelope.
+does in the `policy` block, and `payload` which is a `bytes` containing
+a serialized representation of `this`. `seal` should return an envelope.
 
-Conversely, `open` has an implicit argument `envelope`, an [envelope
-struct](#envelope-type), and it should return a command struct with the
-command's fields.
+`open` also has `this` and `payload` arguments as well as an implicit
+argument `envelope`, an [envelope struct](#envelope-type), and it
+should return `Unit` to signify a successful opening.
 
-If `open` does not return a valid command struct, or `seal` does not
-return a valid envelope, policy evaluation will terminate with a runtime
-exception.
+```policy
+function seal(this, payload bytes) struct Envelope
+function open(this, payload bytes, envelope struct Envelope) Unit
+```
 
-`seal`/`open` are the appropriate place to perform any serialization,
-cryptography, or envelope validation necessary as part of this
-transformation, but it is not required that they do anything other than
-return a valid envelope or command struct respectively. It is valid
-(though likely not useful) to do no work at all and return static
-values.
+`seal` and `open` are expected to use an ffi to trigger an error in
+the case of a failure such as a missing key.
+
+`seal`/`open` are the appropriate place to perform any cryptography or
+envelope validation necessary as part of this transformation, but it is
+not required that they do anything other than return a valid envelope or
+unit respectively. It is valid (though likely not useful) to do no work
+at all and return static values.
 
 When evaluating a policy block, the implicit argument `envelope` is also
 available so that properties of the envelope can be obtained.
@@ -114,13 +118,12 @@ example:
 
 ```
 command Foo {
-    ...
+    seal {
+        return envelope::do_seal(payload)
+    }
 
     open {
-        // envelope::do_open turns the opaque envelope into a `bytes`
-        // that deserialize turns into a command struct.
-        let serialized_struct = envelope::do_open(envelope)
-        return deserialize(serialized_struct)
+        return envelope::do_open(payload, envelope)
     }
 
     ...
