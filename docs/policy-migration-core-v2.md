@@ -46,19 +46,15 @@ check_statement = { "check" ~ expression ~ "else" ~ expression }
 
 The `else` expression must have type `Never`. Otherwise the compiler
 reports *check else must be terminal (e.g. `return`, `recall`)*.
-What counts as terminal depends on context:
+Which terminal expression to use depends on the block:
 
-| Block                         | Terminal `else` expressions                  |
-| ----------------------------- | -------------------------------------------- |
-| `policy { }`                  | `recall f()`, `test_fail()`, `todo()`        |
-| `recall f() { }`              | `test_fail()`, `todo()`                      |
-| `action` (infallible)         | `test_fail()`, `todo()`                      |
-| `action` -> `result[unit, E]` | `return Err(e)`, `test_fail()`, `todo()`     |
-| `function`                    | `return <T>`, `test_fail()`, `todo()`        |
-| `seal` / `open`               | `return <value>`, `test_fail()`, `todo()`    |
-
-`recall` is only valid inside `policy` blocks, and `policy` blocks
-have no return type, so `recall` is the only production option there.
+- `policy` blocks are expected to trigger a recall on error, so they
+  use `recall f()`. `recall` is only valid inside `policy` blocks.
+- Functions and actions can return results, so they use
+  `return Err(e)` (see section 4 for actions).
+- `seal` and `open` fail through FFI failures rather than `check`
+  (see section 3).
+- `recall` blocks must be infallible.
 
 ```policy
 // before
@@ -75,15 +71,6 @@ policy {
 
 recall reject() {}
 ```
-
-### `test_fail()` is debug-only
-
-`test_fail(msg?)` compiles to `exit panic` and, like `todo()`, is
-only accepted when the compiler is in debug mode
-(`Compiler::debug(true)`, default `cfg!(debug_assertions)`). A
-release-mode compile of a policy containing it fails with
-`DebugModeRequired`. The repo's example and test policies use it
-freely; production policies should use `recall` or `return Err(..)`.
 
 ## 2. `unwrap` and `check_unwrap` removed ([#736])
 
@@ -328,21 +315,12 @@ Err(ClientError::PolicyError(PolicyError::Rejected)) => ...
 
 ### `Command::max_cut` / `Command::address` ([#742])
 
-This is why `aranya-core` went to 2.0.0. `max_cut()` and `address()`
-moved off `trait Command` onto `CommandExt`, which has a blanket
-impl for all `C: Command` and always derives max cut from the
-parents. Remove these methods from your `Command` impls and import
-`CommandExt` where you call them.
+`max_cut()` and `address()` moved off `trait Command` onto
+`CommandExt`, which has a blanket impl for all `C: Command` and
+always derives max cut from the parents. Remove these methods from
+your `Command` impls and import `CommandExt` where you call them.
 
-### Struct serialization ([#748])
-
-`aranya_policy_vm::serialize` is now `pub(crate)`. Use the new
-`Machine` methods:
-
-```rust
-let bytes = machine.serialize_struct(&s)?;
-let s = machine.deserialize_struct(name, &bytes)?;
-```
+### Struct deserialization ([#748])
 
 Deserialization validates enum values against the module's enum
 definitions and returns `DeserializeError::UnknownEnum` on a miss.
@@ -357,10 +335,12 @@ constructing `ActionDef` by hand must set the new field.
 ## 6. Recompile `Module` artifacts
 
 `ModuleData::V0` is still the only tag, but `ModuleV0` changed
-incompatibly: `action_defs`, `command_defs`, `fact_defs`,
-`struct_defs`, and `enum_defs` moved from maps to `Vec`s ([#726]),
-and `ActionDef` gained `result_type` ([#706]). Modules serialized by
-the previous release will not deserialize. Recompile from source.
+incompatibly. The module and VM types no longer carry source `Span`s
+([#726]); as part of that, `action_defs`, `command_defs`,
+`fact_defs`, `struct_defs`, and `enum_defs` moved from maps to
+`Vec`s. `ActionDef` also gained `result_type` ([#706]). Modules
+serialized by the previous release will not deserialize. Recompile
+from source.
 
 ## Syntax reference
 
@@ -377,7 +357,6 @@ the previous release will not deserialize. Recompile from source.
 
 | Added                         | Notes                                           |
 | ----------------------------- | ----------------------------------------------- |
-| `test_fail(msg?)`             | debug-mode only; panics                         |
 | `Some(ident)` match patterns  | binds the inner value                           |
 | `action f() result[unit, E]`  | success type must be `unit`                     |
 
@@ -386,18 +365,9 @@ the previous release will not deserialize. Recompile from source.
 `crates/aranya-policy-lang/src/lang/parse/keywords.rs`; the grammar
 is `crates/aranya-policy-lang/src/lang/parse/policy.pest`.
 
-## Verifying
+## Reference policies
 
-```bash
-# Requires the policy plus at least one run file.
-cargo run -p aranya-policy-runner -- --validator <policy.md> <run-file>
-
-cargo make build-code
-cargo make unit-tests
-cargo make correctness
-```
-
-Reference policies on the new syntax:
+Policies in `aranya-core` that use the new syntax:
 
 - `crates/aranya-core-example/src/policy.md`
 - `crates/aranya-model/src/tests/basic-policy.md`
