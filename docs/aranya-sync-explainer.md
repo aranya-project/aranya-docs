@@ -111,12 +111,12 @@ Going from 100 devices to 10,000 roughly doubles the hop count while per-device 
 
 | | |
 |---|---|
-| <img src="assets/sync-topology-clique.svg" alt="Full clique" width="230"> | **Full clique.** Every device subscribes to and pulls from every other. One hop, but `N(N−1)` hellos per change and a peer list on every device that grows with the team. Fine for a handful of devices. It does not scale. |
-| <img src="assets/sync-topology-star.svg" alt="Star" width="230"> | **Star.** Every device links to a single hub and to nothing else. Two hops at most and trivially easy to configure: a new device needs one peer, and only the hub's list changes. The price is that the hub does all the work — `N` hellos and `N` pulls per change — and is a single point of failure for the whole team. A star is reasonable when there is a natural always-on gateway and the team is small enough for one device to serve it, and it is the shape to grow *out of* first, by adding a second hub or cross-links between spokes. |
-| <img src="assets/sync-topology-hierarchy.svg" alt="Hierarchy" width="230"> | **Hierarchy.** Devices are arranged in a tree, often mirroring roles: owner, admins, operators, members. Latency from the top is `log(N)` and the shape is easy to reason about, but two devices in different branches are up to `2 log(N)` apart, and every interior node is a cut vertex whose absence isolates its whole subtree. A good starting point when there is a natural gateway at each level, provided you add cross-links between siblings or a second parent for resilience. |
-| <img src="assets/sync-topology-ring.svg" alt="Ring" width="230"> | **Ring.** Each device subscribes to its two neighbours. Constant cost, no single point of failure, and a two-device partition is survivable, but information crawls: `N/4` hops on average, `N/2` worst case. Rings are a useful *component* (the convergence tests in the Aranya repository use rings of up to 100 nodes) but a poor topology on their own for anything large. |
-| <img src="assets/sync-topology-random.svg" alt="Random graph" width="230"> | **Random graph.** Each device subscribes to a few peers chosen at random. Near-optimal hops with no coordination, and no device matters more than any other. The cost is that nothing about the shape reflects the physical network; a "neighbour" may be on the far side of a slow link. |
-| <img src="assets/sync-topology-small-world.svg" alt="Small world" width="230"> | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device). This is the shape to aim for. |
+| ![Full clique](assets/sync-topology-clique.svg) | **Full clique.** Every device subscribes to and pulls from every other. One hop, but `N(N−1)` hellos per change and a peer list on every device that grows with the team. Fine for a handful of devices. It does not scale. |
+| ![Star](assets/sync-topology-star.svg) | **Star.** Every device links to a single hub and to nothing else. Two hops at most and trivially easy to configure: a new device needs one peer, and only the hub's list changes. The price is that the hub does all the work — `N` hellos and `N` pulls per change — and is a single point of failure for the whole team. A star is reasonable when there is a natural always-on gateway and the team is small enough for one device to serve it, and it is the shape to grow *out of* first, by adding a second hub or cross-links between spokes. |
+| ![Hierarchy](assets/sync-topology-hierarchy.svg) | **Hierarchy.** Devices are arranged in a tree, often mirroring roles: owner, admins, operators, members. Latency from the top is `log(N)` and the shape is easy to reason about, but two devices in different branches are up to `2 log(N)` apart, and every interior node is a cut vertex whose absence isolates its whole subtree. A good starting point when there is a natural gateway at each level, provided you add cross-links between siblings or a second parent for resilience. |
+| ![Ring](assets/sync-topology-ring.svg) | **Ring.** Each device subscribes to its two neighbours. Constant cost, no single point of failure, and a two-device partition is survivable, but information crawls: `N/4` hops on average, `N/2` worst case. Rings are a useful *component* (the convergence tests in the Aranya repository use rings of up to 100 nodes) but a poor topology on their own for anything large. |
+| ![Random graph](assets/sync-topology-random.svg) | **Random graph.** Each device subscribes to a few peers chosen at random. Near-optimal hops with no coordination, and no device matters more than any other. The cost is that nothing about the shape reflects the physical network; a "neighbour" may be on the far side of a slow link. |
+| ![Small world](assets/sync-topology-small-world.svg) | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device). This is the shape to aim for. |
 
 ### Practical guidance
 
@@ -180,7 +180,9 @@ A pull, end to end, looks like this. The reference implementation is `aranya-tcp
 let cache = peer_caches.entry((peer_addr, graph_id)).or_default();
 let mut requester = SyncRequester::new(graph_id, &mut rng);
 
-let (len, _) = requester.poll(&mut buf, &mut provider, &cache.session_heads(), &mut traversal)?;
+let (len, _) = requester.poll(
+    &mut buf, &mut provider, &cache.session_heads(), &mut traversal,
+)?;
 transport.send(peer_addr, &buf[..len])?;
 
 let reply = transport.recv(peer_addr)?;
@@ -188,7 +190,9 @@ if let Some(commands) = requester.receive(&reply)? {
     let mut trx = client.transaction(graph_id);
     client.add_commands(&mut trx, &mut sink, &commands, &mut buffers, make_spill)?;
     client.commit(&mut trx, &mut sink, &mut buffers, make_spill)?;
-    client.update_heads(graph_id, commands.iter().map(|c| c.address()), cache, &mut traversal)?;
+    client.update_heads(
+        graph_id, commands.iter().map(|c| c.address()), cache, &mut traversal,
+    )?;
 }
 ```
 
@@ -209,7 +213,8 @@ match SyncIncoming::decode(&inbound)? {
             schedule_pull_from(from, h.graph_id());
         }
     }
-    SyncIncoming::Hello(SyncHello::Subscribe(s)) => subscriptions.insert(from, s), // your table
+    // Subscription bookkeeping is yours.
+    SyncIncoming::Hello(SyncHello::Subscribe(s)) => subscriptions.insert(from, s),
     SyncIncoming::Hello(SyncHello::Unsubscribe(u)) => subscriptions.remove(from),
     _ => {}
 }
@@ -309,7 +314,8 @@ aranya_sync_peer_config_builder_set_sync_now(&b);
 aranya_sync_peer_config_build(&b, &cfg);
 
 aranya_add_sync_peer(client, &team_id, peer_addr, &cfg);
-aranya_sync_hello_subscribe(client, &team_id, peer_addr, NULL);   /* NULL = default hello config */
+/* NULL = default hello subscription config */
+aranya_sync_hello_subscribe(client, &team_id, peer_addr, NULL);
 
 /* later */
 aranya_sync_now(client, &team_id, peer_addr, NULL);
