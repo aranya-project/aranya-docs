@@ -1,88 +1,145 @@
----
-layout: page
-title: "Policy Lang: the `?` operator"
-permalink: "/policy-try-operator/"
----
+# The `?` operator
 
-## The `?` operator
+## 1. Summary
 
-Propagating an error out of a `result[T, E]` value is a common thing to
-do, but it is verbose today. You have to `match` on the value and re-wrap
-the error yourself:
+`?` written after a call consumes the `result[T, E]` that call returns:
+- `Ok(v)` evaluates to `v`
+- `Err(e)` returns `Err(e)` from the enclosing callable.
+
+It's essentially syntactic sugar for a `match`. It compiles to a branch and an unwrap.
+
+## 2. Motivation
+
+Propagation is written by hand today:
 
 ```policy
-function get_value() result[int, string] { ... }
-
-function foo() result[int, string] {
-    let n = match get_value() {
-        Ok(v) => v
-        Err(e) => return Err(e)
+action foo() result[unit, enum Error] {
+    let value = match try_get_value() {
+        Ok(n) => n
+        _ => return Err(Error::Fail)
     }
-    return Ok(do_something(n))
+    ...
 }
 ```
 
-The `Err(e) => return Err(e)` arm is pure boilerplate: on failure, stop and
-hand the same error back to the caller. The `?` operator captures exactly
-that pattern. Like [Rust's `?`
-operator](https://doc.rust-lang.org/std/result/index.html#the-question-mark-operator-),
-it unwraps a successful `result` and propagates a failing one:
+When calling multiple fallible functions, it gets verbose fast. With `?`:
 
 ```policy
-function foo() result[int, string] {
-    let n = get_value()?
-    return Ok(do_something(n))
+action foo() result[unit, enum Error] {
+    let value = try_return(succeed)?
+    ...
 }
 ```
 
-The coalescing [`or` operator](/policy-or-recall/) can already
-unwrap-or-escape, but it cannot forward the inner error value to its
-right-hand side, so it cannot express "return this same error". `?` fills
-that gap for `result` values.
+## 3. Non-goals
 
-## Semantics
+- `?` on anything but a call — not on locals, `Ok`/`Err` literals, or field
+  accesses (§4)
+- `?` on `option[T]` - we can use the `or` operator for handling `None`
+- error conversion — the language has no trait system, so no `From` analogue
 
-`?` is a postfix operator applied to a `result[T, E]` value. `e?` is
-equivalent to:
+## 4. Syntax
+
+`?` is a postfix operator whose operand must be a call — it goes directly after
+one, and nowhere else. It is part of the call form rather than a free-standing
+postfix operator, so `x?` on a local, `this.field?`, and `Err(e)?` are parse
+errors. It may repeat: `f(x)??` unwraps a `result[result[T, E], E]`,
+since the chain still starts at a call.
+
+The restriction keeps the parser simple, and avoids ambiguity against the *bind*
+token, which is also `?`. A bind never follows a call, so
+`query Stuff[x: k]=>{y: ?}` is unambiguous, and is easy to parse.
+
+Whether nested `result` is a type worth having at all is a separate question —
+the parser tests already flag it ("not sure we want it",
+[tests.rs:240](../src/lang/parse/tests.rs#L240)). If it goes away, `f(x)??` goes
+with it at no cost.
+
+`?` is also not accepted on `action foo()`, which is a statement rather than an
+expression; see §7.
+
+A call with `?` is an atom, so the ordinary operators compose around it:
+`f(x)?.field`, `!f(x)?`, and `f(x)? + g(y)?` needs no parentheses.
+
+### 5. Diagnostics
+
+Reuses the existing `InvalidType` and `InvalidReturn` error kinds.
+
+On the call:
+
+```
+`?` can only be applied to a call returning `result[T, E]`; `f` returns `option[int]`
+  note: `option` has no error to propagate; use `or`
+
+`?` cannot propagate an error of type `string`
+  the enclosing function returns `result[int, enum Error]`
+  note: there is no automatic error conversion; use `match` to map the error
+```
+
+On the `?` itself, following the existing `return` wording:
+
+```
+cannot use `?` in an infallible action; declare a `result[unit, E]` return type
+cannot use `?` in a function returning `int`; the return type must be `result[T, E]`
+`?` is not valid in a command policy block; use `match`
+`?` is not valid in a finish block
+```
+
+A `?` on a non-call operand is a parse error, not a type error, and should say
+so plainly: ``the `?` operator can only follow a call``.
+
+## 6. Dynamic semantics
+
+`f(a)?` is an expression of type `T`, so it goes anywhere an expression of that
+type goes: `let x = f(a)?`, a call argument, a struct field, either side of `+`.
+
+## 7. Risks and open questions
+
+**Return coverage.** The compiler's own check scans for any return instruction
+in range, so the one `?` emits on the error path satisfies it even when the
+success path falls through:
 
 ```policy
-match e {
-    Ok(v) => v
-    Err(err) => return Err(err)
-}
+function f() result[int, string] {
+    let x = g()?          // the `?` return satisfies the range scan
+}                         // ...but the success path has none
 ```
 
-If `e` evaluates to `Ok(v)`, the `e?` expression evaluates to `v`. If `e`
-evaluates to `Err(err)`, `?` performs an early `return Err(err)` from the
-enclosing definition, and no further statements in the caller run.
+The `FunctionAnalyzer` will detect the missing return, but only when compiling
+with analysis enabled.
 
-Because the failing branch is a `return Err(err)`, `?` is only valid where
-that exact `return` is legal: the enclosing definition must return a value,
-that value must be a `result`, and its error type must match the operand's
-error type. The three ways this can fail are described in [Enclosing context
-requirements](#enclosing-context-requirements).
+**Action-to-action calls.** `action foo()` is a statement, so when the callee is
+fallible its error is silently dropped and the caller carries on as if it
+succeeded. Tracked separately in
+[#800](https://github.com/aranya-project/aranya-core/issues/800).
 
-## Type rules
+**Early exit from `map`.** A `map` body's query iterator is only released when
+it is exhausted, so any early exit — an existing `return`, or a new `?` — leaks
+one for the life of the run. This is an existing issue.
 
-- The operand of `?` must have a `result[T, E]` type. Applying `?` to any
-  other type (for example an `optional` or a plain `int`) is a compile
-  error.
-- `e?` has type `T`, the success type of the operand.
-- The enclosing definition must return `result[_, E]`, with the same `E` as
-  the operand.
-- `?` is a postfix operator and binds more tightly than any prefix or infix
-  operator. So `a + f()?` parses as `a + (f()?)`, and `x?.field` as
-  `(x?).field`. Parentheses can override this as usual.
+**`?` on `option[T]`.** Rust's `?` works on `Option`, so users may expect the
+same here. It stays a compile error: `None` has no error value to propagate, and `or`
+already covers the case. The §5.3 note points at `or` for that reason.
 
-## Error messages
+## 8. Tests
 
-Because `?` expands to generated code that does not literally appear in the
-policy source, diagnostics need to be mapped back to the operator carefully.
-Every error above should point at the `?` operator and its operand, not at the
-generated `return`:
+**Parser:** `f(x)?`, `mod::f(x)?`, and the compositions in §4; `x?`,
+`this.field?`, `Err(e)?`, and `action foo()?` rejected with the §5.3 parse
+error; `f(x)??` accepted; every existing bind form still parsing.
 
-| Case | Diagnostic should say |
-|---|---|
-| Enclosing definition returns nothing | `?` is not allowed in this context |
-| Enclosing definition returns a non-`result` | `?` requires a `result` return type |
-| Error types do not match | expected error type {e}, but `?` produces {f}  |
+**Compiler:** one negative test per diagnostic in §5.3; calls returning `int`,
+`unit`, and `option[T]` each rejected; error mismatch across `enum`, `string`,
+and `struct` error types; `?` inside `match` arms, `if` branches, block
+expressions, and `map` bodies; `f(x)??` on a `result[result[int, E], E]`, and
+rejected when the two error types differ. Add the §7 fall-through to
+`test_validate_return`.
+
+**VM:** the `Ok` path continues with the inner value; the `Err` path returns the
+original payload by identity, from a nested block and from inside a `map`; empty
+stack and a normal exit reason on both.
+
+**Runtime:** a fallible ephemeral action propagating with `?` yields
+`PolicyError::Rejected`, matching an explicit `return Err(..)`.
+
+Rewrite `test_result`'s `try` in `aranya-policy-vm/tests/vm.rs` to use `?`,
+keeping a `match` version for coverage.
