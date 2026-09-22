@@ -1,7 +1,7 @@
 # Commands
 
 ```
-command Foo {
+command Foo with SomeBase {
     attributes {
         // attributes can only be literals, so their type is implied
         priority: 3,
@@ -38,11 +38,12 @@ command Foo {
 }
 ```
 
-Commands define structured data (the `fields` block), rules for
-transforming that structured data to and from a transportable format
-(`seal` and `open` blocks), and policy decisions for determining the
-validity and effects of processing that data (the `policy` and `recall`
-blocks).
+Commands define runtime-specific `attributes`, structured data (the
+`fields` block), and policy decisions for determining the validity
+and effects of processing that data (the `policy` and `recall` blocks).
+
+Commands also refer to a base command which define various properties
+while reducing repetition. See [Base Commands](../base-commands.md).
 
 Policy statements may terminate execution on a variety of conditions,
 like a failed `check` or a query that returns `None` where the policy
@@ -75,39 +76,8 @@ struct is used when `publish`ing a command in an action.
 
 ## Seal/Open
 
-The `seal` and `open` blocks perform any operations necessary to
-transform an envelope into command fields, and vice versa. `seal` is
-automatically called when a command is `publish`ed, and `open` is
-automatically called before command policy is evaluated (either when a
-command is published, or when it is received via syncing). `seal` and
-`open` are required blocks for commands.
-
-These blocks operate like [pure
-functions](functions.md#pure-functions) - `seal` has an implicit
-argument `this`, which contains the pending command's fields just as it
-does in the `policy` block, and `payload` which is a `bytes` containing
-a serialized representation of `this`. `seal` should return an envelope.
-
-`open` also has `this` and `payload` arguments as well as an implicit
-argument `envelope`, an [envelope struct](#envelope-type), and it
-should return `Unit` to signify a successful opening.
-
-```policy
-function seal(this, payload bytes) struct Envelope
-function open(this, payload bytes, envelope struct Envelope) Unit
-```
-
-`seal` and `open` are expected to use an ffi to trigger an error in
-the case of a failure such as a missing key.
-
-`seal`/`open` are the appropriate place to perform any cryptography or
-envelope validation necessary as part of this transformation, but it is
-not required that they do anything other than return a valid envelope or
-unit respectively. It is valid (though likely not useful) to do no work
-at all and return static values.
-
-When evaluating a policy block, the implicit argument `envelope` is also
-available so that properties of the envelope can be obtained.
+Seal and open blocks have been removed.
+See [`get_key`](./base-commands.md#get-key-block).
 
 ### `envelope` type
 
@@ -118,15 +88,10 @@ example:
 
 ```
 command Foo {
-    seal {
-        return envelope::do_seal(payload)
+    policy {
+        let author = envelope::author_id(envelope)
+        ...
     }
-
-    open {
-        return envelope::do_open(payload, envelope)
-    }
-
-    ...
 }
 ```
 
