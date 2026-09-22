@@ -66,7 +66,7 @@ Because hellos are cheap and pulls happen only when there is something to fetch,
 
 ## 3. Topology: sync from a few peers, not from everyone
 
-Who syncs from whom is the single biggest lever you have over both latency and load. Think of the team as a directed graph where an edge `A → B` means "A pulls from B." New information committed on one device spreads along the edges, one hop per sync exchange.
+Who syncs from whom is the single biggest lever you have over both latency and load. Think of the team as a directed graph where an edge `A ⇌ B` means "A pulls from B." New information committed on one device spreads along the edges, one hop per sync exchange.
 
 ### How information spreads
 
@@ -117,7 +117,7 @@ Going from 100 devices to 10,000 roughly doubles the hop count while per-device 
 | ![Hierarchy](../assets/sync-topology-hierarchy.svg) | **Hierarchy.** Devices are arranged in a tree, often mirroring roles: owner, admins, operators, members. Latency from the top is `log(N)` and the shape is easy to reason about, but two devices in different branches are up to `2 log(N)` apart, and every interior node is a cut vertex whose absence isolates its whole subtree. A good starting point when there is a natural gateway at each level, provided you add cross-links between siblings or a second parent for resilience. |
 | ![Ring](../assets/sync-topology-ring.svg) | **Ring.** Each device subscribes to its two neighbours. Constant cost, no single point of failure, but information crawls: `N/4` hops on average, `N/2` worst case. Rings are a useful *component* (the convergence tests in the Aranya repository use rings of up to 100 nodes) but a poor topology on their own for anything large. |
 | ![Random graph](../assets/sync-topology-random.svg) | **Random graph.** Each device subscribes to a few peers chosen at random. Near-optimal hops with no coordination, and no device matters more than any other. The cost is that nothing about the shape reflects the physical network; a "neighbour" may be on the far side of a slow link. |
-| ![Small world](../assets/sync-topology-small-world.svg) | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device). This is the shape to aim for. |
+| ![Small world](../assets/sync-topology-small-world.svg) | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device).  |
 
 ### Practical guidance
 
@@ -161,20 +161,27 @@ If you are integrating the `aranya-runtime` crate into your own system, the runt
 
 The split is simple to state. **The runtime decides what to send; you decide when, to whom, and over what.**
 
-| The runtime does | You do |
-|---|---|
-| Works out which commands a peer is missing, given what it has advertised | Choose which peers this device syncs from (the topology) |
-| Produces the request and response messages, into buffers you own | Move those bytes between devices, over whatever transport you like |
-| Turns replies back into commands and applies them to the graph through policy | Authenticate and encrypt the channel |
-| Tracks, per peer, what has already been exchanged so later pulls stay small | Decide when to pull: on a timer, on a hello, or both |
-| Tells you the graph head to advertise when your graph changes, and whether a hello you received is worth acting on | Keep the list of who has subscribed to your hellos, honour their debounce and expiry, and send the hellos |
-| | Retry a failed exchange (start it again), and serialise access to the client state |
+#### The runtime does
+ - Works out which commands a peer is missing, given what it has advertised
+ - Produces the request and response messages, into buffers you own
+ - Turns replies back into commands and applies them to the graph through policy
+ - Tracks, per peer, what has already been exchanged so later pulls stay small
+ - Tells you the graph head to advertise when your graph changes, and whether a hello you received is worth acting on
 
-Everything in the left column is reached through a handful of types in the `aranya_runtime::sync` module: a requester and a responder that you drive one message at a time, a per-peer cache you hand to both, a decoder for inbound bytes, and two helpers on the client for hello. The crate's API documentation covers their signatures and buffer requirements; this page covers how they fit together.
+#### Your code dose
+ - Choose which peers this device syncs from (the topology) 
+ - Move those bytes between devices, over whatever transport you like
+ - Authenticate and encrypt the channel
+ - Decide when to pull: on a timer, on a hello, or both
+ - Keep the list of who has subscribed to your hellos, honour their debounce and expiry, and send the hellos
+ - Retry a failed exchange (start it again), and serialise access to the client state
+ - 
+
+Runtime responsibilities are accessed through a handful of types in the `aranya_runtime::sync` module: a requester and a responder that you drive one message at a time, a per-peer cache you hand to both, a decoder for inbound bytes, and two helpers on the client for hello. The crate's API documentation covers their signatures and buffer requirements; this page covers how they fit together.
 
 ### What you provide
 
-A pull, end to end, looks like this. The reference implementation is `aranya-tcp-syncer` in the `aranya-core` repository, about four hundred lines and worth reading in full; note that it deliberately omits encryption and authentication.
+A pull, end to end, looks like this. The reference implementation is [`aranya-tcp-syncer`](https://github.com/aranya-project/aranya-core/tree/main/crates/aranya-tcp-syncer) in the `aranya-core` repository, about four hundred lines and worth reading in full; note that it deliberately omits encryption and authentication.
 
 ```rust
 // Requester side: one exchange with one peer.
@@ -271,7 +278,7 @@ team.sync_now(peer_addr, None).await?;   // one-shot pull, e.g. right after onbo
 team.remove_sync_peer(peer_addr).await?; // stop pulling from this peer
 ```
 
-Adding a peer with `sync_now(true)` and no interval performs exactly one pull. Adding a peer with neither registers it without scheduling anything, which is the right shape when hello notifications will drive the syncing.
+Adding a peer with `sync_now(true)` and no interval performs exactly one pull. Adding a peer with neither registers it without scheduling anything, which is the right approach when hello notifications will drive the syncing.
 
 ### Hello sync
 
@@ -328,7 +335,7 @@ Every function also has an `_ext` variant that returns extended error informatio
 
 ### Worked example: a sparse topology for six devices
 
-Give each device two ring neighbours plus one long link, and configure every link in both directions. Device *i* pulls from *i−1*, *i+1*, and *i+3* (mod 6). Each device makes three `add_sync_peer` calls and three `sync_hello_subscribe` calls, and every device is reachable from every other in at most two hops with two disjoint paths.
+Give each device two ring neighbours plus one long link, and configure every link in both directions. Device *i* pulls from *i−1*, *i+1*, and *i + 6 / 2* (mod 6). Each device makes three `add_sync_peer` calls and three `sync_hello_subscribe` calls, and every device is reachable from every other in at most two hops with two disjoint paths.
 
 ```rust
 async fn wire_peers(team: &Team, my_index: usize, addrs: &[Addr]) -> Result<()> {
@@ -352,7 +359,7 @@ Run `wire_peers` on every device and the topology is symmetric by construction. 
 
 ### Onboarding note
 
-A device that has just been added to a team has an empty graph. Its first pull from any existing member fetches the whole history, and until that pull completes the device cannot evaluate policy for the team. The examples in the repository therefore call `sync_now` against the device that added them immediately after onboarding, before relying on the periodic or hello-driven schedule. Do the same.
+A device that has just been added to a team has an empty graph. Its first pull from any existing member fetches the whole history, and until that pull completes the device cannot evaluate policy for the team. The examples in the repository therefore call `sync_now` against the device that added them immediately after onboarding, before relying on the periodic or hello-driven schedule. This is the onboarding pattern you should fallow by default.
 
 ## 7. Summary
 
