@@ -16,7 +16,7 @@ Propagation is written by hand today:
 action foo() result[unit, enum Error] {
     let value = match try_get_value() {
         Ok(n) => n
-        _ => return Err(Error::Fail)
+        Err(e) => return Err(e)
     }
     ...
 }
@@ -45,10 +45,6 @@ one, and nowhere else. It is part of the call form rather than a free-standing
 postfix operator, so `x?` on a local, `this.field?`, and `Err(e)?` are parse
 errors. It may repeat: `f(x)??` unwraps a `result[result[T, E], E]`,
 since the chain still starts at a call.
-
-The restriction keeps the parser simple, and avoids ambiguity against the *bind*
-token, which is also `?`. A bind never follows a call, so
-`query Stuff[x: k]=>{y: ?}` is unambiguous, and is easy to parse.
 
 Whether nested `result` is a type worth having at all is a separate question —
 the parser tests already flag it ("not sure we want it",
@@ -88,12 +84,7 @@ cannot use `?` in a function returning `int`; the return type must be `result[T,
 A `?` on a non-call operand is a parse error, not a type error, and should say
 so plainly: ``the `?` operator can only follow a call``.
 
-## 6. Dynamic semantics
-
-`f(a)?` is an expression of type `T`, so it goes anywhere an expression of that
-type goes: `let x = f(a)?`, a call argument, a struct field, either side of `+`.
-
-## 7. Risks and open questions
+## 6. Risks and open questions
 
 **Return coverage.** The compiler's own check scans for any return instruction
 in range, so the one `?` emits on the error path satisfies it even when the
@@ -119,27 +110,4 @@ one for the life of the run. This is an existing issue.
 
 **`?` on `option[T]`.** Rust's `?` works on `Option`, so users may expect the
 same here. It stays a compile error: `None` has no error value to propagate, and `or`
-already covers the case. The §5.3 note points at `or` for that reason.
-
-## 8. Tests
-
-**Parser:** `f(x)?`, `mod::f(x)?`, and the compositions in §4; `x?`,
-`this.field?`, `Err(e)?`, and `action foo()?` rejected with the §5.3 parse
-error; `f(x)??` accepted; every existing bind form still parsing.
-
-**Compiler:** one negative test per diagnostic in §5.3; calls returning `int`,
-`unit`, and `option[T]` each rejected; error mismatch across `enum`, `string`,
-and `struct` error types; `?` inside `match` arms, `if` branches, block
-expressions, and `map` bodies; `f(x)??` on a `result[result[int, E], E]`, and
-rejected when the two error types differ. Add the §7 fall-through to
-`test_validate_return`.
-
-**VM:** the `Ok` path continues with the inner value; the `Err` path returns the
-original payload by identity, from a nested block and from inside a `map`; empty
-stack and a normal exit reason on both.
-
-**Runtime:** a fallible ephemeral action propagating with `?` yields
-`PolicyError::Rejected`, matching an explicit `return Err(..)`.
-
-Rewrite `test_result`'s `try` in `aranya-policy-vm/tests/vm.rs` to use `?`,
-keeping a `match` version for coverage.
+already covers the case.
