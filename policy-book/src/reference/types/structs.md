@@ -11,6 +11,10 @@ field definitions enclosed in curly braces. All fields must be
 specified, either through direct field definitions or via [Struct
 Composition](#struct-composition).
 
+Field init shorthand allows you to omit the field expression when the
+expression is the same identifier as the field. E.g. `Foo { bar: bar }`
+can be shortened to `Foo { bar }`.
+
 ```
 // user-defined structs
 struct Bar {
@@ -31,9 +35,10 @@ command Foo {
 
 action make_foo() {
     let x = Blonk { d: false }
+    let a = 2
     // `struct Foo` is automatically defined by `command Foo`
     let cmd = Foo {
-        a: 2,
+        a,
         b: Bar {
             c: "hello",
             // Bar's `d` field is pulled from `x.d`
