@@ -96,8 +96,6 @@ command FailCommand {
         fail bool
     }
 
-    // omit seal and open for example
-
     policy {
         check !this.fail else recall failed()
         finish {}
