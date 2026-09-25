@@ -28,7 +28,7 @@ A single exchange has three parts.
 
 **The responder computes the difference.** Starting from its own heads, the responder walks backward through its graph until it reaches the commands in the requester's sample, collecting every command on the way. Shared history is skipped rather than re-examined command by command, so the cost of an exchange tracks the size of the difference, not the size of the graph. The result is sorted so that a command's parents are always sent before the command itself; the requester never has to buffer an orphan.
 
-**The requester applies and remembers.** Incoming commands are evaluated against the team's policy inside a transaction. Anything the policy rejects causes the sync to stop and the transaction to role back. Then the requester records the heads of what this responder delivered in a small per-peer **peer cache**. On the next request to the same peer, those heads go into the sample, telling the responder "I received these; don't send them or anything before them again." For a large difference that takes several rounds to transfer, this speeds up convergence.
+**The requester applies and remembers.** Incoming commands are evaluated against the team's policy inside a transaction. Anything the policy rejects causes the sync to stop and the transaction to roll back. Then the requester records the heads of what this responder delivered in a small per-peer **peer cache**. On the next request to the same peer, those heads go into the sample, telling the responder "I received these; don't send them or anything before them again." For a large difference that takes several rounds to transfer, this speeds up convergence.
 
 Two properties of the graph make this cheap to reason about. First, every command is identified by a hash of its contents and names its parents, so a device can always tell whether a command it hears about is one it already has. Second, when two devices commit concurrently and the graph forks, the eventual merge is *deterministic*: every peer that sees the same set of heads computes the same merge command. That is what lets a single head stand in for "the state of my graph" in a hello notification, described next.
 
@@ -56,7 +56,7 @@ sequenceDiagram
     B-->>A: SyncResponse / SyncEnd
 ```
 
-The Hello command notifies the receiver of the current head of the senders graph. If this is a command the receiver dose not have it can be used to trigger a sync from the sender. The Hello commands a small causing minimal impact on both the network and the receiver allowing them to be set optimistically. This optimistic sending reduces the latency of command propagation. Three parameters shape a subscription:
+The Hello command notifies the receiver of the current head of the senders graph. If this is a command the receiver does not have it can be used to trigger a sync from the sender. The Hello commands are small, causing minimal impact on both the network and the receiver, which allows them to be sent optimistically." This optimistic sending reduces the latency of command propagation. Three parameters shape a subscription:
 
 - **Graph-change debounce.** The minimum spacing between hellos to the same subscriber when the graph is changing rapidly. A burst of ten commits produces one hello, not ten, and the subscriber's single pull picks up all ten.
 - **Periodic interval.** The publisher sends a hello every so often *regardless* of changes. This is the safety net for lost hellos and for a subscriber that was briefly unreachable; it turns hello mode into "poll, but at a relaxed rate, with immediate notification on top."
@@ -67,6 +67,16 @@ Because hellos are cheap and pulls happen only when there is something to fetch,
 ## 3. Topology: sync from a few peers, not from everyone
 
 Who syncs from whom is the single biggest lever you have over both latency and load. Think of the team as a directed graph where an edge `A ⇌ B` means "A pulls from B." New information committed on one device spreads along the edges, one hop per sync exchange.
+### Comparing shapes
+
+| | |
+|---|---|
+| ![Full clique](../assets/sync-topology-clique.svg) | **Full clique.** Every device subscribes to and pulls from every other. One hop, but `N(N−1)` hellos per change and a peer list on every device that grows with the team. Fine for a handful of devices. It does not scale. |
+| ![Star](../assets/sync-topology-star.svg) | **Star.** Every device links to a single hub and to nothing else. Two hops at most and trivially easy to configure: a new device needs one peer, and only the hub's list changes. The price is that the hub does all the work — `N` hellos and `N` pulls per change — and is a single point of failure for the whole team. A star is reasonable when there is a natural always-on gateway and the team is small enough for one device to serve it, and it is the shape to grow *out of* first, by adding a second hub or cross-links between spokes. |
+| ![Hierarchy](../assets/sync-topology-hierarchy.svg) | **Hierarchy.** Devices are arranged in a tree, often mirroring roles: owner, admins, operators, members. Latency from the top is `log(N)` and the shape is easy to reason about, but two devices in different branches are up to `2 log(N)` apart, and every interior node is a cut vertex whose absence isolates its whole subtree. A good starting point when there is a natural gateway at each level, provided you add cross-links between siblings or a second parent for resilience. |
+| ![Ring](../assets/sync-topology-ring.svg) | **Ring.** Each device subscribes to its two neighbours. Constant cost, no single point of failure, but information crawls: `N/4` hops on average, `N/2` worst case. Rings are a useful *component* (the convergence tests in the Aranya repository use rings of up to 100 nodes) but a poor topology on their own for anything large. |
+| ![Random graph](../assets/sync-topology-random.svg) | **Random graph.** Each device subscribes to a few peers chosen at random. Near-optimal hops with no coordination, and no device matters more than any other. The cost is that nothing about the shape reflects the physical network; a "neighbour" may be on the far side of a slow link. |
+| ![Small world](../assets/sync-topology-small-world.svg) | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device).  |
 
 ### How information spreads
 
@@ -107,17 +117,6 @@ Measured average hops on random graphs with a fixed number of links per device:
 | 10,000 | ~11.4 | ~7.7 | ~5.6 | ~4.8 |
 
 Going from 100 devices to 10,000 roughly doubles the hop count while per-device cost stays flat. A 1,000-device team with four well-mixed links per device and a 100 ms debounce converges in about a second; the same team polling at 10 s takes closer to half a minute.
-
-### Comparing shapes
-
-| | |
-|---|---|
-| ![Full clique](../assets/sync-topology-clique.svg) | **Full clique.** Every device subscribes to and pulls from every other. One hop, but `N(N−1)` hellos per change and a peer list on every device that grows with the team. Fine for a handful of devices. It does not scale. |
-| ![Star](../assets/sync-topology-star.svg) | **Star.** Every device links to a single hub and to nothing else. Two hops at most and trivially easy to configure: a new device needs one peer, and only the hub's list changes. The price is that the hub does all the work — `N` hellos and `N` pulls per change — and is a single point of failure for the whole team. A star is reasonable when there is a natural always-on gateway and the team is small enough for one device to serve it, and it is the shape to grow *out of* first, by adding a second hub or cross-links between spokes. |
-| ![Hierarchy](../assets/sync-topology-hierarchy.svg) | **Hierarchy.** Devices are arranged in a tree, often mirroring roles: owner, admins, operators, members. Latency from the top is `log(N)` and the shape is easy to reason about, but two devices in different branches are up to `2 log(N)` apart, and every interior node is a cut vertex whose absence isolates its whole subtree. A good starting point when there is a natural gateway at each level, provided you add cross-links between siblings or a second parent for resilience. |
-| ![Ring](../assets/sync-topology-ring.svg) | **Ring.** Each device subscribes to its two neighbours. Constant cost, no single point of failure, but information crawls: `N/4` hops on average, `N/2` worst case. Rings are a useful *component* (the convergence tests in the Aranya repository use rings of up to 100 nodes) but a poor topology on their own for anything large. |
-| ![Random graph](../assets/sync-topology-random.svg) | **Random graph.** Each device subscribes to a few peers chosen at random. Near-optimal hops with no coordination, and no device matters more than any other. The cost is that nothing about the shape reflects the physical network; a "neighbour" may be on the far side of a slow link. |
-| ![Small world](../assets/sync-topology-small-world.svg) | **Small world.** Ring neighbours for locality and a fault-tolerant backbone, plus one or two long links per device to collapse the diameter. `log(N)` hops, constant per-device cost, no cut vertices, and the long links are where you encode knowledge of the real network (a link between sites, a link to an always-on device).  |
 
 ### Practical guidance
 
@@ -168,14 +167,13 @@ The split is simple to state. **The runtime decides what to send; you decide whe
  - Tracks, per peer, what has already been exchanged so later pulls stay small
  - Tells you the graph head to advertise when your graph changes, and whether a hello you received is worth acting on
 
-#### Your code dose
+#### Your code does
  - Choose which peers this device syncs from (the topology) 
  - Move those bytes between devices, over whatever transport you like
  - Authenticate and encrypt the channel
  - Decide when to pull: on a timer, on a hello, or both
  - Keep the list of who has subscribed to your hellos, honour their debounce and expiry, and send the hellos
  - Retry a failed exchange (start it again), and serialise access to the client state
- - 
 
 Runtime responsibilities are accessed through a handful of types in the `aranya_runtime::sync` module: a requester and a responder that you drive one message at a time, a per-peer cache you hand to both, a decoder for inbound bytes, and two helpers on the client for hello. The crate's API documentation covers their signatures and buffer requirements; this page covers how they fit together.
 
@@ -359,7 +357,7 @@ Run `wire_peers` on every device and the topology is symmetric by construction. 
 
 ### Onboarding note
 
-A device that has just been added to a team has an empty graph. Its first pull from any existing member fetches the whole history, and until that pull completes the device cannot evaluate policy for the team. The examples in the repository therefore call `sync_now` against the device that added them immediately after onboarding, before relying on the periodic or hello-driven schedule. This is the onboarding pattern you should fallow by default.
+A device that has just been added to a team has an empty graph. Its first pull from any existing member fetches the whole history, and until that pull completes the device cannot evaluate policy for the team. The examples in the repository therefore call `sync_now` against the device that added them immediately after onboarding, before relying on the periodic or hello-driven schedule. This is the onboarding pattern you should follow by default.
 
 ## 7. Summary
 
