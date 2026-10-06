@@ -38,6 +38,7 @@
   - [Facts](reference/top-level/facts.md)
   - [Actions](reference/top-level/actions.md)
   - [Effects](reference/top-level/effects.md)
+  - [Base Commands](reference/top-level/base-commands.md)
   - [Commands](reference/top-level/commands.md)
   - [Functions](reference/top-level/functions.md)
   - [Foreign Function Interface](reference/top-level/ffi.md)

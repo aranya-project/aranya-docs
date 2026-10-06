@@ -7,8 +7,8 @@
 | global | ❌ |
 | `action` | ✅ |
 | `function` | ✅ |
+| `gey_key` | ✅ |
 | `policy`/`recall` | ✅ |
-| `seal`/`open` | ✅ |
 | `finish` | ❌ |
 | `finish function` | ❌ |
 

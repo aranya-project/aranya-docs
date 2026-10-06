@@ -19,7 +19,8 @@ if foo is None {
 
 In some contexts, there are names automatically defined by the runtime.
 
-- In `policy`, `recall`, and `seal` blocks, the fields of the command are available via the
+- In `get_key` blocks, the author's ID is available as `author_id id`.
+- In `policy`, `recall`, and `get_key` blocks, the fields of the command are available via the
   name `this`, which is of type `struct <CommandName>`.
-- In `policy`, `recall`, and `open` blocks, the envelope of the command
+- In `policy` and `recall` blocks, the envelope of the command
   is available via the name `envelope`, which is an opaque type accessible via the `envelope` FFI.

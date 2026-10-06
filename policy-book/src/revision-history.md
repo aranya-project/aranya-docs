@@ -2,6 +2,11 @@
 
 This lists major changes to the documentation over time.
 
+## Revision D (September 2026)
+
+- Removed `seal`/`open` blocks
+- Added base commands and `get_key` blocks.
+
 ## Revision C (August 2026)
 
 - Added [Result Types](reference/types/result.md) and the optional
