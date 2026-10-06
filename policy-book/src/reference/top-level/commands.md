@@ -43,7 +43,7 @@ Commands define runtime-specific `attributes`, structured data (the
 and effects of processing that data (the `policy` and `recall` blocks).
 
 Commands also refer to a base command which define various properties
-while reducing repetition. See [Base Commands](../base-commands.md).
+while reducing repetition. See [Base Commands](./base-commands.md).
 
 Policy statements may terminate execution on a variety of conditions,
 like a failed `check` or a query that returns `None` where the policy
