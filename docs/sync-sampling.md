@@ -83,6 +83,12 @@ commands. Session heads are not sent.
    larger of `COMMAND_RESPONSE_MAX` and the span divided by the free
    slots. Spacing tighter than one message saves less than a message.
 
+   Spacing is even rather than geometric from the tip. Geometric
+   spacing leaves wide gaps deep in the graph, and when the shared
+   history lies below the last probe, nothing resolves and the
+   responder resends all of it. Even spacing keeps every gap at most
+   span / slots.
+
 3. **Offset.** Pick r uniformly at random between g/2 and g. Starting at
    least g/2 below the tallest head avoids a probe that nearly
    duplicates the head anchor. A random offset means repeated rounds
