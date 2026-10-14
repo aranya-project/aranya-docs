@@ -63,9 +63,9 @@ the peer's graph.
 
 ## Algorithm
 
-Inputs: the graph's heads and the peer cache. Budget:
-`COMMAND_SAMPLE_MAX` slots. The sample contains only committed
-commands. Session heads are not sent.
+Inputs: the graph's heads, their saved LCA (see Head Set LCA), and the
+peer cache. Budget: `COMMAND_SAMPLE_MAX` slots. The sample contains
+only committed commands. Session heads are not sent.
 
 1. **Anchors.** Anchors get at most half the slots. Add cache heads
    first, then graph heads, skipping graph heads that equal a cache
@@ -79,9 +79,32 @@ commands. Session heads are not sent.
    find their shared history, and the responder resends it from the
    root.
 
-2. **Gap.** The span is the tallest head's max cut. The gap g is the
-   larger of `COMMAND_RESPONSE_MAX` and the span divided by the free
-   slots. Spacing tighter than one message saves less than a message.
+2. **Floor.** The floor is a command the peer holds such that
+   everything we hold below it is one of its ancestors, so probes only
+   cover the region above it. With an empty cache the floor is the
+   root. Otherwise let D be the max cut of the deepest cache head.
+   Walk back from the heads' LCA to the highest command on its path at
+   or below D: take the lowest skip-list entry at or above D when one
+   exists, step to the prior on a single-parent segment, and at a
+   merge with no usable skip, step to the merge's LCA. Stop at the
+   first command at or below D.
+
+   Every point on this path is a command that every head passes
+   through on the way to the root: the heads' LCA is one, a merge's LCA
+   is one for the merge, and skip-list entries are built only from
+   these and single priors. So every path from a head to a cache head
+   continues through the floor, and the floor is at or below each
+   cache head on it. The peer holds every cache head, so it holds the
+   floor and all of its ancestors.
+
+   The walk is a few skip-list jumps. When the requester is one or two
+   commands ahead of the cache, the floor is just below the tip, the
+   span is too small for a probe, and the sample is only anchors.
+
+3. **Gap.** The span is the tallest head's max cut minus the floor's.
+   The gap g is the larger of `COMMAND_RESPONSE_MAX` and the span
+   divided by the free slots. Spacing tighter than one message saves
+   less than a message.
 
    Spacing is even rather than geometric from the tip. Geometric
    spacing leaves wide gaps deep in the graph, and when the shared
@@ -89,13 +112,13 @@ commands. Session heads are not sent.
    responder resends all of it. Even spacing keeps every gap at most
    span / slots.
 
-3. **Offset.** Pick r uniformly at random between g/2 and g. Starting at
+4. **Offset.** Pick r uniformly at random between g/2 and g. Starting at
    least g/2 below the tallest head avoids a probe that nearly
    duplicates the head anchor. A random offset means repeated rounds
    probe different commands.
 
-4. **Probes.** Positions are tallest head - r, then down by g to the
-   root. For each position t:
+5. **Probes.** Positions are tallest head - r, then down by g, while
+   above the floor. For each position t:
    - Eligible heads are those with max cut at least t.
    - Pick one at random, so a branch skipped this round is probed in a
      later one, and walk back to max cut t. Take the lowest skip-list
@@ -105,6 +128,13 @@ commands. Session heads are not sent.
      higher parent. Stop at the segment whose range contains t and take
      the command at t.
    - Add the command found, unless already added.
+
+## Head Set LCA
+
+The head set stores the LCA of its heads. For a single head it is the
+head. Committing more than one head braids them to rebuild the fact
+cache, and the braid computes their LCA, so the commit saves it with
+the head set.
 
 ## Responder Sample
 
@@ -124,8 +154,9 @@ several rounds, so the sample adds no round trip.
 
 ### Contents
 
-The responder runs steps 2 through 4 over its own graph, with its own
-heads as anchors under the same half-slot limit as step 1. Probes that
+The responder runs steps 3 through 5 over its own graph with the root
+as the floor, and its own heads as anchors under the same half-slot
+limit as step 1. Probes that
 land on commands included in this reply are dropped, since the
 requester will hold them after processing it. The sample counts
 against the reply's size limit, so a reply that carries one has less
@@ -146,8 +177,11 @@ request still count if an earlier request sent them.
 
 ## Cost
 
-Building a sample reads the head set and the peer cache, then takes
-one skip-list jump per probe, at most `COMMAND_SAMPLE_MAX`.
+Building a sample reads the head set and the peer cache, walks from
+the heads' LCA to the floor in a few skip-list jumps, then takes one
+skip-list jump per probe, at most `COMMAND_SAMPLE_MAX`. Probes span
+only the region above the floor, so a peer one or two commands behind
+gets a sample of anchors only.
 
 ## Changes
 
@@ -160,12 +194,15 @@ one skip-list jump per probe, at most `COMMAND_SAMPLE_MAX`.
 - Remove `PEER_HEAD_MAX`. The peer cache has no size limit.
 - Limit anchors to half of `COMMAND_SAMPLE_MAX`, cache heads before
   graph heads, choosing a random subset when they exceed it.
-- Replace the phase 3 walk in `get_commands` with steps 2 through 4.
+- Store the heads' LCA in `HeadSet`, saved from the braid on a
+  multi-head commit and set to the head for a single head.
+- Replace the phase 3 walk in `get_commands` with steps 2 through 5.
 - In the responder, treat the heads of its peer cache for the
   requester as covered in `find_needed_segments`.
 - Add a sample of addresses to the sync reply. The responder fills it
   when the uncovered region has more commands than fit in the reply,
-  using the same sampling steps, and leaves it empty otherwise.
+  using sampling steps 3 through 5 from the root, and leaves it empty
+  otherwise.
 - In the requester, resolve a reply's sample and add the commands it
   holds to the peer cache.
 - Give the responder a random source, as the requester already has.
