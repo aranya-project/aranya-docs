@@ -2,6 +2,11 @@
 
 This lists major changes to the documentation over time.
 
+## Revision D (October 2026)
+
+- Added the [`?` operator](reference/types/result.md#propagating-errors-with-),
+  which unwraps a `result` or propagates its error.
+
 ## Revision C (August 2026)
 
 - Added [Result Types](reference/types/result.md) and the optional
