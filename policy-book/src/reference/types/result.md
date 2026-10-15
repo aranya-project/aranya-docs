@@ -33,6 +33,41 @@ function foo() result[int, string] {
 }
 ```
 
+## Propagating errors with `?`
+
+Writing `?` after an expression of type `result[T, E]` unwraps it: `Ok(v)`
+evaluates to `v`, and `Err(e)` returns `Err(e)` from the enclosing function
+or action. These are equivalent:
+
+```policy
+function foo() result[int, string] {
+    let n = match get_value(1) {
+        Ok(n) => n
+        Err(msg) => return Err(msg)
+    }
+    return Ok(n)
+}
+
+function foo() result[int, string] {
+    let n = get_value(1)?
+    return Ok(n)
+}
+```
+
+The operand can be any `result` expression: a call, a local, a field
+access, etc.
+
+Restrictions:
+
+- The enclosing function or action must return a `result` with the same
+  error type `E`. There is no automatic error conversion; use `match` to
+  map one error type to another.
+- `?` is not allowed in command `policy`, `recall`, or `finish` blocks.
+- `?` does not apply to `option[T]`, which has no error value to
+  propagate. Use [`or`](optional.md#coalescing-with-or) instead.
+- `?` only covers the error path. A function must still `return` on its
+  success path.
+
 ### Match pattern restrictions
 Literal and binding patterns can be used together, but with some restrictions:
 
@@ -55,4 +90,7 @@ Literal and binding patterns can be used together, but with some restrictions:
   ```
 
 ### Nesting
-Results can be nested: `result[result[int, string], enum Error]`. They can also be combined with optionals, e.g. `result[option[int], enum Error]`.
+Results can be nested: `result[result[int, string], enum Error]`. `?` can be
+repeated to unwrap nested results that share an error type, e.g. `x??` on a
+`result[result[int, E], E]`. They can also be combined with optionals, e.g.
+`result[option[int], enum Error]`.

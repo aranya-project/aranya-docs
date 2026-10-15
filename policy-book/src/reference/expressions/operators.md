@@ -51,16 +51,23 @@ Integers can be compared against each other.
 expression such as `return` or `recall`. See [Coalescing with
 `or`](../types/optional.md#coalescing-with-or).
 
+## Result Operators
+
+| Operator | Meaning |
+|----------|---------|
+| `?` | `f(x)?` is the value inside `Ok` if the call returns `Ok`, otherwise it returns the `Err` from the enclosing function or action |
+
 ## Operator Precedence
 
 | Priority | Op |
 |----------|----|
-| 1        | `.` |
-| 2        | `substruct`, `as` |
-| 3        | `-` (prefix), `!` |
-| 4        | `+`, `-` (infix) |
-| 5        | `>`, `<`, `>=`, `<=`, `is` |
-| 6        | `==`, `!=` |
-| 7        | `&&`, `\|\|` |
-| 8        | `or` (optional coalescing, right-associative) |
+| 1        | `?` |
+| 2        | `.` |
+| 3        | `substruct`, `as` |
+| 4        | `-` (prefix), `!` |
+| 5        | `+`, `-` (infix) |
+| 6        | `>`, `<`, `>=`, `<=`, `is` |
+| 7        | `==`, `!=` |
+| 8        | `&&`, `\|\|` |
+| 9        | `or` (optional coalescing, right-associative) |
 
