@@ -31,6 +31,7 @@
     - [Test Fail](reference/expressions/functions/test-fail.md)
   - [Block Expressions](reference/expressions/block-expressions.md)
   - [Struct Conversion](reference/expressions/struct-conversion.md)
+  - [Action Calls](reference/expressions/action-calls.md)
 - [Top-level Declarations](reference/top-level.md)
   - [Global Values](reference/top-level/global-values.md)
   - [Structs](reference/top-level/structs.md)
