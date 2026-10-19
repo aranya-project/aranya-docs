@@ -62,5 +62,5 @@ gives the application a fixed set of failures to match on, but any policy
 type is allowed.
 
 Calling an action with a return type from another action is an
-[expression](../expressions/action-calls.md) that evaluates to the
+[expression](../statements/action.md) that evaluates to the
 called action's result.

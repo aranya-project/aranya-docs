@@ -5,7 +5,7 @@ This lists major changes to the documentation over time.
 ## Revision D (October 2026)
 
 - Calling an action that has a return type is now an
-  [expression](reference/expressions/action-calls.md) that evaluates to
+  [expression](reference/statements/action.md) that evaluates to
   the called action's result, which must be used.
 
 ## Revision C (August 2026)
