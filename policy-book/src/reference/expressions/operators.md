@@ -55,7 +55,7 @@ expression such as `return` or `recall`. See [Coalescing with
 
 | Operator | Meaning |
 |----------|---------|
-| `?` | `f(x)?` is the value inside `Ok` if the call returns `Ok`, otherwise it returns the `Err` from the enclosing function or action |
+| `?` | `x?` is the value inside `Ok` if the result is `Ok`, otherwise it returns the `Err` value |
 
 ## Operator Precedence
 
