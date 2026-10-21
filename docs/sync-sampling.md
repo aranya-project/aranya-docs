@@ -75,31 +75,59 @@ head still converge. Each request sends a different random subset of
 heads, and the responder's picture of the requester grows until it
 covers everything.
 
-**Reset.** That knowledge is wrong if the requester loses commands,
-for example by losing its storage and resyncing from the root, or by
-restoring a backup. The requester then sets `reset` in its request,
-and the responder clears its peer cache for the requester before
-resolving the sample.
+A peer cache holds at most `PEER_HEAD_MAX` (100) heads. When a new
+head would exceed that, a random existing head is evicted. Eviction
+only loses knowledge, so the responder may resend that head's branch.
+With more than 100 live branches the cache can thrash, evicting heads
+nearly as fast as it learns them. Sync still converges, since the
+random choices mean each round has some chance of progress, but it
+can take many more rounds.
 
-The requester sets `reset` whenever its own peer cache for the responder
-is empty. That cache must not outlive the requester's storage, so losing
-storage or restoring a backup always empties it. A reset that was not
-needed only costs one round without the responder's earlier knowledge. A
-reset that is lost in transit is sent again, since the requester's cache
-stays empty until a reply arrives.
+**Reset.** That knowledge is wrong if the requester loses commands,
+for example by losing its storage, restoring a backup, or dropping a
+transaction whose session heads it sent. The requester then sets
+`reset` in its request, and the responder clears its peer cache for
+the requester before resolving the sample.
+
+The requester sets `reset` when any of these holds:
+
+- **Its peer cache for the responder is empty.** That cache must not
+  outlive the requester's storage, so losing storage or restoring a
+  backup always empties it.
+- **It received a command from the responder whose parent it does not
+  have.** The responder only sends a command once it believes the
+  requester holds the parent, so a missing parent means its knowledge
+  is wrong.
+- **It sent session heads to the responder in a transaction that
+  ended without committing.** The requester marks its peer cache for
+  the responder when it sends session heads, and a successful commit
+  clears the mark. A dropped or failed transaction leaves it set, and
+  the next request outside that transaction resets. The missing parent
+  check does not cover this case when the lost commands are the tips
+  of the responder's branch, since the responder then has nothing
+  newer to send.
+
+A reset that was not needed only costs one round without the
+responder's earlier knowledge. A reset that is lost in transit is sent
+again, since the requester clears the condition only when a reply
+arrives.
 
 ### Requester Sample
 
-The sample is filled from three sources:
+The sample is filled from four sources:
 
-1. **Peer cache heads.** Commands the responder is known to hold.
-2. **Graph heads.** The requester's own heads, skipping any that are
+1. **Session heads.** When the caller keeps a transaction open across
+   several requests, the commands received so far are not committed,
+   so they are in neither the graph heads nor the peer cache. Their
+   tips are sent so the responder does not resend them.
+2. **Peer cache heads.** Commands the responder is known to hold.
+3. **Graph heads.** The requester's own heads, skipping any that are
    cache heads. The responder holds them if it is caught up.
-3. **Random commands.** Commands spread between the cache heads and
+4. **Random commands.** Commands spread between the cache heads and
    the graph heads, to find how far up the responder's graph reaches.
 
-Cache heads and graph heads together get at most half the slots,
-cache heads first. When a source does not fit in the slots left for
+Session, cache and graph heads together get at most half the slots,
+in that order. When a source does not fit in the slots left for
 heads, add a random subset of it that fills them. Random commands get
 the rest.
 
@@ -249,18 +277,24 @@ sample of heads only.
   picks a random parent with max cut at least the target, and it
   returns the command at the target rather than a segment at or above
   it.
-- Stop sending session heads in the sample.
-- Remove `PEER_HEAD_MAX`. The peer cache has no size limit.
-- Limit heads to half of `COMMAND_SAMPLE_MAX`, cache heads before
-  graph heads, choosing a random subset when they exceed it.
+- Raise `PEER_HEAD_MAX` to 100. When the peer cache is full, evict a
+  random head instead of dropping the new one.
+- Limit heads to half of `COMMAND_SAMPLE_MAX`, session heads, then
+  cache heads, then graph heads, choosing a random subset when they
+  exceed it.
 - Store the heads' LCA in `HeadSet`, saved from the braid on a
   multi-head commit and set to the head for a single head.
 - Replace the phase 3 walk in `get_commands` with the random commands.
 - In the responder, treat the heads of its peer cache for the
   requester as covered in `find_needed_segments`.
 - Add a `reset` flag to the sync request. The requester sets it when
-  its peer cache for the responder is empty, and the responder clears
-  its peer cache for the requester before resolving the sample.
+  its peer cache for the responder is empty, after a reply from the
+  responder fails with `ClientError::NoSuchParent`, or when it sent
+  session heads to the responder in a transaction that ended without
+  committing. The responder clears its peer cache for the requester
+  before resolving the sample.
+- Add a mark to `PeerCache`, set when session heads are sent to that
+  peer and cleared when the transaction commits.
 - Add a sample of addresses to the sync reply. The responder fills it
   when the uncovered region has more commands than fit in the reply,
   with its heads and random commands above the floor from its peer
