@@ -7,6 +7,8 @@ This lists major changes to the documentation over time.
 - Calling an action that has a return type is now an
   [expression](reference/statements/action.md) that evaluates to
   the called action's result, which must be used.
+- Added the [`?` operator](reference/types/result.md#propagating-errors-with-),
+  which unwraps a `result` or propagates its error.
 
 ## Revision C (August 2026)
 
