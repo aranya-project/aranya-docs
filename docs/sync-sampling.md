@@ -68,7 +68,9 @@ structures used to compute it. Implementation covers those.
 
 The responder treats a command as held by the requester when it is in
 the sample or peer cache, or is an ancestor of one. The responder adds
-each sample command it holds to its peer cache for the requester.
+each sample command it holds to its peer cache for the requester. It
+never adds commands it sent. It learns only from samples it receives,
+since it cannot know whether a reply arrived.
 
 Keeping earlier knowledge is what lets a sample that cannot hold every
 head still converge. Each request sends a different random subset of
