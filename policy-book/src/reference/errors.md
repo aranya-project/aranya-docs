@@ -118,3 +118,18 @@ that returns `Ok(Unit)` only means the action itself ran to completion.
     published in an action are treated atomically. Each command is
     processed individually whether they are published by one action or
     many.
+
+## Error propagation with the `?` operator
+
+Instead of matching on every `result`, a function or action can append
+`?` to a `result` expression to unwrap its `Ok` value, or return its `Err`
+early if it failed. See [Propagating errors with
+`?`](types/result.md#propagating-errors-with-) for details.
+
+```policy
+action bar(a int) result[unit, enum Error] {
+    let value = validate(a)?
+    publish Foo{a: value}
+    return Ok(Unit)
+}
+```
