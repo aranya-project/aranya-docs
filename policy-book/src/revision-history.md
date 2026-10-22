@@ -9,6 +9,8 @@ This lists major changes to the documentation over time.
   the called action's result, which must be used.
 - Added the [`?` operator](reference/types/result.md#propagating-errors-with-),
   which unwraps a `result` or propagates its error.
+- Removed `seal`/`open` blocks
+- Added base commands and `get_key` blocks.
 
 ## Revision C (August 2026)
 
