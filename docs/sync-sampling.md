@@ -93,18 +93,22 @@ the requester before resolving the sample.
 
 The requester sets `reset` when any of these holds:
 
-- **Its peer cache for the responder is empty.** That cache must not
-  outlive the requester's storage, so losing storage or restoring a
-  backup always empties it.
+- **Its peer cache for the responder is new.** No reply from the
+  responder has arrived since the cache was created. That cache must
+  not outlive the requester's storage, so losing storage or restoring
+  a backup always starts a new one. A cache that is merely empty, for
+  a requester that has received nothing, does not reset again.
 - **It received a command from the responder whose parent it does not
   have.** The responder only sends a command once it believes the
   requester holds the parent, so a missing parent means its knowledge
   is wrong.
 - **It sent session heads to the responder in a transaction that
-  ended without committing.** The requester marks its peer cache for
-  the responder when it sends session heads, and a successful commit
-  clears the mark. A dropped or failed transaction leaves it set, and
-  the next request outside that transaction resets. The missing parent
+  ended without committing.** The requester records in its peer cache
+  for the responder the session heads it sends. Before each request it
+  checks them: one that is now committed is resolved, and one the open
+  transaction still holds is kept. Any other was sent by a transaction
+  that was dropped or failed, so the request resets, even if it is
+  sent inside a later transaction. The missing parent
   check does not cover this case when the lost commands are the tips
   of the responder's branch, since the responder then has nothing
   newer to send.
@@ -290,13 +294,14 @@ sample of heads only.
 - In the responder, treat the heads of its peer cache for the
   requester as covered in `find_needed_segments`.
 - Add a `reset` flag to the sync request. The requester sets it when
-  its peer cache for the responder is empty, after a reply from the
+  its peer cache for the responder is new, after a reply from the
   responder fails with `ClientError::NoSuchParent`, or when it sent
   session heads to the responder in a transaction that ended without
   committing. The responder clears its peer cache for the requester
   before resolving the sample.
-- Add a mark to `PeerCache`, set when session heads are sent to that
-  peer and cleared when the transaction commits.
+- Record in `PeerCache` the session heads sent to that peer, until
+  each is committed or found to be from a dropped transaction. Clear
+  the reset conditions when a reply from that peer arrives.
 - Add a sample of addresses to the sync reply. The responder fills it
   when the uncovered region has more commands than fit in the reply,
   with its heads and random commands above the floor from its peer
