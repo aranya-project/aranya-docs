@@ -68,9 +68,16 @@ structures used to compute it. Implementation covers those.
 
 The responder treats a command as held by the requester when it is in
 the sample or peer cache, or is an ancestor of one. The responder adds
-each sample command it holds to its peer cache for the requester. It
-never adds commands it sent. It learns only from samples it receives,
-since it cannot know whether a reply arrived.
+each sample command it holds to its peer cache for the requester,
+except session heads. It never adds commands it sent. It learns only
+from samples it receives, since it cannot know whether a reply
+arrived.
+
+Session heads are commands the requester has not committed, and it
+loses them if its transaction ends without committing. The responder
+uses them for the request that carries them but does not keep them.
+The requester sends them again in every request of the transaction,
+ahead of any other head, so keeping them would save nothing.
 
 Keeping earlier knowledge is what lets a sample that cannot hold every
 head still converge. Each request sends a different random subset of
@@ -86,8 +93,8 @@ random choices mean each round has some chance of progress, but it
 can take many more rounds.
 
 **Reset.** That knowledge is wrong if the requester loses commands,
-for example by losing its storage, restoring a backup, or dropping a
-transaction whose session heads it sent. The requester then sets
+for example by losing its storage or restoring a backup. The
+requester then sets
 `reset` in its request, and the responder clears its peer cache for
 the requester before resolving the sample.
 
@@ -102,16 +109,6 @@ The requester sets `reset` when any of these holds:
   have.** The responder only sends a command once it believes the
   requester holds the parent, so a missing parent means its knowledge
   is wrong.
-- **It sent session heads to the responder in a transaction that
-  ended without committing.** The requester records in its peer cache
-  for the responder the session heads it sends. Before each request it
-  checks them: one that is now committed is resolved, and one the open
-  transaction still holds is kept. Any other was sent by a transaction
-  that was dropped or failed, so the request resets, even if it is
-  sent inside a later transaction. The missing parent
-  check does not cover this case when the lost commands are the tips
-  of the responder's branch, since the responder then has nothing
-  newer to send.
 
 A reset that was not needed only costs one round without the
 responder's earlier knowledge. A reset that is lost in transit is sent
@@ -294,14 +291,13 @@ sample of heads only.
 - In the responder, treat the heads of its peer cache for the
   requester as covered in `find_needed_segments`.
 - Add a `reset` flag to the sync request. The requester sets it when
-  its peer cache for the responder is new, after a reply from the
-  responder fails with `ClientError::NoSuchParent`, or when it sent
-  session heads to the responder in a transaction that ended without
-  committing. The responder clears its peer cache for the requester
-  before resolving the sample.
-- Record in `PeerCache` the session heads sent to that peer, until
-  each is committed or found to be from a dropped transaction. Clear
-  the reset conditions when a reply from that peer arrives.
+  its peer cache for the responder is new, or after a reply from the
+  responder fails with `ClientError::NoSuchParent`, and clears the
+  condition when a reply from that peer arrives. The responder clears
+  its peer cache for the requester before resolving the sample.
+- Add a session head count to the sync request. The sample's session
+  heads come first, and the responder uses them for coverage but does
+  not add them to its peer cache.
 - Add a sample of addresses to the sync reply. The responder fills it
   when the uncovered region has more commands than fit in the reply,
   with its heads and random commands above the floor from its peer
