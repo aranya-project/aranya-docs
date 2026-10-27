@@ -185,9 +185,11 @@ on branches the responder does not hold. The responder then sends
 from the root, and every command below the real overlap is one the
 requester already has.
 
-So the responder also samples. If more remains uncovered than fits in
-one reply, it samples its own graph the same way and attaches the
-sample to the reply. Random commands that land on commands in the
+So the responder also samples. If its first reply to a request is
+full, more may remain uncovered than fits in one reply, so it samples
+its own graph the same way and attaches the sample to the reply. A
+full reply that happens to hold everything carries a sample it did not
+need, which costs only its size. Random commands that land on commands in the
 reply are dropped, since the requester will hold them. The sample
 counts against the reply's size limit.
 
@@ -299,7 +301,7 @@ sample of heads only.
   heads come first, and the responder uses them for coverage but does
   not add them to its peer cache.
 - Add a sample of addresses to the sync reply. The responder fills it
-  when the uncovered region has more commands than fit in the reply,
+  when its first reply to a request is full,
   with its heads and random commands above the floor from its peer
   cache for the requester, and leaves it empty otherwise.
 - In the requester, resolve a reply's sample and add the commands it
