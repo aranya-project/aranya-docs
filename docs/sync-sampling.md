@@ -185,17 +185,20 @@ on branches the responder does not hold. The responder then sends
 from the root, and every command below the real overlap is one the
 requester already has.
 
-So the responder also samples. If its first reply to a request is
-full, more may remain uncovered than fits in one reply, so it samples
-its own graph the same way and attaches the sample to the reply. A
-full reply that happens to hold everything carries a sample it did not
-need, which costs only its size. Random commands that land on commands in the
-reply are dropped, since the requester will hold them. The sample
-counts against the reply's size limit.
+So the responder also samples. A full reply means the responder
+stopped at the reply limit, so the requester will send another
+request. The responder attaches a sample of its own graph, built the
+same way as the requester's. A reply that is not full ends the sync,
+so it carries no sample. A full reply that happens to hold everything
+carries a sample it did not need, which costs only its size. Random
+commands that land on commands in the reply are dropped, since the
+requester will hold them. The sample counts against the reply's size
+limit.
 
 The requester processes the reply's commands, then looks up each
 sample address in its own graph and adds the ones it holds to its
-peer cache. 
+peer cache. They go out as cache heads in its next request, so the
+next reply starts nearer the overlap.
 
 A send that needs more than one reply already takes several rounds,
 so the responder's sample adds no round trip. With both sides sampling,
@@ -301,9 +304,9 @@ sample of heads only.
   heads come first, and the responder uses them for coverage but does
   not add them to its peer cache.
 - Add a sample of addresses to the sync reply. The responder fills it
-  when its first reply to a request is full,
-  with its heads and random commands above the floor from its peer
-  cache for the requester, and leaves it empty otherwise.
+  when the reply is full, with its heads and random commands above the
+  floor from its peer cache for the requester, and leaves it empty
+  otherwise.
 - In the requester, resolve a reply's sample and add the commands it
   holds to the peer cache.
 - Give the responder a random source, as the requester already has.
