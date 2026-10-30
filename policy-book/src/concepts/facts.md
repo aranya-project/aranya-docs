@@ -11,7 +11,7 @@ example](commands-graph.md#commands) from earlier. Here is a fact that
 keeps track of an account balance value per user.
 
 ```policy
-fact Account[user id]=>{balance int}
+fact Account[user: id]=>{balance: int}
 ```
 
 The fields on the left of `=>` between square brackets are the **key**,
@@ -25,7 +25,7 @@ need to initialize the fact to something.
 ```policy
 command Enroll {
     fields {
-        user id,
+        user: id,
     }
 
     policy {
@@ -55,8 +55,8 @@ To change this balance, we'll use the command we created earlier.
 ```policy
 command AddBalance {
     fields {
-        user id,
-        amount int,
+        user: id,
+        amount: int,
     }
 
     policy {
@@ -98,14 +98,14 @@ And finally, let's write a command that does something with this.
 
 ```policy
 effect WithdrawalResult {
-    completed bool,
-    remaining_balance int,
+    completed: bool,
+    remaining_balance: int,
 }
 
 command Withdrawal {
     fields {
-        user id,
-        amount int,
+        user: id,
+        amount: int,
     }
 
     policy {
@@ -241,7 +241,7 @@ value side that they offer the same kind of lookup functionality. For
 example, take this very ordinary fact definition for a set of users:
 
 ```policy
-fact Users[user id]=>{level enum AuthorizationLevel}
+fact Users[user: id]=>{level: enum AuthorizationLevel}
 ```
 
 You can, of course, find the authorization level of a particular user.
@@ -265,7 +265,7 @@ latter query, you will have to create a fact with both fields as keys
 and no values.
 
 ```policy
-fact UsersByAuthorization[level enum AuthorizationLevel, user id]=>{}
+fact UsersByAuthorization[level: enum AuthorizationLevel, user: id]=>{}
 ```
 
 Now you can query on the `level` field and find the first user at that level.

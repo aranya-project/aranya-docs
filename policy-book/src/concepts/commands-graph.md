@@ -11,8 +11,8 @@ Let's consider this command:
 ```
 command AddBalance {
     fields {
-        user id,
-        amount int,
+        user: id,
+        amount: int,
     }
 
     policy {

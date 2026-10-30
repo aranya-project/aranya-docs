@@ -27,7 +27,7 @@ only be used in actions, pure functions, command
 ## Finish Functions
 
 ```
-finish function set_foo(device id, new int) {
+finish function set_foo(device: id, new: int) {
     update FooCounter[device: device]=>{count: current} to {count: new}
 }
 ```

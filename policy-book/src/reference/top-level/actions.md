@@ -1,7 +1,7 @@
 # Actions
 
 ```policy
-action foo(a int, b string) {
+action foo(a: int, b: string) {
     let cmd = Foo{a: a + 1, b: b}
     publish cmd
 }
@@ -10,7 +10,7 @@ action foo(a int, b string) {
 ```policy
 enum Error { InvalidID }
 
-action foo(a int) result[unit, enum Error] {
+action foo(a: int) result[unit, enum Error] {
     check a > 0 else return Err(Error::InvalidID)
     publish Foo{a: a}
     return Ok(Unit)
@@ -49,7 +49,7 @@ that point are accepted (see [Errors in Actions](../errors.md#errors-in-actions)
 ```policy
 enum Error { InvalidAmount, NoSuchDevice }
 
-action deposit(device id, amount int) result[unit, enum Error] {
+action deposit(device: id, amount: int) result[unit, enum Error] {
     check amount > 0 else return Err(Error::InvalidAmount)
     let account = query Account[device: device] or return Err(Error::NoSuchDevice)
     publish Deposit{device: device, amount: amount, balance: account.balance}

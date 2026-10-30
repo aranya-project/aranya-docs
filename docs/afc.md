@@ -52,7 +52,7 @@ between the Aranya client and Aranya daemon. The Aranya client only reads
 channel data while the Aranya daemon can read and modify the shared channel data.
 
 The daemon may modify channel data when the client invokes one of the [channel APIs](/docs/aranya-mvp.md#channel-apis)
-or when the delete method on a [channel object](/docs/aranya-mvp.md#channel-types) is called. 
+or when the delete method on a [channel object](/docs/aranya-mvp.md#channel-types) is called.
 
 ### AFC Config
 
@@ -82,7 +82,7 @@ when the daemon is restarted. See [aranya#483](https://github.com/aranya-project
 
 ## Aranya Fast Channel IDs
 
-Channels are locally identified by a `channel_id` which is a 32-bit integer. 
+Channels are locally identified by a `channel_id` which is a 32-bit integer.
 
 This provides direct lookup without hash truncation.
 
@@ -113,7 +113,7 @@ Channel type is determined by the policy action used to create it.
   Encrypts plaintext for the specified channel.
   Returns the header which includes channel metadata, like the AFC protocol version.
 - `open(channel_id, plaintext_buffer, ciphertext) -> (label_id, sequence_number)` -
-  Decrypts ciphertext from the peer. 
+  Decrypts ciphertext from the peer.
   Returns the label_id associated with the channel and the sequence number of the ciphertext.
 
 ### Policy
@@ -121,12 +121,12 @@ Channel type is determined by the policy action used to create it.
 Channel creation happens through policy actions:
 
 ```policy
-action create_afc_bidi_channel(peer_id id, label_id id) {
+action create_afc_bidi_channel(peer_id: id, label_id: id) {
     let channel = afc::create_bidi_channel(peer_id, label)
     publish AfcBidiChannelCreated { ... }
 }
 
-action create_afc_uni_channel(sender_id id, receiver_id id, label_id id) {
+action create_afc_uni_channel(sender_id: id, receiver_id: id, label_id: id) {
     let channel = afc::create_bidi_channel(peer_id, label)
     publish AfcUniChannelCreated { ... }
 }
@@ -157,7 +157,7 @@ See [Channel Types](/docs/aranya-mvp.md#channel-types) for the types of channel 
 
 1. App calls `Channel.seal(..)` to encrypt data (**Note**: Assumes that an `AfcBidiChannel` or `AfcSendChannel` channel was created by calling `Create*Channel*(..)`)
 2. App sends ciphertext via any transport (TCP, QUIC, etc.)
-3. Peer receives ciphertext via transport  
+3. Peer receives ciphertext via transport
 4. Peer calls `Channel.open(..)` to decrypt and get the sequence number (**Note**: Assumes that an `AfcBidiChannel` or `AfcOpenChannel` channel was created by calling `ReceiveCtrl(..)`)
 
 This keeps AFC focused on encryption while letting apps choose their
@@ -166,4 +166,3 @@ preferred transport.
 Note: The user must keep track of (device -> channel object) pairs
 
 [^ctrl]: The control message contains the serialized channel creation command, including the HPKE encapsulation that allows the peer device to derive the shared channel keys. Only the intended recipient can use this encapsulation with their private key to send/receive messages on the secure channel. See [HPKE key derivation](/docs/afc-crypto.md#key-derivation).
-

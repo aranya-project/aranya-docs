@@ -3,7 +3,7 @@
 ## `query`
 
 ```
-fact Foo[deviceID id]=>{count int}
+fact Foo[deviceID: id]=>{count: int}
 
 let x = query Foo[deviceID: me]
 ```

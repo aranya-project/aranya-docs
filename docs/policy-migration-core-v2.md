@@ -136,9 +136,9 @@ The runtime now assumes the envelope payload is `serialize(this)`,
 which lets it skip `open` when braiding. As a result:
 
 - `serialize()` and `deserialize()` are removed from the language.
-- `seal` receives `this` and an implicit `payload bytes` (the
+- `seal` receives `this` and an implicit `payload: bytes` (the
   serialized command).
-- `open` receives `this` (already deserialized), `payload bytes`,
+- `open` receives `this` (already deserialized), `payload: bytes`,
   and `envelope`, and **returns `unit`**. Its only job is
   verification.
 - `struct Envelope` no longer has a `payload` field;
@@ -204,7 +204,7 @@ the payload and returns `unit`.
 
 ```policy
 // before
-function seal_command(payload bytes) struct Envelope {
+function seal_command(payload: bytes) struct Envelope {
     let parent_id = perspective::head_id()
     let author_id = device::current_device_id()
     let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
@@ -213,7 +213,7 @@ function seal_command(payload bytes) struct Envelope {
     return envelope::new(parent_id, author_id, signed.command_id, signed.signature, payload)
 }
 
-function open_envelope(sealed_envelope struct Envelope) bytes {
+function open_envelope(sealed_envelope: struct Envelope) bytes {
     let author_id = envelope::author_id(sealed_envelope)
     let author_sign_pk = check_unwrap query DeviceSignPubKey[device_id: author_id]
 
@@ -227,7 +227,7 @@ function open_envelope(sealed_envelope struct Envelope) bytes {
 }
 
 // after
-function seal_command(payload bytes) struct Envelope {
+function seal_command(payload: bytes) struct Envelope {
     let parent_id = perspective::head_id()
     let author_id = device::current_device_id()
     let author_sign_id = match query DeviceSignPubKey[device_id: author_id] {
@@ -239,7 +239,7 @@ function seal_command(payload bytes) struct Envelope {
     return envelope::new(parent_id, author_id, signed.command_id, signed.signature)
 }
 
-function open_envelope(payload bytes, sealed_envelope struct Envelope) unit {
+function open_envelope(payload: bytes,sealed_envelope: structt Envelope) unit {
     let author_id = envelope::author_id(sealed_envelope)
     let author_sign_pk = match query DeviceSignPubKey[device_id: author_id] {
         Some(pk) => Some(pk.key)
@@ -284,7 +284,7 @@ replacement for actions that used to fail through a bare `check`.
 ```policy
 action infallible() {}
 
-action can_fail(x int) result[unit, string] {
+action can_fail(x: int) result[unit, string] {
     check x > 0 else return Err("negative input")
     return Ok(Unit)
 }

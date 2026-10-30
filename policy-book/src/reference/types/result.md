@@ -9,7 +9,7 @@ A type that represents either a success (with an associated value), or a failure
 Function that returns a result:
 
 ```policy
-function get_value(n int) result[int, string] {
+function get_value(n: int) result[int, string] {
     if n > 0 {
         return Ok(n)
     } else {
@@ -76,7 +76,7 @@ Literal and binding patterns can be used together, but with some restrictions:
   // okay
   Ok(5) =>
   Ok(n) =>
-  
+
   // invalid
   Ok(n) =>
   Ok(5) => // this is unreachable

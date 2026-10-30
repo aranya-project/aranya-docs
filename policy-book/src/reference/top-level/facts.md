@@ -1,8 +1,8 @@
 # Facts
 
 ```
-fact FooCounter[device id]=>{count int}
-immutable fact FooUsed[deviceid id]=>{}
+fact FooCounter[device: id]=>{count: int}
+immutable fact FooUsed[deviceid: id]=>{}
 ```
 
 A fact definition defines the schema for a fact. The first set of fields

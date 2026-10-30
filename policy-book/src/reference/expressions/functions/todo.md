@@ -1,7 +1,7 @@
 # Todo
 
 ```policy
-action foo(type enum Bar) {
+action foo(type: enum Bar) {
     let x = if type == Bar::Done {
         1
     } else {

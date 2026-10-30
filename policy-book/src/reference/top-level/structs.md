@@ -2,8 +2,8 @@
 
 ```
 struct MyStruct {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 ```
 
@@ -11,9 +11,9 @@ Arbitrary struct types can be defined in `struct` blocks. To use these
 types in parameters, fields, or return types, use `struct ❮name❯`. e.g.
 
 ```
-function foo(s struct MyStruct) { ... }
+function foo(s: struct MyStruct) { ... }
 function makeStruct() struct MyStruct { ... }
-struct InteriorStruct { thing struct MyStruct }
+struct InteriorStruct { thing: struct MyStruct }
 ```
 
 Any type may be used for struct fields except opaque types, though
@@ -27,13 +27,13 @@ insert those field definitions into your struct. For example, this:
 
 ```
 struct Foo {
-    a int,
-    b bool,
+    a: int,
+    b: bool,
 }
 
 struct Bar {
     +Foo,
-    c string,
+    c: string,
 }
 ```
 
@@ -44,7 +44,7 @@ explicitly. This also works in command fields:
 command Baz {
     fields {
         +Bar,
-        d optional bytes,
+        d: option[bytes],
     }
     ...
 }
@@ -61,8 +61,8 @@ Duplicate fields from referenced struct definitions are a
 compile error, e.g.
 
 ```
-struct A { x int }
-struct B { +A, x int }
+struct A { x: int }
+struct B { +A, x: int }
 ```
 
 Struct `B` will cause an error because `x` is already defined in `A`.

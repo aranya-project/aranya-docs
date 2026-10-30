@@ -2,8 +2,8 @@
 
 ```
 effect FooEffect {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 ```
 

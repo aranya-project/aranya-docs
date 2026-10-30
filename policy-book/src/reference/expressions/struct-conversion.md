@@ -9,16 +9,16 @@ arbitrary struct to a command struct:
 
 ```
 struct Foo {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
 command Bar {
     fields {
-        a int,
-        c bool,
-        b string, // order is not important, just names and types
+        a: int,
+        c: bool,
+        b: string, // order is not important, just names and types
     }
     ...
 }
@@ -34,13 +34,13 @@ Or a struct into an effect:
 
 ```
 effect FooEffect {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 command Bar {
@@ -63,14 +63,14 @@ A struct `A` whose fields are a strict subset of the fields of struct
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
 action frob(x Foo) {
@@ -92,14 +92,14 @@ operator `substruct`.
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
 action frob(x Bar) {
