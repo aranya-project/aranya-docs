@@ -19,7 +19,7 @@ if foo is None {
 
 In some contexts, there are names automatically defined by the runtime.
 
-- In `get_key` blocks, the author's ID is available as `author_id id`.
+- In `get_key` blocks, the author's ID is available as `author_id: id`.
 - In `policy`, `recall`, and `get_key` blocks, the fields of the command are available via the
   name `this`, which is of type `struct <CommandName>`.
 - In `policy` and `recall` blocks, the envelope of the command

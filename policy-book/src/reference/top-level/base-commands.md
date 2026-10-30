@@ -40,7 +40,7 @@ author ID to be used while the runtime opens this command.
 The block behaves like a function with this signature:
 
 ```
-function get_key(this struct <Base>, author_id id) option[bytes]
+function get_key(this: struct <Base>, author_id: id) option[bytes]
 ```
 
 Note that `this` only provides access to the fields of the base command.
