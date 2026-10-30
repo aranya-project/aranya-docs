@@ -26,7 +26,6 @@
     - [Math Functions](reference/expressions/functions/math.md)
     - [Queries and Counting](reference/expressions/functions/queries.md)
     - [If and Match](reference/expressions/functions/if-match.md)
-    - [Serialize and Deserialize](reference/expressions/functions/serialize-deserialize.md)
     - [Todo](reference/expressions/functions/todo.md)
     - [Test Fail](reference/expressions/functions/test-fail.md)
   - [Block Expressions](reference/expressions/block-expressions.md)
