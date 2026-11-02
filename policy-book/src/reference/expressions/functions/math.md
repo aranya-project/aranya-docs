@@ -7,25 +7,25 @@ version which clamps the value at the minimum/maximum values for an
 9223372036854775807). There are no "wrapping" versions of these
 operations.
 
-# `add(x: int,y: intt) option[int]`
+# `add(x: int, y: int) option[int]`
 
 `add` calculates `x + y`, returning the sum as an `option[int]`. The
 optional is `Some(x + y)` if addition succeeds without overflow or
 underflow, or `None` if it does not.
 
-# `saturating_add(x: int,y: intt) int`
+# `saturating_add(x: int, y: int) int`
 
 `saturating_add` calculates `x + y`, returning the sum as an `int`.
 Instead of overflowing or overflowing, it clamps the result to the
 bounds of what can be represented in an `int`.
 
-# `sub(x: int,y: intt) option[int]`
+# `sub(x: int, y: int) option[int]`
 
 `sub` calculates `x - y`, returning the difference as an
 `option[int]`. The optional is `Some(x - y)` if subtraction succeeds
 without overflow or underflow, or `None` if it does not.
 
-# `saturating_sub(x: int,y: intt) int`
+# `saturating_sub(x: int, y: int) int`
 
 `saturating_sub` calculates `x - y`, returning the difference as an
 `int`. Instead of overflowing or underflowing, it clamps the result to

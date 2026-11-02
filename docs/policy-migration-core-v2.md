@@ -239,7 +239,7 @@ function seal_command(payload: bytes) struct Envelope {
     return envelope::new(parent_id, author_id, signed.command_id, signed.signature)
 }
 
-function open_envelope(payload: bytes,sealed_envelope: structt Envelope) unit {
+function open_envelope(payload: bytes, sealed_envelope: struct Envelope) unit {
     let author_id = envelope::author_id(sealed_envelope)
     let author_sign_pk = match query DeviceSignPubKey[device_id: author_id] {
         Some(pk) => Some(pk.key)
