@@ -7,7 +7,7 @@
 | global | ❌ |
 | `action` | ✅ |
 | `function` | ✅ |
-| `gey_key` | ✅ |
+| `get_key` | ✅ |
 | `policy`/`recall` | ✅ |
 | `finish` | ❌ |
 | `finish function` | ❌ |
