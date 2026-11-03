@@ -21,3 +21,5 @@ permalink: /"url-slug"/
 Before opening a PR, please test your changes locally. This ensures that formatting, links, and images have been thoroughly tested before anything goes live. See the [Develop Locally](#develop-locally) section for instructions.
 
 Once the PR has been approved, please test again locally before merging it in. This will give you a second chance to make sure no unwanted formatting issues were introduced while addressing feedback.
+
+## Something else
