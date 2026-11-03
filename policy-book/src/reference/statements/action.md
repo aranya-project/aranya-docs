@@ -7,8 +7,8 @@
 | global | ❌ |
 | `action` | ✅ |
 | `function` | ❌ |
+| `get_key` | ❌ |
 | `policy`/`recall` | ❌ |
-| `seal`/`open` | ❌ |
 | `finish` | ❌ |
 | `finish function` | ❌ |
 
@@ -30,4 +30,3 @@ The statement form is for actions without a return type. If the action has a
 i.e. capture the value. Since the success type of an action is limited to
 `unit`, the only meaningful check is that the value is not `Err`; this is
 most easily done with the try `?` operator.
-
