@@ -202,7 +202,7 @@ command Bar {
     ...
 }
 
-action frob(f Foo) {
+action frob(f: struct Foo) {
     // external::foo_creator() returns a Foo
     let b = external::foo_creator() as Bar
     publish b
@@ -227,7 +227,7 @@ struct Bar {
     c: bool,
 }
 
-action frob(x Foo) {
+action frob(x: struct Foo) {
     let b = Bar {
         c: false,
         ...x,
@@ -281,7 +281,7 @@ struct Bar {
     c: bool,
 }
 
-action frob(x Bar) {
+action frob(x: struct Bar) {
     let f = x substruct Foo
 }
 ```

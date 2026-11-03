@@ -8,7 +8,7 @@ No function type may be used in a way that would cause recursion.
 ## Pure Functions
 
 ```
-function count_valid(v count) bool {
+function count_valid(v: int) bool {
     return v >= 0
 }
 ```

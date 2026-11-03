@@ -73,7 +73,7 @@ struct Bar {
     c: bool,
 }
 
-action frob(x Foo) {
+action frob(x: struct Foo) {
     let b = Bar {
         ...x,
         c: false,
@@ -102,7 +102,7 @@ struct Bar {
     c: bool,
 }
 
-action frob(x Bar) {
+action frob(x: struct Bar) {
     let f = x substruct Foo
 }
 ```

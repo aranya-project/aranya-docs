@@ -191,7 +191,7 @@ struct Bar {
     c: bool,
 }
 
-action frob(x Foo) {
+action frob(x: struct Foo) {
     let b = Bar {
         ...x,
         c: false,
