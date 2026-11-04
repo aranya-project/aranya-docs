@@ -2,5 +2,6 @@
 
 [`struct-literal` "struct" 'identifier' "{" <
         ['identifier' ":" 'expression'],
+        ['identifier']#`Field Init Shorthand`,
         ["..." 'identifier']#`Struct Composition`
     >*"," ","? "}"]
