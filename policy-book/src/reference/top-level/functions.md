@@ -20,9 +20,9 @@ Pure functions can contain data processing statements (`let`, `if`,
 Pure functions are valid in any expression (see also
 [Functions](../expressions/functions.md) in the Expressions section).
 But due to the restrictions on finish blocks and functions, they may
-only be used in actions, pure functions, command
-`seal`/`open`/`policy`/`recall` blocks outside finish blocks, and global
-`let` definitions (subject to [their restrictions](global-values.md)).
+only be used in actions, pure functions, `get_key` blocks, command
+`policy`/`recall` blocks outside finish blocks, and global `let`
+definitions (subject to [their restrictions](global-values.md)).
 
 ## Finish Functions
 
