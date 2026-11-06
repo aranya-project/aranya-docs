@@ -5,11 +5,11 @@ Declarations](../top-level/functions.md)), which can be called inside an
 expression in the usual way.
 
 ```policy
-function increment(x int) int {
+function increment(x: int) int {
     return x + 1
 }
 
-function increment_twice(x int) int {
+function increment_twice(x: int) int {
     return increment(increment(x))
 }
 ```
@@ -25,7 +25,7 @@ library name.
 ```policy
 use math
 
-function increment_twice(x int) int {
+function increment_twice(x: int) int {
     return math::add(x, 2)
 }
 ```

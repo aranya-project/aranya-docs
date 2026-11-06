@@ -18,18 +18,18 @@ can be shortened to `Foo { bar }`.
 ```
 // user-defined structs
 struct Bar {
-    c string,
-    d bool,
+    c: string,
+    d: bool,
 }
 
 struct Blonk {
-    d bool
+    d: bool
 }
 
 command Foo {
     fields {
-        a int,
-        b struct Bar,
+        a: int,
+        b: struct Bar,
     }
 }
 
@@ -64,8 +64,8 @@ example:
 ```
 command Foo {
     fields {
-        a int,
-        b string,
+        a: int,
+        b: string,
     }
 }
 
@@ -77,7 +77,7 @@ function make_struct_foo() struct Foo {
 }
 
 effect Bar {
-    x int,
+    x: int,
 }
 
 function make_struct_bar() struct Bar {
@@ -86,7 +86,7 @@ function make_struct_bar() struct Bar {
     }
 }
 
-fact Baz[x int]=>[y string]
+fact Baz[x: int]=>[y: string]
 
 function make_struct_baz() struct Baz {
     return Baz {
@@ -103,13 +103,13 @@ insert those field definitions into your struct.
 
 ```
 struct Foo {
-    a int,
-    b bool,
+    a: int,
+    b: bool,
 }
 
 struct Bar {
     +Foo,
-    c string,
+    c: string,
 }
 ```
 
@@ -120,7 +120,7 @@ explicitly. This also works in command fields:
 command Baz {
     fields {
         +Bar,
-        d optional bytes,
+        d: option[bytes],
     }
     ...
 }
@@ -137,8 +137,8 @@ Duplicate fields from referenced struct definitions are a
 compile error, e.g.
 
 ```
-struct A { a int }
-struct B { +A, a int }
+struct A { a: int }
+struct B { +A, a: int }
 ```
 
 Struct `B` will cause an error because `a` is already defined in `A`.
@@ -155,21 +155,21 @@ command struct:
 
 ```
 struct Foo {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
 command Bar {
     fields {
-        a int,
-        c bool,
-        b string, // order is not important, just names and types
+        a: int,
+        c: bool,
+        b: string, // order is not important, just names and types
     }
     ...
 }
 
-action frob(f Foo) {
+action frob(f: struct Foo) {
     // external::foo_creator() returns a Foo
     let b = external::foo_creator() as Bar
     publish b
@@ -186,17 +186,17 @@ A struct `A` whose fields are a strict subset of the fields of struct
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
-action frob(x Foo) {
+action frob(x: struct Foo) {
     let b = Bar {
         ...x,
         c: false,
@@ -210,13 +210,13 @@ literal, but the fields in the source structs cannot overlap.
 
 ```
 struct Baz {
-    a int,
-    b string,
-    c bool,
-    d id,
+    a: int,
+    b: string,
+    c: bool,
+    d: id,
 }
 
-action fnord(x Foo, y Bar, user id) {
+action fnord(x: struct Foo, y: struct Bar, user: id) {
     let b = Baz {
         ...x,  // invalid as both Foo and Bar define fields `a` and `b`
         ...y,  // and it is not clear which source struct they come from
@@ -233,17 +233,17 @@ operator `substruct`.
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
-action frob(x Bar) {
+action frob(x: struct Bar) {
     let f = x substruct Foo
 }
 ```

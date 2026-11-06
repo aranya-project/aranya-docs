@@ -29,7 +29,7 @@ use such a definition outside of that block, and it will cause a compile
 error.
 
 ```
-action foo(x int) {
+action foo(x: int) {
     if x == 1 {
         let y = 4
         publish Foo { y: y }
@@ -54,7 +54,7 @@ look like:
 
 ```
 // PL v1 match statement conditional variable set
-action foo(x int) {
+action foo(x: int) {
     match x {
         3 => {
             let v = 1
@@ -73,7 +73,7 @@ But is now expressed more clearly as:
 
 ```
 // PL v2 match statement with expressions
-action foo(x int) {
+action foo(x: int) {
     let v = match x {
         3 => 1
         4 => 2
@@ -92,7 +92,7 @@ required colon separator and terminal expression. The value of the block
 is the value of that terminal expression.
 
 ```
-action foo(x int) {
+action foo(x: int) {
     let y = {
         let v = ffi::external_value()
         : x + v
@@ -106,7 +106,7 @@ action foo(x int) {
 complex operations can be performed through block expressions.
 
 ```
-action foo(x int) {
+action foo(x: int) {
     let v = if x != 0 {
         let y = ffi::frob(x)
         : y + 1
@@ -119,7 +119,7 @@ curly braces, not expressions, and ending a block with an expression in
 that context is an error.
 
 ```
-action foo(x int) {
+action foo(x: int) {
     match x {
         3 => { 4 }  // Error - 4 is not a statement
         _ => { ... }
@@ -134,13 +134,13 @@ insert those field definitions into your struct.
 
 ```
 struct Foo {
-    a int,
-    b bool,
+    a: int,
+    b: bool,
 }
 
 struct Bar {
     +Foo,
-    c string,
+    c: string,
 }
 ```
 
@@ -151,7 +151,7 @@ explicitly. This also works in command fields:
 command Baz {
     fields {
         +Bar,
-        d optional bytes,
+        d: option[bytes],
     }
     ...
 }
@@ -168,8 +168,8 @@ Duplicate fields from referenced struct definitions are a
 compile error, e.g.
 
 ```
-struct A { a int }
-struct B { +A, a int }
+struct A { a: int }
+struct B { +A, a: int }
 ```
 
 Struct `B` will cause an error because `a` is already defined in `A`.
@@ -188,21 +188,21 @@ arbitrary struct to a command struct:
 
 ```
 struct Foo {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
 command Bar {
     fields {
-        a int,
-        c bool,
-        b string, // order is not important, just names and types
+        a: int,
+        c: bool,
+        b: string, // order is not important, just names and types
     }
     ...
 }
 
-action frob(f Foo) {
+action frob(f: struct Foo) {
     // external::foo_creator() returns a Foo
     let b = external::foo_creator() as Bar
     publish b
@@ -217,17 +217,17 @@ operator `...`.
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
-action frob(x Foo) {
+action frob(x: struct Foo) {
     let b = Bar {
         c: false,
         ...x,
@@ -271,17 +271,17 @@ operator `substruct`.
 
 ```
 struct Foo {
-    a int,
-    b string,
+    a: int,
+    b: string,
 }
 
 struct Bar {
-    a int,
-    b string,
-    c bool,
+    a: int,
+    b: string,
+    c: bool,
 }
 
-action frob(x Bar) {
+action frob(x: struct Bar) {
     let f = x substruct Foo
 }
 ```
@@ -294,7 +294,7 @@ failure to the calling application.
 ```policy
 enum Error { InvalidAmount, NoSuchDevice }
 
-action deposit(device id, amount int) result[unit, enum Error] {
+action deposit(device: id, amount: int) result[unit, enum Error] {
     check amount > 0 else return Err(Error::InvalidAmount)
     let account = query Account[device: device] or return Err(Error::NoSuchDevice)
     publish Deposit { device: device, amount: amount }

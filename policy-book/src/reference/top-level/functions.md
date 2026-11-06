@@ -8,7 +8,7 @@ No function type may be used in a way that would cause recursion.
 ## Pure Functions
 
 ```
-function count_valid(v count) bool {
+function count_valid(v: int) bool {
     return v >= 0
 }
 ```
@@ -27,7 +27,7 @@ definitions (subject to [their restrictions](global-values.md)).
 ## Finish Functions
 
 ```
-finish function set_foo(device id, new int) {
+finish function set_foo(device: id, new: int) {
     update FooCounter[device: device]=>{count: current} to {count: new}
 }
 ```

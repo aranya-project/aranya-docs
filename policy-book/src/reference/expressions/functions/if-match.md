@@ -21,7 +21,7 @@ default case represented by `_` if it exists. If `_` is not present, the
 failed match causes a runtime exception.
 
 ```policy
-action foo(x int) {
+action foo(x: int) {
     let v = match x {
         3 => 1
         4 => 2

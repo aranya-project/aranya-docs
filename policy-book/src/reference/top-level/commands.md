@@ -8,8 +8,8 @@ command Foo with SomeBase {
     }
 
     fields {
-        a int,
-        b string,
+        a: int,
+        b: string,
     }
 
     policy {

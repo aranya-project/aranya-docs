@@ -38,13 +38,13 @@ or [JavaScript's nullish coalescing operator
 `??`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing).
 
 ```policy
-fact Capability[object_id id] => {
-    read bool,
-    write bool,
+fact Capability[object_id: id] => {
+    read: bool,
+    write: bool,
 }
 
 // default `struct Capability` created by fact above
-function default_capability(object_id id) struct Capability {
+function default_capability(object_id: id) struct Capability {
     return Capability {
         object_id: object_id,
         read: false,
@@ -52,7 +52,7 @@ function default_capability(object_id id) struct Capability {
     }
 }
 
-function get_capability(object_id id) struct Capability {
+function get_capability(object_id: id) struct Capability {
     let cap_opt = query Capability[object_id: object_id]
     return cap_opt or default_capability(object_id)
 }
@@ -106,11 +106,11 @@ command Foo {
         }
     }
 
-    recall invalid_user(user_id id) {
+    recall invalid_user(user_id: id) {
         // handle the error
     }
 
-    recall insufficient_privileges(user struct User) {
+    recall insufficient_privileges(user: struct User) {
         // ...
     }
 }

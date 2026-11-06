@@ -29,7 +29,7 @@ to that block. Using such a definition outside of that block will cause
 a compile error.
 
 ```
-action foo(x int) {
+action foo(x: int) {
     if x == 1 {
         let y = 4
         publish Foo { y: y }

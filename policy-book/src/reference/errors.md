@@ -61,7 +61,7 @@ a precondition:
 ```policy
 enum Error { InvalidID }
 
-action foo(a int) result[unit, enum Error] {
+action foo(a: int) result[unit, enum Error] {
     check a > 0 else return Err(Error::InvalidID)
     publish Foo{a: a}
     return Ok(Unit)
@@ -93,7 +93,7 @@ And neither will this:
 ```policy
 command FailCommand {
     fields {
-        fail bool
+        fail: bool
     }
 
     policy {
@@ -127,7 +127,7 @@ early if it failed. See [Propagating errors with
 `?`](types/result.md#propagating-errors-with-) for details.
 
 ```policy
-action bar(a int) result[unit, enum Error] {
+action bar(a: int) result[unit, enum Error] {
     let value = validate(a)?
     publish Foo{a: value}
     return Ok(Unit)

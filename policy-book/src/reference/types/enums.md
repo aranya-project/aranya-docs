@@ -7,7 +7,7 @@ enum Foo {
     C,
 }
 
-function is_a(v enum Foo) {
+function is_a(v: enum Foo) {
     match v {
         Foo::A => return true,
         _ => return false,

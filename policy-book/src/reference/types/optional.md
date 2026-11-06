@@ -7,8 +7,8 @@ expressions for optionals are `None` and `Some(❮expression❯)`.
 ```policy
 // declare an optional field
 effect Foo {
-    a string,
-    b option[int]
+    a: string,
+    b: option[int]
 }
 
 // initialize an optional
@@ -34,7 +34,7 @@ let no_other    = player2 is None  // true
 
 ## Testing with `is`
 
-`is` tests whether an optional holds a value. It returns true if the value is `Some`, and false if it is `None`. 
+`is` tests whether an optional holds a value. It returns true if the value is `Some`, and false if it is `None`.
 
 It does not compare against an inner value, so `x is Some(3)` is not valid. Use
 [`match`](../expressions/functions/if-match.md#match) to test the value
