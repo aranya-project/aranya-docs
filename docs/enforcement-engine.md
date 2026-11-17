@@ -1,6 +1,6 @@
 # Enforcement Engine
 
-The Enforcement Engine enforces the boundary between applications running in an Application VM and system resources. It gates access to these resources based on capabilities that are governed by Aranya policy.
+The Enforcement Engine enforces a boundary between applications running in an Application Environment and system resources. It gates access to these resources based on capabilities that are governed by Aranya policy.
 
 ## Architectural Diagram of Capability Acquisition and Use
 
@@ -28,9 +28,13 @@ graph BT
   ee -- "⑩ System Call Response" --> app
 ```
 
+## Application Environment
+
+Each Application runs in an Application Environment that manages the running application. It knows its Instance ID and provides the [System Call Interface](#system-call-interface) to the application.
+
 ## Application Mapping
 
-Each application in the system has an Application ID created by the developer and provided in the app's metadata. On instantiation in the VM, a _running_ application is given a VM ID that uniquely identifies the running application (this identifier could be based on a process identifier, a memory address, etc.; it doesn't matter to the Enforcement Engine). The Enforcement Engine keeps a mapping of Application IDs to VM IDs so that the Policy Engine does not need to be aware of the runtime details of applications. This does imply that permissions cannot be granted only to particular _instances_ of an application. They can only be granted to an application as a whole.
+Each application in the system has an Application ID created by the developer and provided in the app's metadata. On instantiation, a _running_ application is given an Instance ID that uniquely identifies the running application (this identifier could be based on a process identifier, a memory address, etc.; it doesn't matter to the Enforcement Engine). The Enforcement Engine keeps a mapping of Application IDs to Instance IDs so that the Policy Engine does not need to be aware of the runtime details of applications. This does imply that permissions cannot be granted to particular _instances_ of an application. They can only be granted to an application as a whole.
 
 The mechanism of populating this mapping is TBD.
 
@@ -56,29 +60,38 @@ The Parameter list fixes certain system call arguments (e.g. to access a particu
 
 ### Capability Response
 
-The capability response only includes a capability ID on success. The further details of this Capability is stored in Shared Memory, which can be queried by the application.
+The capability response only includes a Capability ID on success. The further details of this Capability is stored in Shared Memory, which can be queried by the application.
 
 | Field | Type | Description |
 |-|-|-|
 | Success | boolean | Whether the call succeeded |
 | Capability ID | u64 | The capability ID, if granted, otherwise zero |
 
-## VM System Calls
+## System Call Interface
 
-The Application VM makes calls to the system through a provided call interface (design TBD). The call includes both the information about the call, and the capability the application holds for that call. The Enforcement Engine receives these calls, evaluates the active capabilities for those calls, and, if allowed by the capabilities, executes them on behalf of the Application.
+The Application makes calls to the system through a call interface in the Application Environment. The call includes both the information about the call, and the capability the application holds for that call. The Enforcement Engine receives these calls, evaluates the active capabilities for those calls, and, if allowed by the capabilities, executes them on behalf of the Application.
 
-It is not required or intended by this specification that these calls must map to real operating system calls. They may be routed to virtual devices, memory ranges, or anything else.
+It is not required or intended by this specification that these calls must map to real operating system calls. They may be routed to virtual devices, memory ranges, API endpoints, or anything else.
 
-Each system call is identified by a number and has a parameter list. The parameter list contains integers which are not interpreted by the enforcement engine, but are checked via caveats (see [Caveats](#caveats) below). The system call also includes the Capability ID which allows the call. The VM also attaches the VM ID, which identifies the VM making the call.
+Each system call is identified by a number and has a parameter list. The parameter list contains values which are not interpreted by the enforcement engine, but are checked via caveats (see [Caveats](#caveats) below). The system call also includes the Capability ID which allows the call. The Application Environment also attaches the Instance ID, which identifies the Application making the call.
 
 | Field | Type | Description |
 |-|-|-|
 | System Call number | u32 | The call being requested |
-| Parameter List | list[u64] | The arguments to the call |
+| Parameter List | list[Value] | The arguments to the call |
 | Capability ID | u64 | The Capability for the system call |
-| VM identifier | u32 | Which VM is making the request |
+| Instance ID | u32 | Which Application is making the request |
 
-Some system call numbers will be reserved for Capability management itself, so that the Enforcement Engine can provide those to the VM without a second call interface.
+Some system call numbers will be reserved for Capability management itself, so that the Enforcement Engine can provide those to the Application without a separate management interface.
+
+### Call Values and Serialization
+
+A Value passed through the System Call Interface can be either a 64-bit integer or a length-prefixed byte string. To support this and future Value types, the system call is serialized (method TBD).
+
+| Variant | Type | Description |
+|-|-|-|
+| Integer | u64 | A numerical type, enumeration, or pointer |
+| Bytes | list[u8] | An array of bytes or character string |
 
 ## Shared Memory (SHM)
 
@@ -91,7 +104,7 @@ Each Capability in the SHM describes a grant given to a running application.
 | Field | Type | Description |
 |-|-|-|
 | Capability ID | u64 | Unique identifier for this granted capability |
-| Application ID | list[u8] | A string uniquely identifying the application |
+| Application ID | list[u8] | A character string uniquely identifying the application |
 | Epoch ID | u64 | The identifier of the epoch this Capability is granted under |
 | Epoch value | u64 | The current value of the Epoch identified by Epoch ID |
 | System Call number | u64 | The system call this Capability applies to |
@@ -99,26 +112,44 @@ Each Capability in the SHM describes a grant given to a running application.
 
 #### Caveats
 
-Each Caveat evaluates one system call argument against a set of possible filters. The Caveat has this form:
+Each Caveat evaluates one system call argument against a set of possible filters. Caveats have these types:
+
+| No. | Operation | Type | Description |
+|-|-|-|-|
+| 0 | Masked Equality | Integer | `(argument ^ A) & B == 0` |
+| 1 | Range | Integer | `argument >= A && argument < B` |
+| 2 | Bitwise flag AND | Integer | `argument & A == A` |
+| 3 | Bitwise flag OR | Integer |`argument & A > 0` |
+| 4 | Token Bucket | Integer (Token Bucket) | `C = min(C + time_since(ts), B); C > 0; C -= A`. `A` is the per-call cost, `B` is the token bucket cap, and `C` is the signed number of tokens in the bucket (increasing at a rate of 1 per time step) |
+| 5 | Bytes Match | Bytes | `argument == X` |
+| 5 | Bytes Prefix | Bytes | `substr(argument, len(X)) == X` |
+
+The Caveat has these base fields:
 
 | Field | Type | Description |
 |-|-|-|
 | Argument number | u8 | The argument position this Caveat applies to |
 | Caveat Operation | u32 | The operation applied in this Caveat |
+
+Integer values Caveats have these fields:
+
+| Field | Type | Description |
+|-|-|-|
 | Caveat Value (`A`) | i64/u64 | A value used by the operation |
 | Caveat Value (`B`) | i64/u64 | A second value used by the operation |
-| Caveat Value (`C`) | i64/u64 | A second value used by the operation |
+
+The Token Bucket Caveat additionally has these fields on top of Integer fields:
+
+| Field | Type | Description |
+|-|-|-|
+| Caveat Value (`C`) | i64/u64 | A third value used by the operation |
 | Caveat Timestamp (`ts`) | u64 | Last time the Caveat was evaluated |
 
-Caveats have these types:
+Bytes Caveats have this field:
 
-| No. | Operation | Description |
+| Field | Type | Description |
 |-|-|-|
-| 0 | Masked Equality | `(argument ^ A) & B == 0` |
-| 1 | Range | `argument >= A && argument < B` |
-| 2 | Bitwise flag AND | `argument & flags == flags` |
-| 3 | Bitwise flag OR | `argument & flags > 0` |
-| 4 | Token Bucket | `C = min(C + time_since(ts), B); C > 0; C -= A`. `A` is the per-call cost, `B` is the token bucket cap, and `C` is the signed number of tokens in the bucket (increasing at a rate of 1 per time step) |
+| Caveat Bytes Match (`X`) | list[u8] | Value to match against for Bytes values |
 
 ### Epochs
 
@@ -160,4 +191,4 @@ When the Enforcement Engine receives a call, it first looks up the capability ID
 
 Caveats place additional restraints on the validity of a capability, as described in [Caveats](#caveats) above. Each Caveat is evaluated in turn, as described by its operation.
 
-Once all checks pass, the sytem call is accepted and passed to the system. The response from the call is passed back through the Evaluation Engine and ultimately back to the application.
+Once all checks pass, the system call is accepted and passed onward. The response from the call is passed back through the Evaluation Engine and ultimately back to the application.
